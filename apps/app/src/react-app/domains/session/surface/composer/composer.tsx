@@ -1,6 +1,7 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Agent } from "@opencode-ai/sdk/v2/client";
+import { CHAT_ATTACHMENT_MAX_BYTES } from "@matterhorn-work/types/chat-attachments";
 import { ArrowUp, Check, ChevronDown, FileText, LockKeyhole, Paperclip, Play, Plug, Puzzle, Settings, Square, Terminal, X, Zap } from "lucide-react";
 import { getMatterhornDeskAgentById } from "@matterhorn-work/types/desk-agents";
 import fuzzysort from "fuzzysort";
@@ -145,7 +146,6 @@ type ComposerProps = {
 
 const FLUSH_PROMPT_EVENT = "matterhorn:flushPromptDraft";
 const FOCUS_PROMPT_EVENT = "matterhorn:focusPrompt";
-const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 const IMAGE_COMPRESS_MAX_PX = 2048;
 const IMAGE_COMPRESS_QUALITY = 0.82;
 const IMAGE_COMPRESS_TARGET_BYTES = 1_500_000;
@@ -178,9 +178,9 @@ function parseClipboardUriList(clipboard: DataTransfer) {
 }
 
 function formatBytes(size: number) {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  if (size < 1000) return `${size} B`;
+  if (size < 1_000_000) return `${Math.round(size / 1000)} KB`;
+  return `${(size / 1_000_000).toFixed(1)} MB`;
 }
 
 function isImageAttachment(attachment: ComposerAttachment) {
@@ -193,47 +193,49 @@ async function compressImageFile(file: File): Promise<File> {
   }
 
   const bitmap = await createImageBitmap(file);
-  const { width, height } = bitmap;
-  const maxDim = Math.max(width, height);
-  const scale = maxDim > IMAGE_COMPRESS_MAX_PX ? IMAGE_COMPRESS_MAX_PX / maxDim : 1;
-  const targetW = Math.round(width * scale);
-  const targetH = Math.round(height * scale);
+  try {
+    const { width, height } = bitmap;
+    const maxDim = Math.max(width, height);
+    const scale = maxDim > IMAGE_COMPRESS_MAX_PX ? IMAGE_COMPRESS_MAX_PX / maxDim : 1;
+    const targetW = Math.round(width * scale);
+    const targetH = Math.round(height * scale);
 
-  let blob: Blob | null = null;
+    let blob: Blob | null = null;
 
-  if (typeof OffscreenCanvas !== "undefined") {
-    const offscreen = new OffscreenCanvas(targetW, targetH);
-    const ctx = offscreen.getContext("2d");
-    if (ctx) {
-      ctx.drawImage(bitmap, 0, 0, targetW, targetH);
-      blob = await offscreen.convertToBlob({
-        type: "image/jpeg",
-        quality: IMAGE_COMPRESS_QUALITY,
-      });
+    if (typeof OffscreenCanvas !== "undefined") {
+      const offscreen = new OffscreenCanvas(targetW, targetH);
+      const ctx = offscreen.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(bitmap, 0, 0, targetW, targetH);
+        blob = await offscreen.convertToBlob({
+          type: "image/jpeg",
+          quality: IMAGE_COMPRESS_QUALITY,
+        });
+      }
     }
-  }
 
-  if (!blob) {
-    const canvas = document.createElement("canvas");
-    canvas.width = targetW;
-    canvas.height = targetH;
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      ctx.drawImage(bitmap, 0, 0, targetW, targetH);
-      blob = await new Promise<Blob | null>((resolve) =>
-        canvas.toBlob(resolve, "image/jpeg", IMAGE_COMPRESS_QUALITY),
-      );
+    if (!blob) {
+      const canvas = document.createElement("canvas");
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(bitmap, 0, 0, targetW, targetH);
+        blob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob(resolve, "image/jpeg", IMAGE_COMPRESS_QUALITY),
+        );
+      }
     }
+
+    if (!blob || blob.size >= file.size) {
+      return file;
+    }
+
+    const stem = file.name.replace(/\.[^.]+$/, "") || "image";
+    return new File([blob], `${stem}.jpg`, { type: "image/jpeg" });
+  } finally {
+    bitmap.close();
   }
-
-  bitmap.close();
-
-  if (!blob || blob.size >= file.size) {
-    return file;
-  }
-
-  const stem = file.name.replace(/\.[^.]+$/, "") || "image";
-  return new File([blob], `${stem}.jpg`, { type: "image/jpeg" });
 }
 
 function formatMcpStatusLabel(status: McpServerStatus | undefined) {
@@ -1025,15 +1027,21 @@ export function ReactSessionComposer(props: ComposerProps) {
     }
 
     const accepted: File[] = [];
-    const oversize: string[] = [];
+    const warnings: string[] = [];
 
     for (const original of inputFiles) {
-      const processed = original.type.startsWith("image/") ? await compressImageFile(original) : original;
-      if (processed.size > MAX_ATTACHMENT_BYTES) {
-        oversize.push(processed.name || original.name);
-        continue;
+      try {
+        const processed = original.type.startsWith("image/") ? await compressImageFile(original) : original;
+        if (processed.size > CHAT_ATTACHMENT_MAX_BYTES) {
+          warnings.push(t("composer.file_exceeds_limit", {
+            name: processed.name || original.name, limit: CHAT_ATTACHMENT_MAX_BYTES / 1_000_000,
+          }));
+          continue;
+        }
+        accepted.push(processed);
+      } catch {
+        warnings.push(t("composer.file_prepare_failed", { name: original.name }));
       }
-      accepted.push(processed);
     }
 
     if (accepted.length) {
@@ -1047,12 +1055,10 @@ export function ReactSessionComposer(props: ComposerProps) {
       });
     }
 
-    if (oversize.length) {
+    if (warnings.length) {
       props.onNotice({
-        title:
-          oversize.length === 1
-            ? t("composer.file_exceeds_limit", { name: oversize[0] })
-            : `${oversize.length} files exceed the 8MB limit.`,
+        title: warnings[0],
+        description: warnings.length > 1 ? t("composer.more_files_skipped", { count: warnings.length - 1 }) : undefined,
         tone: "warning",
       });
     }

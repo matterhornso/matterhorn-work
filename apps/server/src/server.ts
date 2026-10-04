@@ -1,4 +1,5 @@
 import { getPortfolio } from "./tools/portfolio-tracker.js";
+import { CHAT_ATTACHMENT_MAX_BYTES } from "@matterhorn-work/types/chat-attachments";
 import { resolveConfinedWorkspacePath } from "./workspace-path-boundary.js";
 import { hostBackupFresh } from "./host-backup-readiness.js";
 import { parseAnswerContinuation, assertAnswerContinuationTarget, answerContinuationSystemContext } from "./answer-continuation.js";
@@ -22146,7 +22147,7 @@ function promptPrivateContextIds(body: Record<string, unknown>, ...keys: string[
 }
 
 const AGENT_MESSAGE_MAX_PARTS = 64;
-const AGENT_MESSAGE_MAX_ATTACHMENT_BYTES = FILE_SESSION_MAX_FILE_BYTES;
+const AGENT_MESSAGE_MAX_ATTACHMENT_BYTES = CHAT_ATTACHMENT_MAX_BYTES;
 // Workspace URLs are small on the wire but expand into inspected file snapshots.
 const AGENT_MESSAGE_MAX_TOTAL_ATTACHMENT_BYTES = AGENT_MESSAGE_MAX_ATTACHMENT_BYTES * 2;
 const AGENT_MESSAGE_JSON_BODY_MAX_BYTES = AGENT_MESSAGE_MAX_TOTAL_ATTACHMENT_BYTES + 65_536;

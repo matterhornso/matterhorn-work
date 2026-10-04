@@ -242,6 +242,8 @@ Button background/shadow/translation transitions are 120ms ease-out. Reduced mot
 
 ### Navigation, selection and overlays
 
+Chat attachment selection uses the gateway's shared 5,000,000-byte per-file limit; MB labels use decimal bytes. Success notices describe attachment to a draft, not a completed upload or shared-folder link. Failed image preparation preserves other valid selections and the typed draft. Notices use status semantics for ordinary feedback and alert semantics for warnings/errors, with wrapping text and a bounded summary for multiple failures. This client feedback does not replace the gateway's aggregate and encoded-request limits.
+
 Selected sidebar entries use ice/ink, 700 weight and a 2px inset line; selected tabs use ice/ink and a 2px action-colored underline. Picker options add a 2px inset outline and keep title, capability, identifier and checkmark on the same selection ink. Unavailable picker options stay disabled with 0.6 opacity and a not-allowed cursor. The full model list retains its separately scoped subtle selected treatment.
 
 Dialogs, alert dialogs, popovers and menus use framed panels with panel depth. Sheets and command dialogs use the same geometry without that shadow. The mobile drawer keeps an explicit 44px close control. Shared badges remain compact inherited components, not invented readiness certifications.

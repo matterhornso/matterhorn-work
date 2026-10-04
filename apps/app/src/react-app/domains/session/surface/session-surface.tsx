@@ -1,5 +1,6 @@
 /** @jsxImportSource react */
 import { latestFinalRunReceipt } from "../../../../app/lib/latest-run-receipt";
+import { CHAT_ATTACHMENT_MAX_BYTES } from "@matterhorn-work/types/chat-attachments";
 import { captureAccountGeneration } from "../../../../app/lib/account-client-state";
 import { MATTERHORN_CONTINUE_ANSWER_TEXT } from "@matterhorn-work/types/guarded-agent-runtime";
 import { responseCompletionSummary } from "../message-completion-metadata";
@@ -2703,12 +2704,12 @@ export function SessionSurface(props: SessionSurfaceProps) {
       setNotice({ title: props.attachmentsDisabledReason ?? "Attachments are unavailable.", tone: "warning" });
       return;
     }
-    const oversized = files.filter((file) => file.size > 25 * 1024 * 1024);
-    const accepted = files.filter((file) => file.size <= 25 * 1024 * 1024);
+    const oversized = files.filter((file) => file.size > CHAT_ATTACHMENT_MAX_BYTES);
+    const accepted = files.filter((file) => file.size <= CHAT_ATTACHMENT_MAX_BYTES);
     if (oversized.length) {
       setNotice({
         title: oversized.length === 1 ? `${oversized[0]?.name ?? "File"} is too large` : `${oversized.length} files are too large`,
-        description: "Files over 25 MB were skipped.",
+        description: `Files over ${CHAT_ATTACHMENT_MAX_BYTES / 1_000_000} MB were skipped.`,
         tone: "warning",
       });
     }

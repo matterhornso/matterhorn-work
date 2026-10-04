@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./chat-attachments": "./src/chat-attachments.ts",
     "./jev": "./src/jev.ts",
     ".": {
       "types": "./src/index.ts",

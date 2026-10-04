@@ -19,6 +19,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { providerListQueryKey } from "../../src/react-app/domains/connections/provider-list-query";
 import { PRIMARY_DESKS } from "../../src/app/lib/minimal-ui";
 import type { WorkspaceSessionGroup } from "../../src/app/types";
+import type { ComposerAttachment } from "../../src/app/types";
+import type { ReactComposerNotice } from "../../src/react-app/domains/session/surface/composer/notice";
 import "../../src/app/index.css";
 
 applyRetroUi(document.documentElement, RETRO_UI);
@@ -82,6 +84,8 @@ function AuthFixture() {
 }
 
 function Fixture() {
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [notice, setNotice] = useState<ReactComposerNotice | null>(null);
   const [desk, setDesk] = useState("");
   const [draft, setDraft] = useState("Explain a blockchain in one sentence.");
   const [result, setResult] = useState("");
@@ -131,10 +135,13 @@ function Fixture() {
       selectedModel={{ providerID: "fixture", modelID: "fixture" }}
       onModelPickerOpenChange={noop}
       onModelChange={noop}
-      attachments={[]}
-      onAttachFiles={noop}
-      onRemoveAttachment={noop}
-      attachmentsEnabled={false}
+      attachments={attachments}
+      onAttachFiles={files => setAttachments(current => [...current, ...files.map((file): ComposerAttachment => ({
+        id: `${current.length}-${file.name}`, name: file.name, size: file.size,
+        mimeType: file.type, kind: "file", file,
+      }))])}
+      onRemoveAttachment={id => setAttachments(current => current.filter(file => file.id !== id))}
+      attachmentsEnabled={params.has("attachments")}
       attachmentsDisabledReason={null}
       modelBehaviorTitle="Default"
       modelVariantLabel="Default"
@@ -155,8 +162,8 @@ function Fixture() {
       recentFiles={[]}
       searchFiles={async () => []}
       onInsertMention={noop}
-      notice={null}
-      onNotice={noop}
+      notice={notice}
+      onNotice={setNotice}
       onPasteText={noop}
       onUnsupportedFileLinks={noop}
       pastedText={[]}
@@ -168,6 +175,7 @@ function Fixture() {
     />
     <output data-testid="result">{result}</output>
     <output data-testid="calls">{JSON.stringify(calls)}</output>
+    <output data-testid="attachments">{JSON.stringify(attachments.map(file => ({ name: file.name, size: file.size })))}</output>
     <button onClick={() => release.current()}>Complete fixture request</button>
     <button onClick={managedSend}>Retry fixture request</button>
     <button onClick={() => {

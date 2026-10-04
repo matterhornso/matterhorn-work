@@ -76,6 +76,97 @@ async function fixturePage() {
   return page;
 }
 
+test("attachment selection respects the server limit without changing the draft", async () => {
+  const page = await fixturePage();
+  try {
+    await page.goto(`${server.url}?attachments`);
+    const input = page.locator('input[type="file"]');
+    await input.setInputFiles({ name: "at-limit.txt", mimeType: "text/plain", buffer: Buffer.alloc(5_000_000, 97) });
+    await page.waitForFunction(() => document.querySelector('[data-testid="attachments"]')?.textContent === '[{"name":"at-limit.txt","size":5000000}]');
+    expect(await page.getByText("5.0 MB", { exact: true }).count()).toBe(1);
+    await input.setInputFiles({ name: "too-large.txt", mimeType: "text/plain", buffer: Buffer.alloc(5_000_001, 98) });
+    await page.getByText("too-large.txt exceeds the 5 MB limit.", { exact: true }).waitFor();
+    expect(await page.getByRole("alert").count()).toBe(1);
+    expect(await page.getByTestId("attachments").textContent()).toBe('[{"name":"at-limit.txt","size":5000000}]');
+    expect(await page.getByRole("textbox", { name: "Test prompt" }).innerText()).toBe("Explain a blockchain in one sentence.");
+    await page.getByRole("button", { name: "Remove", exact: true }).click();
+    expect(await page.getByTestId("attachments").textContent()).toBe("[]");
+  } finally { await page.close(); }
+});
+
+test("attachment success only claims draft attachment", async () => {
+  const page = await fixturePage();
+  try {
+    await page.goto(`${server.url}?attachments`);
+    await page.locator('input[type="file"]').setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("Disposable notes") });
+    const directory = process.env.ATTACHMENT_QA_CAPTURES;
+    if (directory) {
+      await mkdir(directory, { recursive: true });
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      for (const theme of ["light", "dark"]) {
+        await page.locator("html").evaluate((el, value) => el.setAttribute("data-theme", value), theme);
+        for (const width of [390, 768, 1280]) {
+          await page.setViewportSize({ width, height: 900 });
+          await page.screenshot({ path: `${directory}/attachment-${theme}-${width}.png`, fullPage: true });
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        }
+      }
+    }
+    await page.getByText("Attached notes.txt to your draft.", { exact: true }).waitFor();
+    expect(await page.getByRole("status").filter({ hasText: "Attached notes.txt to your draft." }).count()).toBe(1);
+    expect(await page.getByText(/shared folder/).count()).toBe(0);
+  } finally { await page.close(); }
+});
+
+test("unreadable image does not discard other selected files or the draft", async () => {
+  const page = await fixturePage();
+  try {
+    await page.goto(`${server.url}?attachments`);
+    await page.locator('input[type="file"]').setInputFiles([
+      { name: "broken.png", mimeType: "image/png", buffer: Buffer.alloc(1_600_000) },
+      { name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("Disposable notes") },
+    ]);
+    await page.getByText("Could not prepare broken.png. Try another file.", { exact: true }).waitFor();
+    expect(await page.getByTestId("attachments").textContent()).toBe('[{"name":"notes.txt","size":16}]');
+    expect(await page.getByRole("textbox", { name: "Test prompt" }).innerText()).toBe("Explain a blockchain in one sentence.");
+    expect(await page.getByTestId("result").textContent()).toBe("");
+  } finally { await page.close(); }
+});
+
+test("mixed rejected files remain recoverable with bounded feedback", async () => {
+  const page = await fixturePage();
+  try {
+    await page.goto(`${server.url}?attachments`);
+    await page.locator('input[type="file"]').setInputFiles([
+      { name: "too-large.txt", mimeType: "text/plain", buffer: Buffer.alloc(5_000_001) },
+      { name: "broken.png", mimeType: "image/png", buffer: Buffer.alloc(1_600_000) },
+      { name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("Disposable notes") },
+    ]);
+    await page.getByText("Other files not attached: 1.", { exact: true }).waitFor();
+    expect(await page.getByRole("alert").innerText()).toContain("too-large.txt exceeds the 5 MB limit.");
+    expect(await page.getByTestId("attachments").textContent()).toBe('[{"name":"notes.txt","size":16}]');
+    const directory = process.env.ATTACHMENT_QA_CAPTURES;
+    if (directory) {
+      await mkdir(directory, { recursive: true });
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      for (const theme of ["light", "dark"]) {
+        await page.locator("html").evaluate((el, value) => el.setAttribute("data-theme", value), theme);
+        for (const width of [390, 768, 1280]) {
+          await page.setViewportSize({ width, height: 900 });
+          await page.screenshot({ path: `${directory}/attachment-error-${theme}-${width}.png`, fullPage: true });
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        }
+      }
+    }
+    await page.getByRole("button", { name: "Remove", exact: true }).focus();
+    await page.keyboard.press("Enter");
+    expect(await page.getByTestId("attachments").textContent()).toBe("[]");
+    await page.locator('input[type="file"]').setInputFiles({ name: "retry.txt", mimeType: "text/plain", buffer: Buffer.from("Retry") });
+    await page.getByText("Attached retry.txt to your draft.", { exact: true }).waitFor();
+    expect(await page.getByRole("textbox", { name: "Test prompt" }).innerText()).toBe("Explain a blockchain in one sentence.");
+  } finally { await page.close(); }
+});
+
 test("header picker labels search and selection while retaining the unsent draft", async () => {
   const page = await fixturePage();
   try {

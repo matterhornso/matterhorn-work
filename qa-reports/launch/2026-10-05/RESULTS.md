@@ -173,4 +173,38 @@ pnpm test:matterhorn-platform-safety
 
 Logs use `/tmp/matterhorn-aggregate-attachment-`: `red3-2026-10-05.log`, `focused-2026-10-05.log`, `http-2026-10-05.log`, `typecheck-2026-10-05.log`, `build-2026-10-05.log`, and `safety-2026-10-05.log`. The existing safety gate already runs the updated HTTP suite.
 
-This bounds attachment expansion per request, not total process RSS, concurrent-request load, selected agent-file context, memory records or historical attachments. Base64, inspection strings and JSON serialization add overhead. Verify composer limit alignment and rendered rejection/draft recovery next; real-provider and hosted acceptance remain separate release gates. No push, merge, deployment, production configuration or existing preview was changed.
+This bounds attachment expansion per request, not total process RSS, concurrent-request load, selected agent-file context, memory records or historical attachments. Base64, inspection strings and JSON serialization add overhead. Composer limit alignment and local selection recovery are addressed below; real-provider and hosted acceptance remain separate release gates. No push, merge, deployment, production configuration or existing preview was changed.
+
+## Composer attachment limits and recovery
+
+Following `5cd50995534cb3dde82d3bc5b0ba56133b426d4f`, three isolated Chromium reproductions failed: the composer accepted a 5,000,001-byte file although the gateway rejects it; its success notice claimed a shared-folder upload/link that had not happened; and decoding a corrupt image interrupted the batch before a valid subsequent file could be attached. These were mounted production-composer/Lexical checks with synthetic files and fixture callbacks, not hosted uploads or model responses.
+
+The gateway, composer and session attachment handler now import the same 5,000,000-byte per-file limit. This removes the inconsistent 8 MiB composer and 25 MiB parent limits. File-size labels use decimal MB to match the advertised limit. All ten existing locale entries now parameterize the limit and describe success as attachment to the draft. The two new preparation-failure/extra-skipped messages use the existing English fallback when another locale lacks them; native-language review remains outstanding.
+
+Image preparation failures are caught per file, so valid siblings remain usable. Any opened image bitmap is closed in `finally`, including canvas failures. Warnings show the first failed file with a count of further skipped files rather than an unbounded concatenation. Notices wrap and expose `alert` for warning/error or `status` for ordinary feedback. This verifies markup semantics, not announcements on a real screen reader.
+
+### Composer verification
+
+- The four new browser tests cover acceptance at exactly 5 MB, rejection one byte above, unchanged draft/earlier attachment, truthful success copy, corrupt-image recovery, mixed rejected/accepted batches, accessible notice roles, keyboard removal and successful reselection.
+- Retro browser suite: 13 pass, zero fail, one optional screenshot-test skip. Legacy rollback suite: 12 pass, zero fail, two skips (retro mobile navigation and optional launcher captures).
+- Frontend regressions: **1,456 pass, zero fail, 8,513 assertions across 193 files**. The first sandbox run could not open the three diagnostic HTTP listeners; the loopback-enabled rerun passed. This is an environment limitation, not a repaired Jev defect.
+- Final frontend typecheck/web build and server typecheck/build pass. The full platform safety gate passes all 11 stages, with terminal exit zero. Existing web bundle-size warnings remain.
+
+One baseline and one confirmation screenshot round cover light/dark at 390, 768 and 1280 px. Confirmation captures include success and mixed-error feedback and pass horizontal-overflow assertions. Images are in `/tmp/matterhorn-composer-attachments-before-2026-10-05` and `/tmp/matterhorn-composer-attachments-after-2026-10-05`; they intentionally show fixture-only controls outside the real composer. Later behavioral reruns took no additional screenshots. The initial test draft used unsupported Bun `expect.poll`; another assertion counted fixture `<output>` status roles as well as the actual notice. Both fixture errors were corrected without weakening the product assertions. The final suite checks the specific notice.
+
+Impeccable/Uncodixfy kept this a local defect correction with no new layout, palette or motion. The automatic design hook reported no deterministic issues on its scanned changes. The existing stale product/surface metadata was not migrated. DESIGN.md records the interaction contract; its generated sidecar was not regenerated because no visual tokens changed.
+
+```sh
+RETRO_QA_FLAG=1 bun test apps/app/scripts/composer-submit.browser.test.ts --timeout 30000
+RETRO_QA_FLAG=0 bun test apps/app/scripts/composer-submit.browser.test.ts --timeout 30000
+bun test apps/app/tests
+pnpm --filter @matterhorn-work/app typecheck
+pnpm --filter @matterhorn-work/app build:web
+pnpm --filter matterhorn-work-server typecheck
+pnpm --filter matterhorn-work-server build
+pnpm test:matterhorn-platform-safety
+```
+
+Logs use `/tmp/matterhorn-composer-attachments-`: `red2-2026-10-05.log`, `browser-final2-2026-10-05.log`, `legacy-2026-10-05.log`, `app-tests-final-2026-10-05.log`, `typecheck-final-2026-10-05.log`, `web-build-final-2026-10-05.log`, `server-typecheck-2026-10-05.log`, `server-build-2026-10-05.log`, and `safety-2026-10-05.log`. Reproduce captures by adding `ATTACHMENT_QA_CAPTURES=<disposable-output-directory>` to the retro browser command. Screenshot files and logs in `/tmp` are local evidence, not durable CI artifacts.
+
+Next review async preparation during overlapping selections, navigation and account changes; exact encoded-request/aggregate rejection through the mounted session send path; and actual server-error draft recovery. The 10 MB aggregate limit and the smaller effective base64 wire allowance remain enforced by the gateway, not pre-approved by the picker. Safari/Firefox, real screen readers, 200% zoom, image decompression resource ceilings, actual provider interpretation and hosted acceptance are not certified by this pass. No user chat/preview was restarted, and nothing was pushed, merged or deployed.
