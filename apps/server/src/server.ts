@@ -3610,11 +3610,10 @@ async function proxyOpencodeRequest(input: {
 }
 
 /**
- * Strip hop-by-hop and transport-level headers that Bun's native fetch keeps
- * in the upstream response even after it has already decoded the body for us.
- * Without this the browser sees `content-encoding: gzip` on a plain-text
- * payload and bails out with ERR_CONTENT_DECODING_FAILED, breaking any UI
- * code that reaches through /opencode/* (including session.create).
+ * Runtime responses are data, not authority over the Matterhorn browser origin.
+ * Allow only API metadata, never cookies, redirects, caching or security policy.
+ * Transport headers are also omitted: fetch may already have decoded gzip and
+ * forwarding its old encoding/length would break the downstream response.
  */
 function sanitizeProxyResponse(
   response: Response,
@@ -3622,10 +3621,13 @@ function sanitizeProxyResponse(
   upstreamController?: AbortController,
   checkAccess?: () => void,
 ): Response {
-  const headers = new Headers(response.headers);
-  headers.delete("content-encoding");
-  headers.delete("transfer-encoding");
-  headers.delete("content-length");
+  const headers = new Headers();
+  for (const name of ["content-type", "etag", "last-modified", "retry-after"]) {
+    const value = response.headers.get(name);
+    if (value !== null) headers.set(name, value);
+  }
+  headers.set("Cache-Control", "no-store");
+  headers.set("Content-Security-Policy", "default-src 'none'; sandbox; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
   if (!response.body) {
     return new Response(null, {
       status: response.status,

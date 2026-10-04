@@ -202,6 +202,7 @@ function startMockOpencode(input?: {
   beforeMessages?: () => Promise<void>;
   onAbort?: () => void;
   beforeRead?: (pathname: string) => Promise<void>;
+  responseForRequest?: (pathname: string) => Response | undefined;
   holdEvent?: Promise<void>;
   sessionMessages?: unknown[] | (() => unknown[]);
   sessionAgent?: string;
@@ -242,6 +243,8 @@ function startMockOpencode(input?: {
         },
       });
       if (request.method === "GET") await input?.beforeRead?.(url.pathname);
+      const customResponse = input?.responseForRequest?.(url.pathname);
+      if (customResponse) return customResponse;
 
       if (url.pathname === "/provider") {
         return Response.json({
@@ -551,7 +554,8 @@ async function waitUntil(predicate: () => boolean) {
   return predicate();
 }
 
-async function createReadAuthorityFixture(beforeRead?: (pathname: string) => Promise<void>, holdEvent?: Promise<void>) {
+async function createReadAuthorityFixture(beforeRead?: (pathname: string) => Promise<void>, holdEvent?: Promise<void>,
+  responseForRequest?: (pathname: string) => Response | undefined) {
   const workspaceRoot = await createWorkspaceRoot();
   process.env.MATTERHORN_AUTH_DB = join(workspaceRoot, "accounts.db");
   process.env.MATTERHORN_WORK_DATA_DIR = join(workspaceRoot, "data");
@@ -562,7 +566,7 @@ async function createReadAuthorityFixture(beforeRead?: (pathname: string) => Pro
   process.env.MATTERHORN_HOSTED_PUBLIC_BETA = "false";
   process.env.MATTERHORN_HOSTED_MCP_ACCESS_MODE = "invite";
   process.env.MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET = "disposable-session-read-integrity-secret";
-  const mock = startMockOpencode({ beforeRead, holdEvent, sessionMessages: defaultSessionMessages() });
+  const mock = startMockOpencode({ beforeRead, holdEvent, responseForRequest, sessionMessages: defaultSessionMessages() });
   const openwork = await startOpenworkServer({ workspaceRoot,
     opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false });
   const base = `http://127.0.0.1:${openwork.server.port}`;
@@ -606,6 +610,57 @@ async function createReadAuthorityFixture(beforeRead?: (pathname: string) => Pro
 }
 
 describe("workspace session read APIs", () => {
+  for (const surface of ["json", "empty", "throttled", "stream", "compressed"]) {
+    test(`runtime response cannot control browser authority: ${surface}`, async () => {
+      const path = surface === "stream" ? "/event" : "/session/ses_1/message";
+      const status = surface === "empty" ? 204 : surface === "throttled" ? 429 : 200;
+      const contentType = surface === "stream" ? "text/event-stream" : "application/json";
+      const payload = surface === "stream" ? "data: fixture-response\n\n" : '{"fixture":"runtime-response"}';
+      const app = await createReadAuthorityFixture(undefined, undefined, pathname => {
+        if (pathname !== path) return undefined;
+        const headers = new Headers({
+          "Content-Type": contentType, "Cache-Control": "public, max-age=3600",
+          "CDN-Cache-Control": "public, max-age=3600", "Vercel-CDN-Cache-Control": "public, max-age=3600",
+          "Set-Cookie": "mh_session=disposable-upstream-cookie; Path=/; HttpOnly",
+          "Clear-Site-Data": '"cookies", "storage"', "Refresh": "0; url=https://fixture.invalid",
+          "Content-Security-Policy": "default-src * 'unsafe-inline'",
+          "Permissions-Policy": "camera=*", "Referrer-Policy": "unsafe-url",
+          "X-Content-Type-Options": "invalid-upstream-value", "X-Frame-Options": "ALLOWALL",
+          "WWW-Authenticate": 'Basic realm="fixture-runtime"', "X-Runtime-Private": "synthetic-secret",
+          "ETag": '"fixture-revision"', "Last-Modified": "Thu, 01 Oct 2026 00:00:00 GMT", "Retry-After": "7",
+        });
+        headers.append("Set-Cookie", "fixture_other=upstream-cookie; Path=/");
+        if (surface === "compressed") headers.set("Content-Encoding", "gzip");
+        return new Response(surface === "empty" ? null : surface === "compressed"
+          ? Bun.gzipSync(new TextEncoder().encode(payload)) : payload, { status, headers });
+      });
+      const response = await fetch(`${app.base}/workspace/${app.workspaceId}/opencode${path}`, {
+        headers: { Cookie: app.cookie },
+      });
+      const deniedHeaders = ["set-cookie", "clear-site-data", "refresh", "cdn-cache-control",
+        "vercel-cdn-cache-control", "www-authenticate", "x-runtime-private", "content-encoding"];
+      expect(deniedHeaders.map(name => ({ name, present: response.headers.has(name) })))
+        .toEqual(deniedHeaders.map(name => ({ name, present: false })));
+      expect(response.status).toBe(status);
+      expect(response.headers.get("content-type")).toBe(contentType);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
+      expect(response.headers.get("permissions-policy")).toBe("camera=(), microphone=(), geolocation=(), payment=(), usb=()");
+      expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+      expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(response.headers.get("x-frame-options")).toBe("DENY");
+      expect(response.headers.get("etag")).toBe('"fixture-revision"');
+      expect(response.headers.get("last-modified")).toBe("Thu, 01 Oct 2026 00:00:00 GMT");
+      expect(response.headers.get("retry-after")).toBe("7");
+      expect(await response.text()).toBe(surface === "empty" ? "" : payload);
+      // Normal account endpoints still own their cookies and remain usable.
+      expect((await fetch(`${app.base}/api/auth/account/security`, { headers: { Cookie: app.cookie } })).status).toBe(200);
+      const logout = await fetch(`${app.base}/api/auth/sign-out`, { method: "POST", headers: { Cookie: app.cookie } });
+      expect(logout.status).toBe(200);
+      expect(logout.headers.has("set-cookie")).toBe(true);
+    });
+  }
+
   for (const principal of ["account", "operator"]) {
     for (const surface of ["read", "stream", "abort"]) {
       test(`runtime proxy minimizes request headers: ${principal}, ${surface}`, async () => {

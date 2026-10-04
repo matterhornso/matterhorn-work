@@ -864,4 +864,30 @@ pnpm test:matterhorn-platform-safety
 git diff --check
 ```
 
-This verifies in-flight local HTTP authority, not cross-process atomic revocation across every data store, UI recovery after these errors, or real runtime/provider behavior. Next review targets are remaining outbound response-header trust and browser recovery when a binding or session operation is denied. Hosted five-desk acceptance, accounting, email, encryption/restore and full accessibility/browser coverage remain open. Existing user chats/previews were untouched; no live chain/provider request, production secret change, push, merge or deployment occurred.
+This verifies in-flight local HTTP authority, not cross-process atomic revocation across every data store, UI recovery after these errors, or real runtime/provider behavior. The response-header follow-up is recorded below; browser recovery remains unverified. Hosted five-desk acceptance, accounting, email, encryption/restore and full accessibility/browser coverage remain open. Existing user chats/previews were untouched; no live chain/provider request, production secret change, push, merge or deployment occurred.
+
+## Runtime response header isolation
+
+Following coworker-authority commit `0c9282143a7bb3b75c13d704b60eb207dba3f678`, five real loopback HTTP cases reproduced response-header injection from the configured runtime. JSON, empty, throttled, event-stream and compressed responses forwarded synthetic Set-Cookie, Clear-Site-Data, Refresh, CDN cache directives, authentication challenges and an arbitrary private header. A compromised or incorrectly configured runtime could therefore supply headers interpreted at the Matterhorn origin. These tests establish forwarding, not a production compromise or a browser exploit.
+
+The response adapter now retains only Content-Type, ETag, Last-Modified and Retry-After from the runtime. It sets Cache-Control to no-store and a restrictive data-response CSP with a sandbox, default-src none, no forms, no framing and no base URI. Upstream policy headers are discarded, allowing Matterhorn's existing response wrapper to apply its own permissions, referrer, MIME-sniffing and framing policies. Transport encoding/length headers remain omitted because fetch may already decompress the body. The application—not the runtime—can still add its own run ID and deployment headers after sanitization.
+
+The HTTP regressions verify unchanged status/body, retained API metadata, gzip decoding, safe policies and the absence of injected headers. They also confirm the real local account security endpoint remains usable and normal logout still emits its own cookie-clearing header. Existing streaming cancellation, request-header isolation and revoked-response tests remain passing. No browser profile or cookie jar was modified by this test; HTTP clients sent only disposable fixture cookies. Header checks alone do not prove browser enforcement across Chromium, Safari or Firefox.
+
+- Focused response/request/stream regressions: **18 pass, zero fail, 202 assertions**.
+- Related session/auth/backend-security/rate-limit/MCP/coworker HTTP suites: **343 pass, zero fail, 3,508 assertions across six files**, terminal exit zero.
+- Server typecheck and build: pass.
+- Full safety gate: all 11 stages pass with terminal exit zero, including the five new response-header cases.
+- Diff whitespace: pass.
+
+Failing evidence: `/tmp/matterhorn-proxy-response-headers-red-2026-10-04.log`. Focused evidence: `/tmp/matterhorn-proxy-response-headers-focused-2026-10-04.log`. Final broader logs: `/tmp/matterhorn-proxy-response-headers-{http,typecheck,build,safety}-2026-10-04.log`.
+
+```sh
+bun test apps/server/src/session-read-model.e2e.test.ts apps/server/src/auth.e2e.test.ts apps/server/src/backend-security.e2e.test.ts apps/server/src/request-rate-limit-store.test.ts apps/server/src/hosted-guarded-mcp.test.ts apps/server/src/crypto-coworker-routes.e2e.test.ts --timeout 20000
+pnpm --filter matterhorn-work-server typecheck
+pnpm --filter matterhorn-work-server build
+pnpm test:matterhorn-platform-safety
+git diff --check
+```
+
+Response sanitization occurs after fetch: it does not establish safe upstream redirect following or validate every response body. Those transport/browser boundaries and recovery after denied coworker/session operations remain next review items. All hosted acceptance, real-provider accounting, inbox, encryption/restore and comprehensive UI/accessibility gates remain open. No feature activation, migration, dependency, user-preview change, push, merge or deployment occurred.
