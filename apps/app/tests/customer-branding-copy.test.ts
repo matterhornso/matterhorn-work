@@ -95,7 +95,7 @@ describe("customer-facing Matterhorn Desks branding", () => {
     );
 
     expect(publicSignIn).toContain(
-      "Account access is temporarily unavailable on this preview.",
+      "Account access could not be checked. Check your connection and try again.",
     );
     expect(publicSignIn).toContain("accountServiceAvailable === false");
     expect(publicSignIn).toContain("Account access unavailable");

@@ -70,7 +70,7 @@ function requireAuthAcknowledgement(value: unknown): { ok: true } {
 async function requestPublicAuth(
   config: PublicCloudConfig,
   path: string,
-  input: { method?: "GET" | "POST"; body?: unknown } = {},
+  input: { method?: "GET" | "POST"; body?: unknown; signal?: AbortSignal } = {},
 ): Promise<unknown> {
   const controller = new AbortController();
   const timeout = globalThis.setTimeout(() => controller.abort(), PUBLIC_AUTH_TIMEOUT_MS);
@@ -83,7 +83,7 @@ async function requestPublicAuth(
         ...(input.body === undefined ? {} : { "Content-Type": "application/json" }),
       },
       body: input.body === undefined ? undefined : JSON.stringify(input.body),
-      signal: controller.signal,
+      signal: input.signal ? AbortSignal.any([controller.signal, input.signal]) : controller.signal,
     });
     const text = await response.text();
     let payload: unknown = null;
@@ -109,6 +109,7 @@ async function requestPublicAuth(
     }
     return payload;
   } catch (error) {
+    if (input.signal?.aborted) throw error;
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new Error("Request timed out.");
     }
@@ -120,7 +121,7 @@ async function requestPublicAuth(
 
 export function createPublicAuthClient(config: PublicCloudConfig) {
   return {
-    getPublicAuthConfig: async () => parsePublicAuthConfig(await requestPublicAuth(config, "/api/auth/config")),
+    getPublicAuthConfig: async (signal?: AbortSignal) => parsePublicAuthConfig(await requestPublicAuth(config, "/api/auth/config", { signal })),
     signInEmail: (email: string, password: string) => requestPublicAuth(config, "/api/auth/sign-in/email", {
       method: "POST",
       body: { email: email.trim(), password },

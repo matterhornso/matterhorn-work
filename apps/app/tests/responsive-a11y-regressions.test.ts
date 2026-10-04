@@ -164,12 +164,14 @@ describe("responsive accessibility regressions", () => {
     expect(signin).toContain("turnstileToken ?? undefined");
     expect(signin).toContain("<PublicTurnstile");
     expect(signin).toContain("resetSignal={turnstileResetSignal}");
-    expect(signin).toContain("client.getPublicAuthConfig()");
+    expect(signin).toContain("client.getPublicAuthConfig(signal)");
     expect(signin).toContain("AUTH_CONFIG_FAIL_CLOSED");
     expect(signin).toContain("never infer that signup or recovery is safe");
     expect(signin).toContain('signupsPaused ? "public-auth-signup-availability" : undefined');
     expect(signin).toContain('id="public-auth-signup-availability"');
-    expect(signin).toContain("publicSignupAvailabilityMessage(publicAuthConfig)");
+    expect(signin).toContain("publicSignupAvailabilityMessage(publicAuthConfig, authConfigUnavailable)");
+    expect(signin).toContain("(accountUnavailable || authConfigUnavailable) && !sessionBusy");
+    expect(signin).toContain("return () => accessCheck.current?.abort()");
     expect(den).toContain('"/api/auth/config"');
     expect(den).toContain('"/api/auth/verify-email"');
     expect(den).toContain('"/api/auth/resend-verification"');

@@ -19,6 +19,23 @@ afterEach(() => {
 });
 
 describe("public Cloud session bootstrap", () => {
+  test("forwards cancellation to a pending session lookup", async () => {
+    const controller = new AbortController();
+    globalThis.fetch = (async (_input, init) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+    })) as typeof fetch;
+    const pending = checkPublicCloudSession(config, controller.signal);
+    controller.abort();
+    await expect(pending).rejects.toBeInstanceOf(DOMException);
+  });
+
+  test("bounds a hung session lookup rather than leaving account controls disabled forever", async () => {
+    globalThis.fetch = (async (_input, init) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+    })) as typeof fetch;
+    await expect(checkPublicCloudSession(config)).rejects.toMatchObject({ name: "TimeoutError" });
+  }, 15_000);
+
   test("returns account creation and sign-in to first-run onboarding", () => {
     const signUp = new URL(
       buildPublicCloudAuthUrl(

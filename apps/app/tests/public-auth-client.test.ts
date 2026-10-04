@@ -26,6 +26,21 @@ afterEach(() => {
 });
 
 describe("public auth client", () => {
+  test("cancels a pending configuration lookup without reporting a timeout", async () => {
+    const controller = new AbortController();
+    let requestSignal: AbortSignal | null | undefined;
+    globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requestSignal = init?.signal;
+      return await new Promise<Response>((_resolve, reject) => {
+        requestSignal?.addEventListener("abort", () => reject(requestSignal?.reason), { once: true });
+      });
+    }) as typeof fetch;
+    const result = createPublicAuthClient(config).getPublicAuthConfig(controller.signal);
+    controller.abort();
+    await expect(result).rejects.toBeInstanceOf(DOMException);
+    expect(requestSignal?.aborted).toBe(true);
+  });
+
   test.each([
     "null",
     "",
