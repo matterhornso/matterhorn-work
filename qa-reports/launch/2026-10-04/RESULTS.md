@@ -763,4 +763,32 @@ git diff --check
 
 Failing reproductions: `/tmp/matterhorn-mixed-principal-red-2026-10-04.log` (eight failures) and `/tmp/matterhorn-mcp-body-red-2026-10-04.log` (three failures, unchanged control passing). Final regression evidence: `/tmp/matterhorn-principal-body-{http,typecheck,build,safety}-2026-10-04.log`. The auth suite is already part of the full safety gate; no dependency, migration, production cleanup or new workflow is required.
 
-Next local review targets are session snapshots and event streams across revocation while awaiting runtime data, including reconnect and cancellation. Their authorization freshness is not proved by these account-route and request-body tests. The full browser/UI, hosted five-desk, inbox, accounting and encryption/restore gates remain open. No push, merge or deployment occurred.
+The subsequent session-read and event-stream review is recorded below; its guarantees are separate from these account-route and request-body tests. The full browser/UI, hosted five-desk, inbox, accounting and encryption/restore gates remain open. No push, merge or deployment occurred.
+
+## Session reads and event streams after access revocation
+
+The account-identity correction above is committed as `be0fd4a436756d2160c15a5c77e6658a97af818c`. A deterministic local HTTP review found that six session read surfaces returned runtime data using authority checked before the external read. The list, session, messages, status, snapshot and initial event-snapshot endpoints all returned success after logout, MCP-key revocation or an active-workspace change while the fake runtime withheld its response. All 18 denied cases initially failed; 12 unchanged cookie/MCP controls passed. The first fixture attempt used an incorrect helper name and did not exercise the product; the final failing log below is the valid reproduction.
+
+Each of those routes now checks the original request's current authority after the runtime read and before returning data. Revoked requests receive 401; an in-flight request whose active workspace changed receives 403. Tests also assert that denied responses omit the synthetic session title and message marker. Four further tests exercise the actual guarded-MCP snapshot and event tools, not just direct HTTP routes: revoked keys produce a safe tool error without message data; unchanged keys return the expected fixture data.
+
+Open event streams also continued sending heartbeat frames after logout, key revocation or a workspace switch. All three original cases failed. Streams now recheck authority before each frame and close without another frame when the check fails. Normal completion, cancellation and abort share timer/listener cleanup; an already-aborted request does not start emitting. Five HTTP stream tests cover the three changes, unchanged access and client cancellation, then attempt a reconnect. Revoked reconnects return 401; the old workspace returns 404 after a switch; unchanged and cancelled clients can open a fresh stream. The tests use a one-second heartbeat and explicitly fail the fixture if revocation misses that interval, rather than treating an already-delivered frame as a leak.
+
+Revocation is checked on the next attempted frame, normally the next heartbeat (15 seconds by default), not through an instantaneous revocation notification. These tests do not claim that already-delivered content can be recalled, that a pending upstream HTTP read is cancelled immediately on revocation, or that the event endpoint produces live model deltas beyond its existing initial snapshot/status and heartbeat behavior. No new streaming capability is introduced.
+
+- New focused delayed-read and stream lifecycle cases: **35 pass, zero fail, 228 assertions**.
+- Final local chat, auth, backend-security, rate-limit and guarded-MCP suites, including four additional MCP transport cases: **277 pass, zero fail, 2,457 assertions across five files**.
+- Server typecheck and build: pass.
+- Full platform safety gate: **all 11 stages pass**, with terminal exit zero.
+- Diff whitespace: pass.
+
+```sh
+bun test apps/server/src/session-read-model.e2e.test.ts apps/server/src/auth.e2e.test.ts apps/server/src/backend-security.e2e.test.ts apps/server/src/request-rate-limit-store.test.ts apps/server/src/hosted-guarded-mcp.test.ts --timeout 20000
+pnpm --filter matterhorn-work-server typecheck
+pnpm --filter matterhorn-work-server build
+pnpm test:matterhorn-platform-safety
+git diff --check
+```
+
+Failing evidence: `/tmp/matterhorn-session-read-revocation-red-final-2026-10-04.log` and `/tmp/matterhorn-session-stream-revocation-red-2026-10-04.log`. Focused evidence: `/tmp/matterhorn-session-authority-focused-2026-10-04.log`. Final broader checks: `/tmp/matterhorn-session-authority-http-2026-10-04.log`, `/tmp/matterhorn-session-authority-typecheck-final-2026-10-04.log` and `/tmp/matterhorn-session-authority-{build,safety}-2026-10-04.log`. The session-read suite already runs in the safety gate. All accounts, keys and runtime data are disposable local fixtures; there was no live inference, hosted account change or user-preview restart.
+
+Next review targets are final delivery of buffered MCP event batches, remaining runtime proxy streams and coworker/session-binding reads across in-flight authorization changes. In particular, the MCP adapter collects internal event frames before producing its complete tool response; the current tests revoke access before the initial snapshot is emitted, not after valid frames have entered that internal buffer. This change does not certify that later boundary, all browser recovery behavior, native-driver concurrency or hosted acceptance. No migration, dependency change, feature activation, push, merge or deployment occurred. The wider QA and launch gates remain open.

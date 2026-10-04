@@ -201,6 +201,7 @@ function startMockOpencode(input?: {
   holdPermission?: Promise<void>;
   beforeMessages?: () => Promise<void>;
   onAbort?: () => void;
+  beforeRead?: (pathname: string) => Promise<void>;
   sessionMessages?: unknown[] | (() => unknown[]);
   sessionAgent?: string;
   agentPrompts?: Record<string, string> | (() => Record<string, string>);
@@ -237,6 +238,7 @@ function startMockOpencode(input?: {
           proxySecret: request.headers.get("x-matterhorn-proxy-secret"),
         },
       });
+      if (request.method === "GET") await input?.beforeRead?.(url.pathname);
 
       if (url.pathname === "/provider") {
         return Response.json({
@@ -533,7 +535,175 @@ async function waitUntil(predicate: () => boolean) {
   return predicate();
 }
 
+async function createReadAuthorityFixture(beforeRead?: (pathname: string) => Promise<void>) {
+  const workspaceRoot = await createWorkspaceRoot();
+  process.env.MATTERHORN_AUTH_DB = join(workspaceRoot, "accounts.db");
+  process.env.MATTERHORN_WORK_DATA_DIR = join(workspaceRoot, "data");
+  process.env.MATTERHORN_WORK_MEMORY_ROOT = join(workspaceRoot, "memory");
+  process.env.MATTERHORN_SIGNUPS_ENABLED = "true";
+  process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "false";
+  process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED = "false";
+  process.env.MATTERHORN_HOSTED_PUBLIC_BETA = "false";
+  process.env.MATTERHORN_HOSTED_MCP_ACCESS_MODE = "invite";
+  process.env.MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET = "disposable-session-read-integrity-secret";
+  const mock = startMockOpencode({ beforeRead, sessionMessages: defaultSessionMessages() });
+  const openwork = await startOpenworkServer({ workspaceRoot,
+    opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false });
+  const base = `http://127.0.0.1:${openwork.server.port}`;
+  const signup = await fetch(`${base}/api/auth/sign-up/email`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "session-read@example.com", password: "disposable-session-read-password" }),
+  });
+  expect(signup.status).toBe(200);
+  const user = await signup.json();
+  const cookie = signup.headers.get("set-cookie")?.split(";")[0];
+  if (!cookie || typeof user.user?.id !== "string") throw new Error("Missing disposable read account");
+  process.env.MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS = user.user.id;
+  const created = await fetch(`${base}/api/auth/account/mcp-access`, {
+    method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" },
+    body: JSON.stringify({ label: "Disposable session reads" }),
+  });
+  expect(created.status).toBe(201);
+  const { credential } = await created.json();
+  if (typeof credential?.accessToken !== "string" || typeof credential.id !== "string") throw new Error("Missing fixture key");
+  const workspaces = await fetch(`${base}/workspaces`, { headers: { Cookie: cookie } });
+  expect(workspaces.status).toBe(200);
+  const { items } = await workspaces.json();
+  const workspaceId = items[0]?.id;
+  if (typeof workspaceId !== "string") throw new Error("Missing fixture workspace");
+  const revoke = async (change: string) => {
+    if (change === "cookie-revoked") {
+      expect((await fetch(`${base}/api/auth/sign-out`, { method: "POST", headers: { Cookie: cookie } })).status).toBe(200);
+    } else if (change === "mcp-revoked") {
+      expect((await fetch(`${base}/api/auth/account/mcp-access/${credential.id}`, {
+        method: "DELETE", headers: { Cookie: cookie },
+      })).status).toBe(200);
+    } else if (change === "workspace-changed") {
+      expect((await fetch(`${base}/api/auth/organization/create`, {
+        method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "New disposable workspace", slug: "new-read-workspace" }),
+      })).status).toBe(200);
+    }
+  };
+  return { base, workspaceId, cookie, accessToken: credential.accessToken, revoke };
+}
+
 describe("workspace session read APIs", () => {
+  for (const tool of ["matterhorn_get_session_snapshot", "matterhorn_watch_session_events"]) {
+    for (const change of ["mcp-revoked", "unchanged"]) {
+      test(`guarded MCP delayed read retains authority: ${tool}, ${change}`, async () => {
+        const reached = deferred();
+        const release = deferred();
+        const app = await createReadAuthorityFixture(async pathname => {
+          if (!pathname.startsWith("/session")) return;
+          reached.resolve();
+          await release.promise;
+        });
+        const controller = new AbortController();
+        const pending = fetch(`${app.base}/mcp/guarded`, {
+          method: "POST", signal: controller.signal,
+          headers: { ...auth(app.accessToken), "Content-Type": "application/json",
+            Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-11-25" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: "delayed-read", method: "tools/call",
+            params: { name: tool, arguments: { workspaceId: app.workspaceId, sessionId: "ses_1",
+              ...(tool === "matterhorn_watch_session_events" ? { snapshot: true, maxEvents: 1 } : {}) } } }),
+        });
+        try {
+          await reached.promise;
+          await app.revoke(change);
+          release.resolve();
+          const response = await pending;
+          expect(response.status).toBe(200);
+          const result = await response.json();
+          expect(result.result?.isError === true).toBe(change === "mcp-revoked");
+          if (change === "mcp-revoked") {
+            expect(JSON.stringify(result)).toContain("Matterhorn denied this account-scoped request.");
+            expect(JSON.stringify(result)).not.toContain("mock-host");
+          } else expect(JSON.stringify(result)).toContain("mock-host");
+        } finally {
+          release.resolve();
+          controller.abort();
+          await pending.catch(() => undefined);
+        }
+      }, 15000);
+    }
+  }
+
+  for (const change of ["cookie-revoked", "mcp-revoked", "workspace-changed", "unchanged", "cancelled"]) {
+    test(`active session event stream handles ${change} and reconnect`, async () => {
+      const app = await createReadAuthorityFixture();
+      const headers = change === "mcp-revoked" ? auth(app.accessToken) : { Cookie: app.cookie };
+      const url = `${app.base}/workspace/${app.workspaceId}/sessions/ses_1/events`;
+      const controller = new AbortController();
+      const response = await fetch(`${url}?maxEvents=2&heartbeatMs=1000`, { headers, signal: controller.signal });
+      expect(response.status).toBe(200);
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("Missing fixture event stream");
+      try {
+        const first = await reader.read();
+        const events = parseSseEvents(new TextDecoder().decode(first.value));
+        expect(events.map(event => event.event)).toEqual(["session.status"]);
+        if (change === "cancelled") {
+          await reader.cancel();
+        } else {
+          await app.revoke(change);
+          // Make a scheduling overrun an explicit fixture failure, rather
+          // than mistake an already delivered heartbeat for post-revoke data.
+          expect(Date.now() - events[0].data.observedAt).toBeLessThan(1000);
+          const next = await reader.read();
+          if (change === "unchanged") {
+            expect(parseSseEvents(new TextDecoder().decode(next.value)).map(event => event.event)).toEqual(["heartbeat"]);
+            expect((await reader.read()).done).toBe(true);
+          } else expect(next.done).toBe(true);
+        }
+        const reconnect = await fetch(`${url}?maxEvents=1`, { headers });
+        expect(reconnect.status).toBe(change === "workspace-changed" ? 404
+          : change === "unchanged" || change === "cancelled" ? 200 : 401);
+        await reconnect.text();
+      } finally {
+        controller.abort();
+        await reader.cancel().catch(() => undefined);
+      }
+    }, 15000);
+  }
+
+  for (const surface of ["list", "session", "messages", "status", "snapshot", "events"]) {
+    for (const change of ["cookie-revoked", "mcp-revoked", "workspace-changed", "unchanged-cookie", "unchanged-mcp"]) {
+      test(`delayed session read rechecks authority: ${surface}, ${change}`, async () => {
+        const reached = deferred();
+        const release = deferred();
+        const app = await createReadAuthorityFixture(async pathname => {
+          if (!pathname.startsWith("/session")) return;
+          reached.resolve();
+          await release.promise;
+        });
+        const headers = change.includes("mcp") ? auth(app.accessToken) : { Cookie: app.cookie };
+        const path = surface === "list" ? "" : surface === "session" ? "/ses_1"
+          : surface === "events" ? "/ses_1/events?snapshot=true&maxEvents=1" : `/ses_1/${surface}`;
+        const controller = new AbortController();
+        const pending = fetch(`${app.base}/workspace/${app.workspaceId}/sessions${path}`, { headers, signal: controller.signal });
+        try {
+          await reached.promise;
+          await app.revoke(change);
+          release.resolve();
+          const response = await pending;
+          const body = await response.text();
+          const unchanged = change.startsWith("unchanged");
+          expect(response.status).toBe(unchanged ? 200 : change === "workspace-changed" ? 403 : 401);
+          if (unchanged) expect(body).toContain("ses_1");
+          else {
+            expect(body).not.toContain("Hostname Check");
+            expect(body).not.toContain("mock-host");
+          }
+        } finally {
+          release.resolve();
+          controller.abort();
+          await pending.catch(() => undefined);
+        }
+      }, 15000);
+    }
+  }
+
   for (const boundary of ["key-revoked", "eligibility-removed", "membership-removed", "mode-disabled", "history-revocation", "permission-revocation", "unchanged"]) {
     test(`guarded MCP approval rechecks original authority after ${boundary}`, async () => {
       const workspaceRoot = await createWorkspaceRoot();

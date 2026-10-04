@@ -6345,12 +6345,17 @@ function sessionEventStreamResponse(input: SessionStreamEventInput) {
   let sent = 0;
   let closed = false;
   let heartbeat: ReturnType<typeof setInterval> | undefined;
+  let abortListener: (() => void) | undefined;
 
   const nextCursor = () => String(index > 0 ? ++index : startedAt + ++index);
+  const cleanup = () => {
+    if (heartbeat) clearInterval(heartbeat);
+    if (abortListener) input.request.signal.removeEventListener("abort", abortListener);
+  };
   const close = (controller: ReadableStreamDefaultController<Uint8Array>) => {
     if (closed) return;
     closed = true;
-    if (heartbeat) clearInterval(heartbeat);
+    cleanup();
     try {
       controller.close();
     } catch {
@@ -6363,6 +6368,12 @@ function sessionEventStreamResponse(input: SessionStreamEventInput) {
     payload: Record<string, unknown>,
   ) => {
     if (closed) return;
+    try {
+      assertRequestAccessCurrent(input.request);
+    } catch {
+      close(controller);
+      return;
+    }
     const cursor = nextCursor();
     const event = {
       type,
@@ -6376,8 +6387,7 @@ function sessionEventStreamResponse(input: SessionStreamEventInput) {
     try {
       controller.enqueue(encoder.encode(`id: ${cursor}\nevent: ${type}\ndata: ${JSON.stringify(event)}\n\n`));
     } catch {
-      closed = true;
-      if (heartbeat) clearInterval(heartbeat);
+      close(controller);
       return;
     }
     sent += 1;
@@ -6492,6 +6502,12 @@ function sessionEventStreamResponse(input: SessionStreamEventInput) {
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
+      abortListener = () => close(controller);
+      input.request.signal.addEventListener("abort", abortListener, { once: true });
+      if (input.request.signal.aborted) {
+        close(controller);
+        return;
+      }
       if (input.sinceCursor) {
         emit(controller, "error", {
           code: "cursor_expired",
@@ -6511,11 +6527,10 @@ function sessionEventStreamResponse(input: SessionStreamEventInput) {
           emit(controller, "heartbeat", { intervalMs: heartbeatMs });
         }, heartbeatMs);
       }
-      input.request.signal.addEventListener("abort", () => close(controller), { once: true });
     },
     cancel() {
       closed = true;
-      if (heartbeat) clearInterval(heartbeat);
+      cleanup();
     },
   });
 
@@ -15196,6 +15211,7 @@ function createRoutes(
       search: ctx.url.searchParams.get("search")?.trim() || undefined,
       limit: parseOptionalPositiveInteger(ctx.url.searchParams.get("limit"), "limit"),
     });
+    assertRequestAccessCurrent(ctx.request);
     return jsonResponse({ items });
   });
 
@@ -15206,6 +15222,7 @@ function createRoutes(
       throw new ApiError(400, "invalid_payload", "sessionId is required");
     }
     const item = await readWorkspaceSession(config, workspace, sessionId);
+    assertRequestAccessCurrent(ctx.request);
     return jsonResponse({ item });
   });
 
@@ -16185,6 +16202,7 @@ function createRoutes(
     const items = await readWorkspaceSessionMessages(config, workspace, sessionId, {
       limit: parseOptionalPositiveInteger(ctx.url.searchParams.get("limit"), "limit"),
     });
+    assertRequestAccessCurrent(ctx.request);
     return jsonResponse({ items });
   });
 
@@ -16195,6 +16213,7 @@ function createRoutes(
       throw new ApiError(400, "invalid_payload", "sessionId is required");
     }
     const item = await readWorkspaceSessionExecutionStatus(config, workspace, sessionId);
+    assertRequestAccessCurrent(ctx.request);
     return jsonResponse({ item });
   });
 
@@ -16207,6 +16226,7 @@ function createRoutes(
     const item = await readWorkspaceSessionSnapshot(config, workspace, sessionId, {
       limit: parseOptionalPositiveInteger(ctx.url.searchParams.get("limit"), "limit"),
     });
+    assertRequestAccessCurrent(ctx.request);
     return jsonResponse({ item });
   });
 
@@ -16229,6 +16249,7 @@ function createRoutes(
         : Promise.resolve(null),
       readWorkspaceSessionExecutionStatus(config, workspace, sessionId),
     ]);
+    assertRequestAccessCurrent(ctx.request);
     return sessionEventStreamResponse({
       request: ctx.request,
       workspaceId: workspace.id,
