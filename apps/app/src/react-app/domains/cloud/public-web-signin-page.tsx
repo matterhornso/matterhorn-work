@@ -23,6 +23,7 @@ import { PublicTurnstile } from "./public-turnstile";
 import { RETRO_UI } from "../../../app/lib/retro-ui";
 import { accountClientState, captureAccountGeneration } from "../../../app/lib/account-client-state";
 import { createPublicAuthMutationScope } from "../../../app/lib/public-auth-mutation";
+import { AccountOutcomeNotice } from "./account-outcome-notice";
 
 type PublicWebSigninPageProps = {
   config: PublicCloudConfig;
@@ -426,6 +427,8 @@ export function PublicWebSigninPage({
             <span>Matterhorn Desks</span>
           </div>
 
+          <AccountOutcomeNotice key={JSON.stringify([config.baseUrl, config.apiBaseUrl])}
+            scope={JSON.stringify([config.baseUrl, config.apiBaseUrl])} className="public-auth-status" />
           {!RETRO_UI && <p className="public-auth-kicker">Public beta</p>}
           <h1 id="public-auth-title" className="public-auth-title">
             Serious work deserves more than a chat.

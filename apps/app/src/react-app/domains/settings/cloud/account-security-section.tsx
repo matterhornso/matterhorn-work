@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import type { DenClient, DenUser } from "../../../../app/lib/den";
 import { accountSecurityQueryKey } from "./account-security-scope";
 import { captureAccountGeneration, runAccountScopedRequest } from "../../../../app/lib/account-client-state";
+import { ACCOUNT_OUTCOME_MESSAGES, rememberAccountOutcome } from "../../../../app/lib/account-outcome";
 import {
   SettingsInset,
   SettingsNotice,
@@ -96,7 +97,8 @@ function ScopedAccountSecuritySection({
     mutationFn: () => runAccountScopedRequest(() => client.changePassword(currentPassword, newPassword), isCurrent),
     onSuccess: () => {
       if (!isCurrent()) return;
-      onSessionEnded("Password changed. Sign in again on this device.");
+      onSessionEnded(ACCOUNT_OUTCOME_MESSAGES.password_changed);
+      rememberAccountOutcome("password_changed");
       window.location.assign("/");
     },
   });
@@ -104,10 +106,9 @@ function ScopedAccountSecuritySection({
     mutationFn: () => runAccountScopedRequest(() => client.deleteAccount(deletePassword, confirmationEmail), isCurrent),
     onSuccess: (result) => {
       if (!isCurrent()) return;
-      const message = result.workspaceDataDeletionComplete
-        ? "Account and owned workspace data deleted."
-        : "Account deletion is pending. You have been signed out; contact support to confirm completion.";
-      onSessionEnded(message);
+      const outcome = result.workspaceDataDeletionComplete ? "account_deleted" : "deletion_pending";
+      onSessionEnded(ACCOUNT_OUTCOME_MESSAGES[outcome]);
+      rememberAccountOutcome(outcome);
       window.location.assign("/");
     },
   });

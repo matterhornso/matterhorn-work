@@ -66,8 +66,13 @@ describe("account lifecycle contract", () => {
     expect(accountSecuritySource).toContain("confirmationEmail.trim().toLowerCase() === user.email.toLowerCase()");
     expect(accountSecuritySource).toContain("deletionBlockers.length > 0");
     expect(accountSecuritySource).toContain('variant="destructive"');
-    expect(accountSecuritySource).toContain("Account deletion is pending.");
+    expect(accountSecuritySource).toContain('result.workspaceDataDeletionComplete ? "account_deleted" : "deletion_pending"');
     expect(accountSecuritySource).not.toContain("Account deleted, but");
+  });
+
+  test("persists only the fixed outcome after cleanup and before redirect", () => {
+    expect(accountSecuritySource).toContain('onSessionEnded(ACCOUNT_OUTCOME_MESSAGES.password_changed);\n      rememberAccountOutcome("password_changed");\n      window.location.assign("/");');
+    expect(accountSecuritySource).toContain('onSessionEnded(ACCOUNT_OUTCOME_MESSAGES[outcome]);\n      rememberAccountOutcome(outcome);\n      window.location.assign("/");');
   });
 
   test("keeps account actions accessible on touch screens and communicates progress", () => {

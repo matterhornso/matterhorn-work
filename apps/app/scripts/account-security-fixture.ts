@@ -1,6 +1,7 @@
 // Disposable browser fixture: synthetic accounts/responses, no auth or external requests.
 // Run: bun apps/app/scripts/account-security-fixture.ts
 import { build } from "vite";
+import { readFile } from "node:fs/promises";
 import tailwindcss from "@tailwindcss/vite";
 const bundle = await build({
   configFile: false, envDir: false, root: new URL("../", import.meta.url).pathname, logLevel: "error",
@@ -15,11 +16,14 @@ if (!("output" in built)) throw new Error("Missing bundle");
 const script = built.output.find(item => item.type === "chunk" && item.isEntry);
 if (!script || script.type !== "chunk") throw new Error("Missing entry");
 const css = built.output.filter(item => item.type === "asset" && item.fileName.endsWith(".css"));
+const logo = await readFile(new URL("../public/matterhorn-logo-square.svg", import.meta.url));
 let scenario = "delayed";
 const pending: Array<() => void> = [];
 const headers = { "Cache-Control": "no-store", "Content-Security-Policy": "default-src 'self' data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" };
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, idleTimeout: 60, async fetch(request) {
   const path = new URL(request.url).pathname;
+  if (path === "/api/den/v1/session") return Response.json({ authenticated: false }, { headers });
+  if (path === "/api/auth/config") return Response.json({ signupsAvailable: false, signupStatus: "paused", emailVerificationRequired: true, passwordResetAvailable: false, legalAcceptanceRequired: true, minimumPasswordLength: 12, turnstileSiteKey: null }, { headers });
   if (path === "/__qa/state" && request.method === "GET") return Response.json({ scenario, pending: pending.length }, { headers });
   if (request.method === "POST" && path.startsWith("/__qa/")) {
     const value = path.slice("/__qa/".length);
@@ -47,6 +51,7 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, idleTimeout: 60, asyn
     return Response.json({ error: "Unsupported fixture request" }, { status: 404, headers });
   }
   if (path === "/fixture.js") return new Response(script.code, { headers: { ...headers, "Content-Type": "text/javascript" } });
+  if (path === "/matterhorn-logo-square.svg") return new Response(logo, { headers: { ...headers, "Content-Type": "image/svg+xml" } });
   if (path === "/fixture.css") return new Response(css.map(item => item.type === "asset" ? item.source : "").join("\n"), { headers: { ...headers, "Content-Type": "text/css" } });
   if (path !== "/") return new Response("Not found", { status: 404, headers });
   return new Response('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Account security fixture</title><link rel="stylesheet" href="/fixture.css"><div id="root"></div><script type="module" src="/fixture.js"></script></html>', { headers: { ...headers, "Content-Type": "text/html" } });
