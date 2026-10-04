@@ -98,7 +98,7 @@ import { deriveRenderedSessionMessages, resolveRenderedSessionSnapshot } from ".
 import { useLocal } from "../../../kernel/local-provider";
 import { deriveSessionRenderModel } from "../sync/transition-controller";
 import { useSessionScrollController } from "./scroll-controller";
-import { failedContinuationResponseId, resolveAssistantResponseRetryTurn, restoreResponseRetryAttachments, ResponseRetryAttachmentError, responseOutputTitle, runAssistantResponseRetry } from "./response-actions";
+import { failedResponseId, resolveAssistantResponseRetryTurn, restoreResponseRetryAttachments, ResponseRetryAttachmentError, responseOutputTitle, runAssistantResponseRetry } from "./response-actions";
 import { getSessionActivityStatusLabel, useSessionActivityStore, type SessionActivityStatus } from "../status/session-activity-store";
 import { deriveOpenTargets, selectAutoOpenTarget, type OpenTarget } from "../artifacts/open-target";
 import {
@@ -652,6 +652,7 @@ function starterWorkflowCapabilityItems(item: CustomerWorkflowStarterCard): stri
 
 type SessionError = {
   message: string;
+  retryResponseMessageId?: string;
   detail?: string;
   kind?: "model-not-found" | "provider-unavailable" | "rate-limited" | "privacy-blocked" | "privacy-consent" | "cancelled" | "generic";
   retryable?: boolean;
@@ -1275,7 +1276,7 @@ export function latestSessionSnapshotFailure(snapshot: MatterhornSessionSnapshot
     retryMessage,
     error: name === "MessageAbortedError"
       ? {
-          message: "Generation stopped. Your prompt is still available to edit or send again.",
+          message: "Generation stopped. The original request is saved in this conversation.",
           kind: "cancelled",
         } satisfies SessionError
       : normalizedError.kind === "provider-unavailable" || normalizedError.kind === "model-not-found" || normalizedError.kind === "privacy-blocked" || normalizedError.kind === "rate-limited"
@@ -1341,7 +1342,7 @@ export function SessionErrorCard({ error, onDismiss, onRetry, retrying, onConfir
                   className="rounded-md bg-dls-surface-muted/35 px-3 py-1.5 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover"
                   onClick={() => {
                     onOpenModelPicker?.();
-                    onDismiss();
+                    if (!error.retryResponseMessageId) onDismiss();
                   }}
                 >
                   Choose another model
@@ -1393,7 +1394,7 @@ export function SessionErrorCard({ error, onDismiss, onRetry, retrying, onConfir
                       className="rounded-md bg-dls-surface-muted/35 px-3 py-1.5 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover"
                       onClick={() => {
                         onChangeModel?.(s);
-                        onDismiss();
+                        if (!error.retryResponseMessageId) onDismiss();
                       }}
                     >
                       Use {s.providerID}/{s.modelID}
@@ -1405,7 +1406,7 @@ export function SessionErrorCard({ error, onDismiss, onRetry, retrying, onConfir
                   className="rounded-md bg-dls-surface-muted/35 px-3 py-1.5 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover"
                   onClick={() => {
                     onOpenModelPicker?.();
-                    onDismiss();
+                    if (!error.retryResponseMessageId) onDismiss();
                   }}
                 >
                   Change model
@@ -2229,23 +2230,23 @@ export function SessionSurface(props: SessionSurfaceProps) {
     if (operation) {
       recordModelOperationProviderError(operation, { name: failure.name });
     }
-    setError(failure.error);
+    setError({ ...failure.error, retryResponseMessageId: failure.id,
+      retryable: failure.error.retryable || failure.error.kind === "provider-unavailable"
+        || failure.error.kind === "model-not-found" || failure.error.kind === "cancelled",
+      detail: failure.error.kind === "provider-unavailable" || failure.error.kind === "model-not-found"
+        ? "The original request is saved in this conversation. Choose a working model, then retry that response."
+        : failure.error.retryable
+          ? [failure.error.detail, "Retry repeats the original request and leaves your draft unchanged."].filter(Boolean).join(" ")
+          : failure.error.detail,
+    });
     activity.setError(props.workspaceId, props.sessionId);
-    if (failure.retryMessage && failure.retryMessage !== MATTERHORN_CONTINUE_ANSWER_TEXT && !draft.trim()) {
-      setComposerDraft(props.sessionId, failure.retryMessage);
-      props.onDraftChange(buildDraft(failure.retryMessage, []));
-    }
   }, [
     awaitingAssistantBaseline,
-    buildDraft,
     chatStreaming,
     currentSnapshot,
-    draft,
-    props.onDraftChange,
     props.sessionId,
     props.workspaceId,
     sessionActivityRecord?.runStartedAt,
-    setComposerDraft,
   ]);
 
   useEffect(() => {
@@ -2589,16 +2590,20 @@ export function SessionSurface(props: SessionSurfaceProps) {
       try { await handleRetryAssistantResponse(retry.messageId); } catch { /* The retry error is already visible. */ }
       return;
     }
-    const failedContinuation = failedContinuationResponseId(latestSessionSnapshotFailure(currentSnapshot), renderedMessages);
-    if (failedContinuation) {
-      // Retry the accepted continuation, never the unrelated composer draft.
-      // The retry dispatcher retains the answer-only tool restriction.
-      try { await handleRetryAssistantResponse(failedContinuation); } catch { /* The retry error is already visible. */ }
+    if (error?.retryResponseMessageId) {
+      const responseId = failedResponseId(error.retryResponseMessageId, renderedMessages);
+      if (!responseId) {
+        setError({ message: "This response is no longer the latest turn. Review the conversation before retrying.", retryable: false });
+        return;
+      }
+      // Bind recovery to the displayed failure, never an unrelated draft or an
+      // older snapshot failure. Continuations retain their answer-only restriction.
+      try { await handleRetryAssistantResponse(responseId); } catch { /* The retry error is already visible. */ }
       return;
     }
     if (sending || (!draft.trim() && attachments.length === 0)) return;
     await handleSend();
-  }, [attachments.length, continueAssistantResponse, currentSnapshot, draft, handleRetryAssistantResponse, handleSend, props.sessionId, renderedMessages, sending]);
+  }, [attachments.length, continueAssistantResponse, draft, error?.retryResponseMessageId, handleRetryAssistantResponse, handleSend, props.sessionId, renderedMessages, sending]);
 
   const handleSaveAssistantResponse = useCallback(async (messageId: string, content: string): Promise<OpenTarget> => {
     if (!content.trim()) throw new Error("This response has no content to save.");

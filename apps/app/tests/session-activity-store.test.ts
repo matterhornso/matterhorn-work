@@ -167,7 +167,7 @@ describe("session activity timing", () => {
       retryMessage: "Find useful subnets",
       error: {
         kind: "cancelled",
-        message: "Generation stopped. Your prompt is still available to edit or send again.",
+        message: "Generation stopped. The original request is saved in this conversation.",
       },
     });
   });

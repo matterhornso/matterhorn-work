@@ -360,3 +360,35 @@ Evidence logs use `/tmp/matterhorn-delayed-control-`: `red2-2026-10-05.log`, `fo
 Impeccable hardening/polish and Uncodixfy kept the existing layout and tokens. This correction adds cancellation feedback through the existing narration/result channel, not a new visual surface. No new screenshot round, cross-browser, native screen-reader or zoom certification is claimed. The automatic design hook found no deterministic issues and reported the existing stale design sidecar; no metadata migration was made.
 
 This gate stops execution before an action starts. It does not reverse accepted mutations or certify every registered action's own post-execution awaits and success reporting. Accepted-run attachment recovery, native decoding resource ceilings and hosted five-desk/operational acceptance remain open. Source inspection still shows the terminal-failure effect restoring only `retryMessage` text with an empty attachment list; a mounted reproduction is the next useful check, not yet a confirmed new finding here. No credentials, existing previews/chats or production configuration were changed. Nothing was pushed, merged or deployed.
+
+## Recovering accepted requests that later fail
+
+Following `54b4dd2a0abaaf0fe667027b4a93c63df746c6ee`, four mounted cases reproduced incorrect recovery from a saved terminal failure. Attachment-only Retry sent nothing; a text-plus-file Retry sent text without its file; and both variants sent a newer composer draft/file when one was present. The failure effect had copied only text into the composer, while Retry used whichever draft happened to be current.
+
+The displayed error now identifies its failed response. Retry validates that it remains the latest response, then uses the existing historical retry transaction and bounded inline-file restoration. The terminal failure no longer writes anything into the composer. Rejected new submissions still use their retained draft, rather than being redirected by an older failed snapshot. The selected model, privacy checks, account checks and server authority remain in the normal path. Saved stopped runs provide an explicit retry action without restarting automatically.
+
+Provider recovery also needed correction: selecting a model dismissed the failed-turn error and removed its recovery action. Errors associated with accepted turns now retain Retry through model selection. Their guidance says the original request is stored in the conversation rather than incorrectly claiming it is in the composer. Other provider/rate-limit guidance remains visible. A source assertion requiring the old automatic text restoration was replaced with the error-to-response binding contract, backed by the failing-then-passing mounted reproductions.
+
+### Terminal recovery verification
+
+- **Eleven new mounted cases** cover saved text-plus-file/file-only failures with empty or newer drafts; accepted dispatch followed by navigation and a terminal snapshot; a newer preflight rejection that must retry the newer draft; rate limiting; unavailable original files; answer-only continuation; model selection; and stopped status. Keyboard Enter activates the failed-turn Retry in the four initial cases. The unavailable-file case stops before abort/revert and shows non-retryable reattachment guidance.
+- Continuation recovery sends `requestToolProfiles: [{ "*": false }]` in both preflight and dispatch. This verifies the browser wire contract, not a real runtime's enforcement. The original incorrect test expected the internal `answerOnly` draft flag on the HTTP body; source inspection established the actual wire representation, and the test now checks that restriction explicitly.
+- The provider recovery test first used the compact header picker's option selector for the full model dialog. After correcting it to the real dialog's model button, `provider-red2` reproduced the missing recovery action. This selector correction is not a product fix.
+- Final mounted suite: **68 pass, zero fail, 474 assertions**, including two provider-capture overflow assertions. The earlier real-gateway attachment cases remain included. Without optional captures, expect two fewer assertions.
+- Final frontend suite: **1,469 pass, zero fail, 8,539 assertions across 193 files**. Final frontend typecheck and web build pass; existing bundle-size warnings remain.
+- The final full platform safety gate passes **all 11 stages**, with terminal exit zero. Earlier running gates were allowed to finish; the final run checked the completed model-selection and stopped-run recovery change.
+
+```sh
+bun test apps/app/scripts/session-route-lifetime.browser.test.ts --test-name-pattern 'accepted failure' --timeout 120000
+TERMINAL_PROVIDER_CAPTURES=<disposable-directory> bun test apps/app/scripts/session-route-lifetime.browser.test.ts --timeout 120000
+bun test apps/app/tests
+pnpm --filter @matterhorn-work/app typecheck
+pnpm --filter @matterhorn-work/app build:web
+pnpm test:matterhorn-platform-safety
+```
+
+Logs use `/tmp/matterhorn-terminal-retry-`: `red-2026-10-05.log`, `provider-red2-2026-10-05.log`, `boundaries-final-2026-10-05.log`, `mounted-verified-2026-10-05.log`, `app-complete-2026-10-05.log`, `typecheck-complete-2026-10-05.log`, `build-complete-2026-10-05.log` and `safety-complete-2026-10-05.log`. Earlier mounted logs include the corrected wire-field assertion failure and are superseded by `mounted-verified`.
+
+Impeccable hardening/polish and Uncodixfy preserved the current components, layout and tokens. One light/dark capture batch at 390/1440 px checked the generic failed-turn guidance, followed by one provider-recovery confirmation batch at light 390/dark 1440. Both mobile and desktop samples were inspected; captured widths have no horizontal page overflow. The existing status/alert semantics remain, and stopped recovery is verified as status rather than an error alert. Captures use reduced motion. This is not Safari/Firefox, real screen-reader, 200% zoom or localized-copy certification. Capture folders are `/tmp/matterhorn-terminal-retry-captures-2026-10-05` and `/tmp/matterhorn-terminal-provider-captures-2026-10-05`; the first batch is reproducible with `TERMINAL_RETRY_CAPTURES` on the focused cases.
+
+The new tests use production UI code with synthetic account, provider and session responses. The accepted-dispatch cases publish a synthetic saved failure after acceptance and read it on returning to the chat; they do not prove a live provider's streaming failure or real rollback. These results close the local terminal-recovery finding, not hosted acceptance. Native image-decoding resource ceilings, asynchronous response-action/consent lifetime checks and hosted five-desk/operational gates remain open. No existing previews/chats, credentials or production settings changed. Nothing was pushed, merged or deployed.

@@ -1,17 +1,15 @@
 import type { UIMessage } from "ai";
 import type { MatterhornAgentPrivacyPreflightResponse } from "@matterhorn-work/types/guarded-agent-runtime";
-import { MATTERHORN_CONTINUE_ANSWER_TEXT } from "@matterhorn-work/types/guarded-agent-runtime";
 import { AccountStateChangedError, captureAccountGeneration } from "../../../../app/lib/account-client-state";
 import type { ComposerAttachment } from "../../../../app/types";
 import { CHAT_ATTACHMENT_MAX_BYTES } from "@matterhorn-work/types/chat-attachments";
 
-export function failedContinuationResponseId(
-  failure: { id: string; retryMessage: string } | null,
+export function failedResponseId(
+  responseMessageId: string | undefined,
   messages: readonly UIMessage[],
 ): string | null {
   const latest = messages.at(-1);
-  return failure?.retryMessage === MATTERHORN_CONTINUE_ANSWER_TEXT
-    && latest?.role === "assistant" && latest.id === failure.id ? failure.id : null;
+  return responseMessageId && latest?.role === "assistant" && latest.id === responseMessageId ? responseMessageId : null;
 }
 
 export function requireAnswerContinuationSupport(preflight: Pick<MatterhornAgentPrivacyPreflightResponse, "continuation">, messageId: string) {

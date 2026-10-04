@@ -6,6 +6,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { delayImagePreparation, delayedImage, releaseImagePreparation } from "./fixtures/attachment-preparation";
+import { MATTERHORN_CONTINUE_ANSWER_TEXT } from "@matterhorn-work/types/guarded-agent-runtime";
 
 // Production shell with synthetic account/runtime services. Attachment integration
 // cases additionally use an isolated real gateway with legitimate local bearer auth;
@@ -23,6 +24,11 @@ let promptFailure: "preflight" | "dispatch" | null = null;
 let promptFixture = false;
 let responseRetryFixture = false;
 let historyText = true;
+let terminalFailure = false;
+let terminalRateLimited = false;
+let terminalProviderUnavailable = false;
+let terminalStopped = false;
+let historyContinuation = false;
 let historyFiles: Array<{ type: "file"; id: string; messageID: string; sessionID: string; url: string; filename: string; mime: string }> = [];
 const promptRequests: Array<{ stage: string; body: unknown }> = [];
 let realGateway: { origin: string; runtimeOrigin: string } | undefined;
@@ -138,7 +144,12 @@ const messages = [
   },
 ];
 const fixtureMessages = () => [
-  { ...messages[0], parts: [...(historyText ? messages[0].parts : []), ...historyFiles] }, messages[1],
+  { ...messages[0], parts: [...(historyText ? messages[0].parts.map(part => historyContinuation ? { ...part, text: MATTERHORN_CONTINUE_ANSWER_TEXT } : part) : []), ...historyFiles] },
+  terminalFailure ? { ...messages[1], info: { ...messages[1].info,
+    error: terminalStopped ? { name: "MessageAbortedError", data: { message: "Stopped" } }
+      : terminalProviderUnavailable ? { name: "APIError", data: { message: "No provider available", statusCode: 401 } }
+      : terminalRateLimited ? { name: "APIError", data: { message: "Too many requests", statusCode: 429 } }
+      : { name: "UnknownError", data: { message: "Synthetic accepted request failed." } } }, parts: [] } : messages[1],
 ];
 
 beforeAll(async () => {
@@ -440,6 +451,11 @@ beforeEach(() => {
   promptFixture = false;
   responseRetryFixture = false;
   historyText = true;
+  terminalFailure = false;
+  terminalRateLimited = false;
+  terminalProviderUnavailable = false;
+  terminalStopped = false;
+  historyContinuation = false;
   historyFiles = [];
   promptRequests.length = 0;
   gatewayResults.length = 0;
@@ -447,6 +463,189 @@ beforeEach(() => {
 });
 
 const operations: Array<"fork" | "revert"> = ["fork", "revert"];
+for (const recovery of ["rate limit", "unavailable file", "continuation", "provider unavailable", "stopped"]) {
+  test(`accepted failure preserves ${recovery} recovery boundaries`, async () => {
+    promptFixture = true;
+    responseRetryFixture = true;
+    terminalFailure = true;
+    terminalRateLimited = recovery === "rate limit";
+    terminalProviderUnavailable = recovery === "provider unavailable";
+    terminalStopped = recovery === "stopped";
+    historyContinuation = recovery === "continuation";
+    if (recovery === "unavailable file") historyFiles = [{ type: "file", id: "part_file", messageID: "msg_user", sessionID: "ses_fixture",
+      filename: "missing.txt", mime: "text/plain", url: "file:///fixture/missing.txt" }];
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    context.setDefaultTimeout(8000);
+    await context.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+    const page = await context.newPage();
+    try {
+      await page.goto(`${server.url}workspace/ws_fixture/session/ses_fixture`);
+      const error = page.locator('[data-matterhorn-session-error]');
+      await error.waitFor();
+      if (terminalProviderUnavailable) await error.getByRole("button", { name: "Choose another model", exact: true }).click();
+      else await page.getByRole("button", { name: "Change model", exact: true }).first().click();
+      if (terminalProviderUnavailable) await page.getByRole("dialog").getByRole("button", { name: /Fixture model/ }).click();
+      else await page.getByRole("option", { name: /Fixture model/ }).click();
+      const editor = page.getByRole("textbox").first();
+      await editor.fill("New unrelated draft");
+      if (terminalStopped) {
+        expect(await error.getAttribute("role")).toBe("status");
+        expect(promptRequests).toEqual([]);
+      }
+      if (terminalProviderUnavailable && process.env.TERMINAL_PROVIDER_CAPTURES) {
+        await mkdir(process.env.TERMINAL_PROVIDER_CAPTURES, { recursive: true });
+        await page.emulateMedia({ reducedMotion: "reduce" });
+        for (const [theme, width] of [["light", 390], ["dark", 1440]] satisfies [string, number][]) {
+          await page.evaluate(value => {
+            document.documentElement.dataset.theme = value;
+            document.documentElement.classList.toggle("dark", value === "dark");
+          }, theme);
+          await page.setViewportSize({ width, height: 1000 });
+          await error.scrollIntoViewIfNeeded();
+          await page.screenshot({ path: join(process.env.TERMINAL_PROVIDER_CAPTURES, `provider-${theme}-${width}.png`), fullPage: true });
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        }
+      }
+      if (recovery === "rate limit") {
+        expect(await error.innerText()).toContain("Wait before retrying, or choose another model.");
+        expect(await error.innerText()).toContain("Retry repeats the original request");
+      }
+      const before = requests.length;
+      if (recovery === "unavailable file") {
+        await error.getByRole("button", { name: "Retry response", exact: true }).click();
+        await error.getByText(/The original attachments cannot be restored/).waitFor();
+        expect(await error.getByRole("button", { name: "Retry response", exact: true }).count()).toBe(0);
+        expect(promptRequests).toEqual([]);
+        expect(requests.slice(before).filter(request => request.method === "POST" && /\/(abort|revert|unrevert)$/.test(request.path))).toEqual([]);
+      } else {
+        await Promise.all([
+          page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname.endsWith("/messages")),
+          error.getByRole("button", { name: "Retry response", exact: true }).click(),
+        ]);
+        expect(JSON.stringify(promptRequests)).not.toContain("New unrelated draft");
+        if (recovery === "continuation") {
+          expect(promptRequests.map(request => request.stage)).toEqual(["preflight", "dispatch"]);
+          for (const request of promptRequests) expect(request.body).toMatchObject({ requestToolProfiles: [{ "*": false }] });
+        }
+      }
+      expect((await editor.innerText()).trim()).toBe("New unrelated draft");
+    } finally { await context.close(); }
+  }, 30000);
+}
+for (const withText of [false, true]) {
+  for (const newerDraft of [false, true]) {
+    test(`accepted failure retry retains files with text=${withText} newerDraft=${newerDraft}`, async () => {
+      promptFixture = true;
+      responseRetryFixture = true;
+      terminalFailure = true;
+      historyText = withText;
+      const originalUrl = "data:text/plain;base64,T3JpZ2luYWwgZmlsZSBieXRlcw==";
+      historyFiles = [{ type: "file", id: "part_file", messageID: "msg_user", sessionID: "ses_fixture",
+        filename: "original.txt", mime: "text/plain", url: originalUrl }];
+      const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+      context.setDefaultTimeout(8000);
+      await context.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+      const page = await context.newPage();
+      try {
+        await page.goto(`${server.url}workspace/ws_fixture/session/ses_fixture`);
+        const error = page.locator('[data-matterhorn-session-error="error"]');
+        await error.waitFor();
+        await page.getByRole("button", { name: "Change model", exact: true }).click();
+        await page.getByRole("option", { name: /Fixture model/ }).click();
+        const editor = page.getByRole("textbox").first();
+        if (newerDraft) {
+          await editor.fill("Do not send my newer draft");
+          await page.locator('input[type="file"]').setInputFiles({ name: "newer.txt", mimeType: "text/plain", buffer: Buffer.from("Newer file") });
+          await page.getByText("newer.txt", { exact: true }).waitFor();
+        }
+        if (withText && newerDraft && process.env.TERMINAL_RETRY_CAPTURES) {
+          await mkdir(process.env.TERMINAL_RETRY_CAPTURES, { recursive: true });
+          await page.emulateMedia({ reducedMotion: "reduce" });
+          for (const theme of ["light", "dark"]) for (const width of [390, 1440]) {
+            await page.evaluate(value => {
+              document.documentElement.dataset.theme = value;
+              document.documentElement.classList.toggle("dark", value === "dark");
+            }, theme);
+            await page.setViewportSize({ width, height: 1000 });
+            await error.scrollIntoViewIfNeeded();
+            await page.screenshot({ path: join(process.env.TERMINAL_RETRY_CAPTURES, `terminal-${theme}-${width}.png`), fullPage: true });
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+          }
+        }
+        const response = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname.endsWith("/messages"));
+        await error.getByRole("button", { name: "Retry response", exact: true }).focus();
+        await page.keyboard.press("Enter");
+        await response;
+        expect(promptRequests.map(request => request.stage)).toEqual(["preflight", "dispatch"]);
+        const encoded = JSON.stringify(promptRequests);
+        expect(encoded).not.toContain("newer.txt");
+        expect(encoded).not.toContain("Do not send my newer draft");
+        expect(promptRequests.at(-1)?.body).toMatchObject({ parts: expect.arrayContaining([
+          expect.objectContaining({ type: "file", filename: "original.txt", url: originalUrl }),
+          ...(withText ? [expect.objectContaining({ type: "text", text: "Synthetic question." })] : []),
+        ]) });
+        expect((await editor.innerText()).trim()).toBe(newerDraft ? "Do not send my newer draft" : "");
+        if (newerDraft) expect(await page.getByText("newer.txt", { exact: true }).count()).toBe(1);
+      } finally { await context.close(); }
+    }, 30000);
+  }
+}
+for (const newerRejection of [false, true]) {
+  test(`accepted failure after dispatch and navigation with newer rejection=${newerRejection}`, async () => {
+    promptFixture = true;
+    responseRetryFixture = true;
+    const originalUrl = "data:text/plain;base64,T3JpZ2luYWwgZmlsZSBieXRlcw==";
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    context.setDefaultTimeout(8000);
+    await context.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+    const page = await context.newPage();
+    try {
+      await page.goto(`${server.url}workspace/ws_fixture/session/ses_fixture`);
+      await page.getByRole("button", { name: "Change model", exact: true }).click();
+      await page.getByRole("option", { name: /Fixture model/ }).click();
+      const editor = page.getByRole("textbox").first();
+      await editor.fill("Synthetic question.");
+      await page.locator('input[type="file"]').setInputFiles({ name: "original.txt", mimeType: "text/plain", buffer: Buffer.from("Original file bytes") });
+      await page.getByRole("button", { name: "Ask", exact: true }).click();
+      await page.getByText("original.txt", { exact: true }).waitFor({ state: "hidden" });
+      expect((await editor.innerText()).trim()).toBe("");
+      expect(promptRequests.at(-1)?.body).toMatchObject({ parts: expect.arrayContaining([
+        expect.objectContaining({ type: "file", filename: "original.txt", url: originalUrl }),
+      ]) });
+      promptRequests.length = 0;
+      await editor.fill("New draft after acceptance");
+      await page.locator('input[type="file"]').setInputFiles({ name: "newer.txt", mimeType: "text/plain", buffer: Buffer.from("Newer file") });
+      await page.getByRole("button", { name: "Other fixture chat", exact: true }).click();
+      await page.waitForURL("**/ses_other");
+      // The fixture publishes a saved terminal failure only after acceptance;
+      // returning reads it through the production session/snapshot path.
+      terminalFailure = true;
+      historyFiles = [{ type: "file", id: "part_file", messageID: "msg_user", sessionID: "ses_fixture",
+        filename: "original.txt", mime: "text/plain", url: originalUrl }];
+      await page.getByRole("button", { name: "Original fixture chat", exact: true }).click();
+      await page.waitForURL("**/ses_fixture");
+      const error = page.locator('[data-matterhorn-session-error="error"]');
+      await error.waitFor();
+      expect((await editor.innerText()).trim()).toBe("New draft after acceptance");
+      expect(await page.getByText("newer.txt", { exact: true }).count()).toBe(1);
+      if (newerRejection) {
+        promptFailure = "preflight";
+        await page.getByRole("button", { name: "Ask", exact: true }).click();
+        await error.getByText("Remove a file and try again. Synthetic attachment rejection.", { exact: false }).waitFor();
+        promptFailure = null;
+        promptRequests.length = 0;
+      }
+      await Promise.all([
+        page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname.endsWith("/messages")),
+        error.getByRole("button", { name: "Retry response", exact: true }).click(),
+      ]);
+      const encoded = JSON.stringify(promptRequests);
+      expect(encoded).toContain(newerRejection ? "newer.txt" : "original.txt");
+      expect(encoded).not.toContain(newerRejection ? "original.txt" : "newer.txt");
+      expect((await editor.innerText()).trim()).toBe(newerRejection ? "" : "New draft after acceptance");
+    } finally { await context.close(); }
+  }, 30000);
+}
 for (const withText of [false, true]) {
   test(`historical response retry preserves original attachments with ${withText ? "text" : "files only"}`, async () => {
     promptFixture = true;

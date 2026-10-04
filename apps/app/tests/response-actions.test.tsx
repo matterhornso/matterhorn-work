@@ -2,7 +2,6 @@ import React from "react";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { UIMessage } from "ai";
-import { MATTERHORN_CONTINUE_ANSWER_TEXT } from "@matterhorn-work/types/guarded-agent-runtime";
 import { accountClientState, AccountStateChangedError } from "../src/app/lib/account-client-state";
 
 import { SessionTranscript } from "../src/react-app/domains/session/surface/message-list";
@@ -12,7 +11,7 @@ import {
   responseOutputTitle,
   runAssistantResponseRetry,
   requireAnswerContinuationSupport,
-  failedContinuationResponseId,
+  failedResponseId,
 } from "../src/react-app/domains/session/surface/response-actions";
 
 const messages: UIMessage[] = [
@@ -70,13 +69,11 @@ describe("assistant response actions", () => {
       expect(calls).toEqual(steps.slice(0, steps.indexOf(boundary) + 1));
     });
   }
-  test("accepted continuation failures retry that response rather than the unrelated draft", () => {
-    const failure = { id: "msg_assistant_1", retryMessage: MATTERHORN_CONTINUE_ANSWER_TEXT };
-    expect(failedContinuationResponseId(failure, messages)).toBe("msg_assistant_1");
-    expect(failedContinuationResponseId(null, messages)).toBeNull();
-    expect(failedContinuationResponseId({ ...failure, retryMessage: "Ordinary question" }, messages)).toBeNull();
-    expect(failedContinuationResponseId(failure, [...messages, { id: "later", role: "user", parts: [] }])).toBeNull();
-    expect(failedContinuationResponseId({ ...failure, id: "older" }, messages)).toBeNull();
+  test("accepted failures retry only the response identified by the displayed error", () => {
+    expect(failedResponseId("msg_assistant_1", messages)).toBe("msg_assistant_1");
+    expect(failedResponseId(undefined, messages)).toBeNull();
+    expect(failedResponseId("msg_assistant_1", [...messages, { id: "later", role: "user", parts: [] }])).toBeNull();
+    expect(failedResponseId("older", messages)).toBeNull();
   });
   test("safe continuation requires acknowledgement from the backend for this exact answer", () => {
     expect(() => requireAnswerContinuationSupport({}, "partial")).toThrow("backend does not support safe answer continuation");
