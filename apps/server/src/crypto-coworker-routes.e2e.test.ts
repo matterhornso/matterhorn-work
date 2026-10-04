@@ -493,13 +493,14 @@ function cookie(response: Response): string {
 function startCoworkerSessionServer(
   sessionIds: string[],
   deleteFailureSessionIds: string[] = [],
+  beforeRead?: (sessionId: string) => Promise<void>,
 ): Served {
   const allowed = new Set(sessionIds);
   const deleteFailures = new Set(deleteFailureSessionIds);
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    fetch(request) {
+    async fetch(request) {
       const url = new URL(request.url);
       const match = /^\/session\/([^/]+)$/.exec(url.pathname);
       const sessionId = match ? decodeURIComponent(match[1] ?? "") : "";
@@ -516,6 +517,7 @@ function startCoworkerSessionServer(
       if (request.method !== "GET") {
         return Response.json({ code: "not_found", message: "Not found" }, { status: 404 });
       }
+      await beforeRead?.(sessionId);
       return Response.json({
         id: sessionId,
         title: `Chat ${sessionId}`,
@@ -874,6 +876,117 @@ afterEach(async () => {
 });
 
 describe("crypto coworker HTTP boundary", () => {
+  for (const surface of ["read", "bind", "unbind", "fork-source", "fork-target"]) {
+    for (const change of ["sign-out", "workspace-switch", "access-revoked", "unchanged"]) {
+      test(`coworker session authority survives runtime wait: ${surface}, ${change}`, async () => {
+        let reach!: () => void;
+        let release!: () => void;
+        const reached = new Promise<void>(resolve => { reach = resolve; });
+        const released = new Promise<void>(resolve => { release = resolve; });
+        let armed = false;
+        let observed = false;
+        const waitSession = surface === "bind" || surface === "fork-target" ? "ses_fork" : "ses_source";
+        const opencode = startCoworkerSessionServer(["ses_source", "ses_fork"], [], async sessionId => {
+          if (!armed || sessionId !== waitSession) return;
+          observed = true;
+          reach();
+          await released;
+        });
+        const server = await boot("invite", {
+          opencodeBaseUrl: `http://127.0.0.1:${opencode.port}`, seedCryptoApps: true,
+        });
+        const signup = await request(server.base, "/api/auth/sign-up/email", {
+          body: { email: "coworker-revocation@example.com", password: PASSWORD },
+        });
+        expect(signup.response.status).toBe(200);
+        const accountCookie = cookie(signup.response);
+        const ownerId = String(signup.payload.user.id);
+        const workspaceId = String((await request(server.base, "/workspaces", { cookie: accountCookie })).payload.items[0].id);
+        const invite = await request(server.base, "/operator/coworker-access/invites", {
+          host: true, body: { ttlMinutes: 60 },
+        });
+        expect((await request(server.base, "/coworker-access/accept", {
+          cookie: accountCookie, body: { inviteToken: String(invite.payload.invite.token) },
+        })).response.status).toBe(200);
+        const created = await request(server.base, `/workspace/${workspaceId}/coworkers`, {
+          cookie: accountCookie, body: coworkerInput(),
+        });
+        expect(created.response.status).toBe(201);
+        const coworkerId = String(created.payload.coworker.id);
+        const connection = await request(server.base, `/workspace/${workspaceId}/crypto-app-connections`, {
+          cookie: accountCookie, body: { appId: "matterhorn.sui-testnet", grantedActionIds: ["sui_account_read"],
+            grantedScopes: [], grantedNetworks: ["sui:testnet"] },
+        });
+        expect(connection.response.status).toBe(201);
+        expect((await request(server.base, `/workspace/${workspaceId}/coworkers/${coworkerId}/resources`, {
+          cookie: accountCookie, method: "PUT", body: { expectedRevision: 0, profileRevision: 1,
+            agentFileIds: [], memoryIds: [], connectionIds: [String(connection.payload.connection.id)] },
+        })).response.status).toBe(200);
+        const sourcePath = `/workspace/${workspaceId}/sessions/ses_source/coworker`;
+        expect((await request(server.base, sourcePath, {
+          cookie: accountCookie, method: "PUT", body: { coworkerId, coworkerRevision: 1, expectedRevision: 0 },
+        })).response.status).toBe(200);
+        const store = new MatterhornCoworkerStore(server.coworkerDb);
+        const sourceBefore = store.getSessionBinding(workspaceId, ownerId, "ses_source");
+        expect(sourceBefore).not.toBeNull();
+        expect(store.getSessionBinding(workspaceId, ownerId, "ses_fork")).toBeNull();
+        armed = true;
+        const pending = request(server.base, surface.startsWith("fork") ? `${sourcePath}/fork`
+          : surface === "bind" ? `/workspace/${workspaceId}/sessions/ses_fork/coworker` : sourcePath, {
+          cookie: accountCookie,
+          method: surface === "read" ? "GET" : surface === "bind" ? "PUT" : surface === "unbind" ? "DELETE" : "POST",
+          ...(surface === "read" ? {} : { body: surface === "bind"
+            ? { coworkerId, coworkerRevision: 1, expectedRevision: 0 }
+            : surface === "unbind" ? { expectedRevision: 1 } : { targetSessionId: "ses_fork" } }),
+        });
+        const watchdog = setTimeout(reach, 4000);
+        try {
+          await reached;
+          clearTimeout(watchdog);
+          expect(observed).toBe(true);
+          if (change === "sign-out") {
+            expect((await request(server.base, "/api/auth/sign-out", {
+              cookie: accountCookie, method: "POST",
+            })).response.status).toBe(200);
+          } else if (change === "workspace-switch") {
+            expect((await request(server.base, "/api/auth/organization/create", {
+              cookie: accountCookie, body: { name: "New test workspace", slug: "coworker-new-workspace" },
+            })).response.status).toBe(200);
+          } else if (change === "access-revoked") {
+            const accessList = await request(server.base, "/operator/coworker-access", { host: true });
+            expect(accessList.response.status).toBe(200);
+            expect((await request(server.base, "/operator/coworker-access/revoke", {
+              host: true, body: { accessId: String(accessList.payload.accounts[0].accessId) },
+            })).response.status).toBe(200);
+          }
+          release();
+          const result = await pending;
+          // Inspect persistence even when the HTTP status is wrong.
+          const sourceAfter = store.getSessionBinding(workspaceId, ownerId, "ses_source");
+          const targetAfter = store.getSessionBinding(workspaceId, ownerId, "ses_fork");
+          expect({ status: result.response.status, sourceUnchanged: JSON.stringify(sourceAfter) === JSON.stringify(sourceBefore),
+            targetExists: targetAfter !== null }).toEqual({
+            status: change === "unchanged" ? surface.startsWith("fork") ? 201 : 200
+              : change === "sign-out" ? 401 : change === "access-revoked" && surface === "bind" ? 409 : 403,
+            sourceUnchanged: change !== "unchanged" || surface !== "unbind",
+            targetExists: change === "unchanged" && (surface === "bind" || surface.startsWith("fork")),
+          });
+          if (change !== "unchanged") {
+            expect(result.payload.coworker).toBeUndefined();
+            expect(result.payload.binding).toBeUndefined();
+          } else if (surface === "read") expect(result.payload.coworker.id).toBe(coworkerId);
+          else if (targetAfter) expect(targetAfter.coworkerId).toBe(coworkerId);
+          else expect(sourceAfter).toBeNull();
+        } finally {
+          clearTimeout(watchdog);
+          release();
+          await pending.catch(() => undefined);
+          store.close();
+        }
+      }, 15000);
+    }
+  }
+
   test("requires a one-time account invite and applies revocation immediately", async () => {
     const server = await boot("invite");
     const signupA = await request(server.base, "/api/auth/sign-up/email", {

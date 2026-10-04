@@ -836,4 +836,32 @@ The regressions verify successful reads/streams/cancellation, preserved negotiat
 
 Commands are the same five-file HTTP group and server typecheck/build/safety commands above. Failing evidence: `/tmp/matterhorn-proxy-headers-red-final-2026-10-04.log`. Passing focused evidence: `/tmp/matterhorn-proxy-headers-focused-2026-10-04.log`. Broader checks: `/tmp/matterhorn-proxy-headers-{http,typecheck,build,safety}-2026-10-04.log`.
 
-Next review: coworker binding reads and fork operations across asynchronous runtime waits, including unchanged controls and durable-state assertions. These remain unverified, not confirmed defects. Hosted acceptance, actual provider responses and accounting, inbox recovery, encryption/restore and complete browser/accessibility coverage remain open. No push, merge or deployment occurred.
+The coworker binding/fork follow-up is recorded below. Hosted acceptance, actual provider responses and accounting, inbox recovery, encryption/restore and complete browser/accessibility coverage remain open. No push, merge or deployment occurred.
+
+## Coworker session authority after runtime waits
+
+Following request-header isolation commit `20c372912a83438e9a72be50a526e2c6e6d88bdb`, a 20-case loopback HTTP matrix tested read, bind, unbind, fork-source and fork-target waits against logout, active-workspace change, coworker-access revocation and unchanged access. Four failures reproduced real defects: the read endpoint returned the coworker/binding after logout or a workspace switch, and a fork waiting for the target session created a durable target binding after either change. The source binding was not modified. Sixteen controls already rejected access or completed as expected. An initial test incorrectly expected 403 rather than the existing safe 409 stale-resource response when binding after coworker-access revocation; that fixture expectation was corrected before the final failing run. No product change was needed for that case.
+
+The server now rechecks the original request authority after the read endpoint's runtime wait, before either its disabled response or coworker data, and after the fork's target-session wait, before reading/inheriting bindings. Existing body-reading checks already cover bind/unbind and the fork's source wait. The fix adds two checks without a new authorization mechanism or migration. Revoked browser sessions return 401 and changed active workspaces return 403. Existing coworker-access and stale-resource errors remain intact.
+
+Tests create and connect a disposable account-owned coworker through the normal APIs using the existing local invite-mode fixture and a synthetic certified testnet-app manifest. This does not make the public beta invite-only or enable any hosted feature. A fake runtime deliberately holds the selected read until the account action completes. Each test verifies HTTP status, absence of coworker/binding data on denial, exact preservation of the source binding and presence/absence of the target in a separately opened store. Unchanged controls prove reads, binding, unbinding and inheritance still work. A bounded watchdog and `finally` release prevent a missing runtime observation from leaving the fixture waiting indefinitely.
+
+- Focused matrix: **20 pass, zero fail, 255 assertions**.
+- Server typecheck and build: pass.
+- Broader HTTP/coworker suites: **377 pass, zero fail, 3,593 assertions across eight files**, terminal exit zero.
+- Full safety gate: all 11 stages pass with terminal exit zero, including all 20 new coworker authority cases.
+- Diff whitespace: pass.
+
+Failing evidence: `/tmp/matterhorn-coworker-session-authority-red-final-2026-10-04.log`. Focused pass: `/tmp/matterhorn-coworker-session-authority-focused-2026-10-04.log`. Broader evidence: `/tmp/matterhorn-coworker-session-authority-{http,typecheck,build,safety}-2026-10-04.log`. The existing `test:crypto-coworker-access-ops` script includes these HTTP tests and is already part of the platform safety gate. No new CI dependency is needed.
+
+Reproduce the eight-file group and build checks with:
+
+```sh
+bun test apps/server/src/crypto-coworker-routes.e2e.test.ts apps/server/src/crypto-coworker-access.test.ts apps/server/src/crypto-coworkers.test.ts apps/server/src/session-read-model.e2e.test.ts apps/server/src/auth.e2e.test.ts apps/server/src/backend-security.e2e.test.ts apps/server/src/request-rate-limit-store.test.ts apps/server/src/hosted-guarded-mcp.test.ts --timeout 20000
+pnpm --filter matterhorn-work-server typecheck
+pnpm --filter matterhorn-work-server build
+pnpm test:matterhorn-platform-safety
+git diff --check
+```
+
+This verifies in-flight local HTTP authority, not cross-process atomic revocation across every data store, UI recovery after these errors, or real runtime/provider behavior. Next review targets are remaining outbound response-header trust and browser recovery when a binding or session operation is denied. Hosted five-desk acceptance, accounting, email, encryption/restore and full accessibility/browser coverage remain open. Existing user chats/previews were untouched; no live chain/provider request, production secret change, push, merge or deployment occurred.

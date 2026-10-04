@@ -15252,6 +15252,7 @@ function createRoutes(
     const sessionId = (ctx.params.sessionId ?? "").trim();
     if (!sessionId) throw new ApiError(400, "invalid_payload", "sessionId is required");
     await readWorkspaceSession(config, workspace, sessionId);
+    assertRequestAccessCurrent(ctx.request);
     if (!coworkerRuntime.coworkers || coworkerRuntime.mode === "off") {
       return noStoreJsonResponse({ mode: coworkerRuntime.mode, active: false, binding: null, coworker: null });
     }
@@ -15348,6 +15349,7 @@ function createRoutes(
       throw new ApiError(400, "coworker_session_binding_invalid", "Forked chat connection is invalid.");
     }
     await readWorkspaceSession(config, workspace, targetSessionId);
+    assertRequestAccessCurrent(ctx.request);
     try {
       const ownerId = cryptoAppCreatedBy(ctx);
       const sourceBinding = coworkerRuntime.coworkers.getSessionBinding(workspace.id, ownerId, sourceSessionId);
