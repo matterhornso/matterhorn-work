@@ -31,7 +31,8 @@ describe("account lifecycle contract", () => {
     expect(accountSecuritySource).toContain("client.exportAccount()");
     expect(accountSecuritySource).toContain("Download account record");
     expect(accountSecuritySource).toContain("Preparing download…");
-    expect(accountSecuritySource).toContain("Account record downloaded.");
+    expect(accountSecuritySource).toContain("Account record download started.");
+    expect(accountSecuritySource).not.toContain("Account record downloaded.");
     expect(accountSecuritySource).toContain("Workspace chats and files are exported separately.");
     expect(accountSecuritySource).toContain("URL.revokeObjectURL");
   });
@@ -77,5 +78,7 @@ describe("account lifecycle contract", () => {
     expect(accountSecuritySource).toContain("Deleting account…");
     expect(accountSecuritySource).toContain("Preparing download…");
     expect(accountSecuritySource).toContain("aria-invalid=");
+    expect(accountSecuritySource.match(/<SettingsNotice tone="error" role="alert">/g)).toHaveLength(6);
+    expect(accountSecuritySource.match(/<SettingsNotice role="status">/g)).toHaveLength(2);
   });
 });
