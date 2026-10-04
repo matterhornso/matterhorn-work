@@ -189,7 +189,35 @@ pnpm test:matterhorn-platform-safety
 
 Reproduction logs: `/tmp/matterhorn-evidence-await-red-2026-10-04.log` and `/tmp/matterhorn-evidence-rotation-clock-red-2026-10-04.log`. Final verification logs: `/tmp/matterhorn-evidence-await-final-2026-10-04.log`, `/tmp/matterhorn-evidence-await-regressions-2026-10-04.log`, `/tmp/matterhorn-evidence-await-typecheck-final-2026-10-04.log` and `/tmp/matterhorn-evidence-await-safety-2026-10-04.log`.
 
-Publication and renewal after deletion remain separate acceptance targets. Inspection shows they use operation claims and perform their own completion writes; the passing existing publisher tests do not prove the new workspace-deletion marker is enforced on those paths. No real Walrus upload, wallet signature or provider request was made. Hosted release, key management, backup restore and full user-journey acceptance remain unverified.
+Commit `c413338b94894d64e32b08f275c60a0937ed5b29` contains this evidence decryption/rotation follow-up. The publication review below separately tests the deletion marker on publisher completion paths. Renewal remains open. No real Walrus upload, wallet signature or provider request was made. Hosted release, key management, backup restore and full user-journey acceptance remain unverified.
+
+## Publication completion during workspace deletion
+
+The next local matrix reproduced four failures across evidence and Agent File publishers: after deletion began during either upload or readback, the pending publisher still completed successfully. Its active operation claim temporarily prevented key cleanup, but there was no deletion-marker check to stop final proof attachment. Four controls deleting a different workspace still published correctly.
+
+Both publishers now check the durable workspace marker after each awaited upload, certification and readback step. Multi-record Quilt publication checks each patch readback before starting the next one. The store also rejects new non-deletion operation claims and final single/batch proof attachments for marked workspaces. Cleanup operations remain permitted. The Agent File store shares one marker-check helper across creation, reads and publication instead of repeating the same check.
+
+The final matrix covers evidence, Agent Files and two-record Quilts, each paused during upload or readback, with target-workspace and unrelated-workspace deletion. Target deletion rejects completion, clears the ciphertext buffers owned by the publisher and releases the busy claims. A second cleanup attempt destroys the local recovery material. When deletion occurs during upload, no certification/readback is started afterward; a Quilt paused on its first readback does not start its second. Unrelated-workspace deletion preserves successful publication. Existing publisher, tenant isolation, renewal, deletion and anchor tests also pass.
+
+| Check | Result |
+| --- | --- |
+| Original single-record/file publisher matrix | Four reproduced failures and four passing controls |
+| Final publisher suites including Quilt deletion | 32 pass, zero fail, 192 assertions across two files |
+| Auth, guarded runtime and affected evidence/file lifecycle suites | 196 pass, zero fail, 1,604 assertions across 13 files |
+| Server typecheck | Pass |
+| Full local platform safety gate | All 11 stages pass |
+| Diff whitespace check | Pass |
+
+```sh
+bun test apps/server/src/crypto-evidence-walrus-publisher.test.ts apps/server/src/agent-file-walrus-publisher.test.ts
+bun test apps/server/src/auth.e2e.test.ts apps/server/src/guarded-agent-runtime.test.ts apps/server/src/crypto-evidence-store.test.ts apps/server/src/crypto-evidence-finalizer.test.ts apps/server/src/crypto-evidence-walrus-publisher.test.ts apps/server/src/crypto-evidence-walrus-renewal.test.ts apps/server/src/crypto-evidence-walrus-deletion.test.ts apps/server/src/crypto-evidence-verification.test.ts apps/server/src/crypto-evidence-sui-anchor.test.ts apps/server/src/agent-file-store.test.ts apps/server/src/agent-file-walrus-publisher.test.ts apps/server/src/agent-file-walrus-renewal.test.ts apps/server/src/guarded-runtime-state-store.test.ts --timeout 15000
+pnpm --filter matterhorn-work-server typecheck
+pnpm test:matterhorn-platform-safety
+```
+
+Logs: `/tmp/matterhorn-publication-deletion-red-2026-10-04.log`, `/tmp/matterhorn-publication-deletion-final-2026-10-04.log`, `/tmp/matterhorn-publication-deletion-regressions-2026-10-04.log`, `/tmp/matterhorn-publication-deletion-typecheck-2026-10-04.log` and `/tmp/matterhorn-publication-deletion-safety-2026-10-04.log`.
+
+These fixtures replace every storage/network/key operation; no real upload or signature occurred. The correction rejects continuation after an awaited request returns, not an already-dispatched network upload. It cannot remove ciphertext already accepted by external storage or recall data from existing backups. Local proof attachment and remote object existence are distinct outcomes. A durable remote-orphan cleanup/reconciliation path and deletion during renewal preparation/confirmation still need acceptance. Source review also found that deleted-workspace errors currently fall back to generic unavailable responses; dedicated user-facing recovery copy and HTTP behavior need testing before this is called seamless end-to-end deletion.
 
 ## Polymarket policy review deadline
 
@@ -206,6 +234,6 @@ Release action: review the current official venue restrictions and the applicabl
 - Fresh hosted responses on all five desks, optional Jev acceptance, accounting settlement, two-account isolation, real email/reset delivery, logout cleanup and production backup/restore evidence remain outstanding as recorded in the [previous launch report](../2026-10-03/RESULTS.md). No fresh hosted state is asserted in this pass.
 - The limited responsive and keyboard evidence above does not establish platform-wide accessibility, cross-browser or theme acceptance.
 - The Polymarket policy review and expiry-state UI/hosted checks above are open release actions; passing historical policy tests does not establish current eligibility.
-- All 11 local safety stages pass after the evidence decryption/rotation corrections. These include offline and source-contract checks, not fresh hosted acceptance or real inbox/provider/restore evidence. The final gate log is `/tmp/matterhorn-evidence-await-safety-2026-10-04.log`.
+- All 11 local safety stages pass after the publication-completion corrections. These include offline and source-contract checks, not fresh hosted acceptance or real inbox/provider/restore evidence. The final gate log is `/tmp/matterhorn-publication-deletion-safety-2026-10-04.log`.
 
 These corrections and regression results do not establish launch readiness. Continue with writes already past request-body validation, auth mutation lifecycle and the remaining acceptance work above.

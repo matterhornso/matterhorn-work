@@ -87,6 +87,63 @@ async function fixture() {
 }
 
 describe("Agent File Walrus backup", () => {
+  for (const stage of ["upload", "readback"]) {
+    for (const deletedWorkspace of ["workspace_alpha", "workspace_other"]) {
+      test(`publication rechecks ${deletedWorkspace} deletion after ${stage}`, async () => {
+        const value = await fixture();
+        let release = () => {};
+        let notifyStarted = () => {};
+        const released = new Promise<void>(resolve => { release = resolve; });
+        const started = new Promise<void>(resolve => { notifyStarted = resolve; });
+        let uploaded = Buffer.alloc(0);
+        let publicBytes: Uint8Array | undefined;
+        let certifications = 0;
+        const transport: MatterhornWalrusEvidenceTransport = {
+          publish: async input => {
+            publicBytes = input.bytes;
+            uploaded = Buffer.from(input.bytes);
+            if (stage === "upload") { notifyStarted(); await released; }
+            return { blobId: "blob-agent-file-1", suiObjectId: "0x1234", declaredEndEpoch: 15 };
+          },
+          readByObjectId: async () => {
+            if (stage === "readback") { notifyStarted(); await released; }
+            return Buffer.from(uploaded);
+          },
+        };
+        const publisher = new MatterhornAgentFileWalrusPublisher(value.store, transport, async () => {
+          certifications += 1;
+          return certification();
+        });
+        const identity = { workspaceId: "workspace_alpha", ownerId: "owner_alpha", fileId: value.item.id, expectedRevision: 1 };
+        const pending = publisher.publish({ ...identity, signal: new AbortController().signal }).then(
+          () => "published", error => error instanceof Error ? error.message : "unknown_error",
+        );
+        try {
+          await started;
+          const deletingTarget = deletedWorkspace === identity.workspaceId;
+          const cleanup = await value.store.destroyWorkspace({ workspaceId: deletedWorkspace });
+          expect(cleanup.destroyed).toBe(0);
+          expect(cleanup.failures).toHaveLength(deletingTarget ? 1 : 0);
+          release();
+          expect(await pending).toBe(deletingTarget ? "agent_file_workspace_deleted" : "published");
+          expect(value.store.get(identity)?.revision).toBe(deletingTarget ? 1 : 2);
+          expect(publicBytes?.every(byte => byte === 0)).toBe(true);
+          expect(certifications).toBe(deletingTarget && stage === "upload" ? 0 : 1);
+          if (deletingTarget) {
+            await expect(publisher.publish({ ...identity, signal: new AbortController().signal })).rejects.toThrow("agent_file_workspace_deleted");
+            expect(await value.store.destroyWorkspace({ workspaceId: deletedWorkspace })).toEqual({ checked: 1, destroyed: 1, failures: [] });
+          }
+        } finally {
+          release();
+          await pending;
+          uploaded.fill(0);
+          value.state.close();
+          rmSync(value.root, { recursive: true, force: true });
+        }
+      });
+    }
+  }
+
   test("publishes ciphertext only, verifies Sui certification and exact readback", async () => {
     const value = await fixture();
     try {

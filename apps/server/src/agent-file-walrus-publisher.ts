@@ -109,12 +109,14 @@ export class MatterhornAgentFileWalrusPublisher {
         storageEpochs: this.storageEpochs,
         signal: input.signal,
       });
+      this.store.assertWorkspaceWritable(input.workspaceId);
       const certification = await this.verifyCertification({
         network: "testnet",
         blobId: upload.blobId,
         suiObjectId: upload.suiObjectId,
         signal: input.signal,
       });
+      this.store.assertWorkspaceWritable(input.workspaceId);
       validateCertification({
         certification,
         blobId: upload.blobId,
@@ -126,6 +128,7 @@ export class MatterhornAgentFileWalrusPublisher {
         signal: input.signal,
       });
       try {
+        this.store.assertWorkspaceWritable(input.workspaceId);
         if (readback.length !== candidate.bytes.length || !timingSafeEqual(readback, candidate.bytes)) {
           throw new Error("agent_file_walrus_readback_mismatch");
         }

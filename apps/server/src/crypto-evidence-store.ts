@@ -559,6 +559,9 @@ export class MatterhornCryptoEvidenceStore {
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
     return this.stateStore.transaction(() => {
+      if (input.operation !== "destroy_key" && input.operation !== "delete") {
+        this.assertWorkspaceWritable(input.workspaceId);
+      }
       this.stateStore.deleteExpired(now.getTime());
       const record = this.storedRecord(input.evidenceId, now.getTime());
       if (!record) throw new Error("crypto_evidence_not_found");
@@ -1393,6 +1396,7 @@ export class MatterhornCryptoEvidenceStore {
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
     return this.stateStore.transaction(() => {
+      this.assertWorkspaceWritable(input.workspaceId);
       if (!this.hasWalrusPublicationClaim({ ...input, now })) {
         throw new Error("crypto_evidence_walrus_publication_claim_invalid");
       }
@@ -1536,6 +1540,7 @@ export class MatterhornCryptoEvidenceStore {
     if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
 
     return this.stateStore.transaction(() => {
+      this.assertWorkspaceWritable(input.workspaceId);
       const nextRecords = input.entries.map((entry) => {
         if (!this.hasWalrusPublicationClaim({
           workspaceId: input.workspaceId,

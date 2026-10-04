@@ -445,12 +445,14 @@ export class MatterhornTestnetWalrusEvidencePublisher {
         ...(ownerAddress ? { ownerAddress } : {}),
         signal: input.signal,
       });
+      this.store.assertWorkspaceWritable(input.workspaceId);
       const certification = await this.verifyCertification({
         network: "testnet",
         blobId: upload.blobId,
         suiObjectId: upload.suiObjectId,
         signal: input.signal,
       });
+      this.store.assertWorkspaceWritable(input.workspaceId);
       if (certification.network !== "testnet"
         || certification.blobId !== upload.blobId
         || certification.suiObjectId !== upload.suiObjectId
@@ -465,6 +467,7 @@ export class MatterhornTestnetWalrusEvidencePublisher {
         signal: input.signal,
       });
       try {
+        this.store.assertWorkspaceWritable(input.workspaceId);
         if (readback.length !== publicBytes.length || !timingSafeEqual(readback, publicBytes)) {
           throw new Error("crypto_evidence_walrus_readback_mismatch");
         }
@@ -562,12 +565,14 @@ export class MatterhornTestnetWalrusEvidencePublisher {
         storageEpochs: this.storageEpochs,
         signal: input.signal,
       });
+      this.store.assertWorkspaceWritable(input.workspaceId);
       const certification = await this.verifyCertification({
         network: "testnet",
         blobId: upload.blobId,
         suiObjectId: upload.suiObjectId,
         signal: input.signal,
       });
+      this.store.assertWorkspaceWritable(input.workspaceId);
       if (certification.network !== "testnet"
         || certification.blobId !== upload.blobId
         || certification.suiObjectId !== upload.suiObjectId
@@ -585,6 +590,7 @@ export class MatterhornTestnetWalrusEvidencePublisher {
         if (!patchId) throw new Error("crypto_evidence_walrus_quilt_patch_binding_invalid");
         const readback = await this.transport.readByQuiltPatchId({ quiltPatchId: patchId, signal: input.signal });
         try {
+          this.store.assertWorkspaceWritable(input.workspaceId);
           if (readback.length !== bytes.length || !timingSafeEqual(readback, bytes)) {
             throw new Error("crypto_evidence_walrus_readback_mismatch");
           }
