@@ -2922,14 +2922,14 @@ async function proxyOpencodeRequest(input: {
 
   const proxyPath = input.proxyPath ?? input.url.pathname;
   const targetUrl = buildOpencodeProxyUrl(baseUrl, proxyPath, input.url.search);
-  const headers = new Headers(input.request.headers);
-  headers.delete("authorization");
-  headers.delete("x-matterhorn-host-token");
-  headers.delete("x-openwork-host-token");
-  headers.delete("x-openwork-client-id");
-  headers.delete("host");
-  headers.delete("origin");
-  headers.delete(MATTERHORN_EXECUTION_MODE_HEADER);
+  // Browser/account and edge credentials belong to Matterhorn, not the runtime.
+  // Copy protocol metadata only; runtime auth and directory are set below from
+  // the authorized workspace, never inherited from the inbound request.
+  const headers = new Headers();
+  for (const name of ["accept", "content-type", "last-event-id", "if-none-match", "if-modified-since"]) {
+    const value = input.request.headers.get(name);
+    if (value !== null) headers.set(name, value);
+  }
 
   const directory = workspace ? resolveOpencodeDirectory(workspace) : null;
   if (directory) {

@@ -215,6 +215,7 @@ function startMockOpencode(input?: {
     directory: string | null;
     method: string;
     body: unknown;
+    headers: Headers;
     untrustedPromptHeaders: Record<string, string | null>;
   }> = [];
   const streamAborts = { count: 0 };
@@ -233,6 +234,7 @@ function startMockOpencode(input?: {
         directory: request.headers.get("x-opencode-directory"),
         method: request.method,
         body,
+        headers: new Headers(request.headers),
         untrustedPromptHeaders: {
           cookie: request.headers.get("cookie"),
           forwardedHost: request.headers.get("x-forwarded-host"),
@@ -460,6 +462,8 @@ function startMockOpencode(input?: {
 async function startOpenworkServer(input: {
   workspaceRoot: string;
   opencodeBaseUrl?: string;
+  opencodeUsername?: string;
+  opencodePassword?: string;
   readOnly?: boolean;
   hardModelUsageLimit?: number;
   trustedProxySecret?: string;
@@ -486,6 +490,8 @@ async function startOpenworkServer(input: {
     approval: input.approval ?? { mode: "auto", timeoutMs: 1000 },
     corsOrigins: ["*"],
     ...(input.opencodeBaseUrl ? { opencodeBaseUrl: input.opencodeBaseUrl } : {}),
+    ...(input.opencodeUsername ? { opencodeUsername: input.opencodeUsername } : {}),
+    ...(input.opencodePassword ? { opencodePassword: input.opencodePassword } : {}),
     workspaces: [
       {
         id: "ws_1",
@@ -595,10 +601,70 @@ async function createReadAuthorityFixture(beforeRead?: (pathname: string) => Pro
       })).status).toBe(200);
     }
   };
-  return { base, workspaceId, cookie, accessToken: credential.accessToken, revoke, streamAborts: mock.streamAborts };
+  return { base, workspaceId, cookie, accessToken: credential.accessToken, revoke,
+    streamAborts: mock.streamAborts, runtimeRequests: mock.requests };
 }
 
 describe("workspace session read APIs", () => {
+  for (const principal of ["account", "operator"]) {
+    for (const surface of ["read", "stream", "abort"]) {
+      test(`runtime proxy minimizes request headers: ${principal}, ${surface}`, async () => {
+        const path = surface === "stream" ? "/event" : surface === "abort" ? "/session/ses_1/abort" : "/session/ses_1/message";
+        const workspaceRoot = principal === "operator" ? await createWorkspaceRoot() : null;
+        const mock = workspaceRoot ? startMockOpencode() : null;
+        const operator = workspaceRoot && mock ? await startOpenworkServer({
+          workspaceRoot, opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false,
+          opencodeUsername: "fixture-runtime", opencodePassword: "disposable-runtime-password",
+        }) : null;
+        const account = principal === "account" ? await createReadAuthorityFixture() : null;
+        const base = account?.base ?? `http://127.0.0.1:${operator?.server.port}`;
+        const workspaceId = account?.workspaceId ?? "ws_1";
+        const requests = account?.runtimeRequests ?? mock?.requests;
+        if (!requests || (!account && !operator)) throw new Error("Missing disposable proxy fixture");
+        const headers = new Headers({
+          Accept: surface === "stream" ? "text/event-stream" : "application/json",
+          "Content-Type": "application/json", "Last-Event-ID": "fixture-event-123",
+          "If-None-Match": '"fixture-revision"', "X-Matterhorn-Execution-Mode": "work",
+          Cookie: account?.cookie ?? "matterhorn_session=disposable-untrusted-cookie",
+          "X-Forwarded-Host": "fixture.invalid", "Forwarded": "for=192.0.2.1",
+          "X-Matterhorn-Proxy-Secret": "disposable-edge-secret",
+          "X-Matterhorn-Agent-Runtime-Secret": "disposable-runtime-secret",
+          "X-API-Key": "disposable-arbitrary-key", "Referer": "https://fixture.invalid/private-chat",
+          "X-OpenCode-Directory": "/tmp/untrusted-fixture-directory",
+        });
+        if (operator) headers.set("Authorization", `Bearer ${operator.token}`);
+        const controller = new AbortController();
+        let response: Response | undefined;
+        try {
+          response = await fetch(`${base}/workspace/${workspaceId}/opencode${path}`, {
+            method: surface === "abort" ? "POST" : "GET", headers, signal: controller.signal,
+            ...(surface === "abort" ? { body: "{}" } : {}),
+          });
+          expect(response.status).toBe(200);
+          const forwarded = requests.find(request => request.pathname === path)?.headers;
+          if (!forwarded) throw new Error("No runtime request observed");
+          // Assert presence only: a regression must not print the disposable account cookie.
+          const privateHeaders = ["cookie", "x-forwarded-host", "forwarded", "x-matterhorn-proxy-secret",
+            "x-matterhorn-agent-runtime-secret", "x-api-key", "referer", "x-matterhorn-execution-mode"];
+          expect(privateHeaders.map(name => ({ name, forwarded: forwarded.has(name) })))
+            .toEqual(privateHeaders.map(name => ({ name, forwarded: false })));
+          expect(forwarded.get("accept")).toBe(headers.get("accept"));
+          expect(forwarded.get("content-type")).toBe("application/json");
+          expect(forwarded.get("last-event-id")).toBe("fixture-event-123");
+          expect(forwarded.get("if-none-match")).toBe('"fixture-revision"');
+          expect(forwarded.get("x-opencode-directory")).toBeTruthy();
+          expect(forwarded.get("x-opencode-directory")).not.toContain("untrusted-fixture-directory");
+          expect(forwarded.get("authorization") === (operator
+            ? `Basic ${Buffer.from("fixture-runtime:disposable-runtime-password").toString("base64")}` : null)).toBe(true);
+          if (surface === "abort") expect(await response.json()).toBe(true);
+        } finally {
+          controller.abort();
+          await response?.body?.cancel().catch(() => undefined);
+        }
+      });
+    }
+  }
+
   for (const surface of ["delayed-read", "stream"]) {
     for (const change of ["cookie-revoked", "workspace-changed", "unchanged"]) {
       test(`runtime proxy rechecks response authority: ${surface}, ${change}`, async () => {
