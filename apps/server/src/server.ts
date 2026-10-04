@@ -6698,6 +6698,12 @@ async function requireClient(request: Request, config: ServerConfig, tokens: Tok
   if (!scope) {
     throw new ApiError(401, "unauthorized", "Invalid bearer token");
   }
+  requestAccessChecks.set(request, () => {
+    if (tokens.currentScopeForToken(token) !== scope) {
+      throw new ApiError(401, "unauthorized", "Access token is no longer active. Check the current state before retrying any operation.");
+    }
+  });
+  assertRequestAccessCurrent(request);
   const clientId = request.headers.get("x-openwork-client-id") ?? undefined;
   return { type: "remote", clientId, tokenHash: hashToken(token), scope };
 }
@@ -13945,7 +13951,9 @@ function createRoutes(
 
   addRoute(routes, "GET", "/workspace/:id/backend/team-access", "host", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
-    return jsonResponse(await buildBackendTeamAccess(config, workspace, tokens));
+    const result = await buildBackendTeamAccess(config, workspace, tokens);
+    assertRequestAccessCurrent(ctx.request);
+    return jsonResponse(result);
   });
 
   addRoute(routes, "GET", "/workspace/:id/backend/team-access/summary", "client", async (ctx) => {
@@ -13995,7 +14003,7 @@ function createRoutes(
         },
       );
     }
-    const issued = await tokens.create(scope, { label });
+    const issued = await tokens.create(scope, { label, assertAccess: () => assertRequestAccessCurrent(ctx.request) });
 
     await recordAudit(workspace.path, {
       id: shortId(),
@@ -14007,6 +14015,7 @@ function createRoutes(
       timestamp: Date.now(),
     });
 
+    assertRequestAccessCurrent(ctx.request);
     return jsonResponse({
       success: true,
       version: "matterhorn.backend.team-access.v1",
@@ -14039,13 +14048,14 @@ function createRoutes(
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const tokenId = ctx.params.tokenId.trim();
     const existing = (await tokens.list()).find((token) => token.id === tokenId);
+    assertRequestAccessCurrent(ctx.request);
     if (!existing) {
       throw new ApiError(404, "token_not_found", "Token not found");
     }
     if (existing.scope === "owner") {
       throw new ApiError(400, "owner_token_not_supported", "Revoke owner tokens from host token settings.");
     }
-    const ok = await tokens.revoke(tokenId);
+    const ok = await tokens.revoke(tokenId, () => assertRequestAccessCurrent(ctx.request));
     if (!ok) {
       throw new ApiError(404, "token_not_found", "Token not found");
     }
@@ -14067,6 +14077,7 @@ function createRoutes(
       timestamp: Date.now(),
     });
 
+    assertRequestAccessCurrent(ctx.request);
     return jsonResponse({
       success: true,
       version: "matterhorn.backend.team-access.v1",

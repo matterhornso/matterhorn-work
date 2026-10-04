@@ -89,6 +89,7 @@ for (const required of [
   "managed-opencode.test.ts",
   "env-routes.e2e.test.ts",
   "tokens.test.ts",
+  "token-authority.e2e.test.ts",
   "voice-credential.test.ts",
   "app-error-boundary-contract.test.ts",
   "app-observability-contract.test.ts",
