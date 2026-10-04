@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { createHash, createHmac } from "node:crypto";
 import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -22,6 +23,12 @@ type Served = {
 const stops: Array<() => void | Promise<void>> = [];
 const roots: string[] = [];
 const priorJevEnv = ["MATTERHORN_JEV_ENABLED", "TYPESAFE_API_KEY", "MATTERHORN_JEV_POLICY_REVIEWED_AT"].map(name => ({ name, value: process.env[name] }));
+const priorHostedAccessEnv = [
+  "MATTERHORN_AUTH_DB", "MATTERHORN_WORK_DATA_DIR", "MATTERHORN_WORK_MEMORY_ROOT",
+  "MATTERHORN_SIGNUPS_ENABLED", "MATTERHORN_EMAIL_VERIFICATION_REQUIRED", "MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED",
+  "MATTERHORN_HOSTED_PUBLIC_BETA", "MATTERHORN_HOSTED_MCP_ACCESS_MODE",
+  "MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS", "MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET",
+].map(name => ({ name, value: process.env[name] }));
 const priorModelUsageEnv = {
   enforcement: process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT,
   daily: process.env.MATTERHORN_MODEL_USAGE_DAILY_LIMIT,
@@ -58,6 +65,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  for (const { name, value } of priorHostedAccessEnv) restoreEnv(name, value);
   for (const { name, value } of priorJevEnv) restoreEnv(name, value);
   configureVenicePrivateModelRegistry([]);
   while (stops.length) {
@@ -190,6 +198,9 @@ function startMockOpencode(input?: {
   abortStatus?: number;
   invalidList?: boolean;
   holdCommand?: Promise<void>;
+  holdPermission?: Promise<void>;
+  beforeMessages?: () => Promise<void>;
+  onAbort?: () => void;
   sessionMessages?: unknown[] | (() => unknown[]);
   sessionAgent?: string;
   agentPrompts?: Record<string, string> | (() => Record<string, string>);
@@ -362,6 +373,7 @@ function startMockOpencode(input?: {
       }
 
       if (url.pathname === "/session/ses_1" && request.method === "PATCH") {
+        await input?.holdPermission;
         const update = body && typeof body === "object" ? body as { permission?: typeof sessionPermission } : {};
         sessionPermission = [...sessionPermission, ...(update.permission ?? [])];
         return Response.json({
@@ -388,6 +400,7 @@ function startMockOpencode(input?: {
       }
 
       if (url.pathname === "/session/ses_1/message") {
+        await input?.beforeMessages?.();
         const sessionMessages = typeof input?.sessionMessages === "function"
           ? input.sessionMessages()
           : input?.sessionMessages;
@@ -414,6 +427,7 @@ function startMockOpencode(input?: {
       }
 
       if (url.pathname === "/session/ses_1/abort" && request.method === "POST") {
+        input?.onAbort?.();
         if (input?.abortStatus && input.abortStatus !== 200) {
           return Response.json({ error: "upstream abort unavailable" }, { status: input.abortStatus });
         }
@@ -459,6 +473,7 @@ async function startOpenworkServer(input: {
     hostToken: "owt_host_token",
     approval: input.approval ?? { mode: "auto", timeoutMs: 1000 },
     corsOrigins: ["*"],
+    ...(input.opencodeBaseUrl ? { opencodeBaseUrl: input.opencodeBaseUrl } : {}),
     workspaces: [
       {
         id: "ws_1",
@@ -519,6 +534,136 @@ async function waitUntil(predicate: () => boolean) {
 }
 
 describe("workspace session read APIs", () => {
+  for (const boundary of ["key-revoked", "eligibility-removed", "membership-removed", "mode-disabled", "history-revocation", "permission-revocation", "unchanged"]) {
+    test(`guarded MCP approval rechecks original authority after ${boundary}`, async () => {
+      const workspaceRoot = await createWorkspaceRoot();
+      const authDb = join(workspaceRoot, "accounts.db");
+      process.env.MATTERHORN_AUTH_DB = authDb;
+      process.env.MATTERHORN_WORK_DATA_DIR = join(workspaceRoot, "data");
+      process.env.MATTERHORN_WORK_MEMORY_ROOT = join(workspaceRoot, "memory");
+      process.env.MATTERHORN_SIGNUPS_ENABLED = "true";
+      process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "false";
+      process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED = "false";
+      process.env.MATTERHORN_HOSTED_PUBLIC_BETA = "false";
+      process.env.MATTERHORN_HOSTED_MCP_ACCESS_MODE = "invite";
+      process.env.MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET = "disposable-hosted-mcp-request-integrity-secret";
+      const permissionGate = deferred();
+      const historyReached = deferred();
+      let holdHistory = false;
+      let replacementStarted = false;
+      const mock = startMockOpencode({
+        holdPermission: boundary === "permission-revocation" ? permissionGate.promise : undefined,
+        onAbort: () => { replacementStarted = true; },
+        beforeMessages: async () => {
+          if (!holdHistory || !replacementStarted) return;
+          historyReached.resolve();
+          await permissionGate.promise;
+        },
+      });
+      const openwork = await startOpenworkServer({ workspaceRoot,
+        opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false,
+        hardModelUsageLimit: 1000,
+        approval: { mode: "manual", timeoutMs: 4000 } });
+      const base = `http://127.0.0.1:${openwork.server.port}`;
+      const signup = await fetch(`${base}/api/auth/sign-up/email`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "mcp-request@example.com", password: "disposable-mcp-request-password" }),
+      });
+      expect(signup.status).toBe(200);
+      const user = await signup.json();
+      if (typeof user.user?.id !== "string") throw new Error("Missing fixture account");
+      const cookie = signup.headers.get("set-cookie")?.split(";")[0];
+      if (!cookie) throw new Error("Missing fixture cookie");
+      process.env.MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS = user.user.id;
+      const created = await fetch(`${base}/api/auth/account/mcp-access`, {
+        method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ label: "Disposable request test" }),
+      });
+      expect(created.status).toBe(201);
+      const { credential } = await created.json();
+      if (typeof credential?.accessToken !== "string" || typeof credential.id !== "string"
+        || typeof credential.activeOrgId !== "string") throw new Error("Missing fixture key");
+      const workspaceResponse = await fetch(`${base}/workspaces`, { headers: auth(credential.accessToken) });
+      expect(workspaceResponse.status).toBe(200);
+      const { items } = await workspaceResponse.json();
+      const workspaceId = items[0]?.id;
+      if (typeof workspaceId !== "string") throw new Error("Missing fixture workspace");
+      const controller = new AbortController();
+      const pending = fetch(`${base}/mcp/guarded`, {
+        method: "POST", signal: controller.signal,
+        headers: { ...auth(credential.accessToken), "Content-Type": "application/json",
+          Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-11-25" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: "approval-fixture", method: "tools/call",
+          params: { name: "matterhorn_submit_session_prompt", arguments: {
+            workspaceId, sessionId: "ses_1", message: "Synthetic request approval check",
+            model: { providerID: "openai", modelID: "gpt-4.1" },
+          } } }),
+      });
+      try {
+        let approvalId: string | undefined;
+        for (let attempt = 0; attempt < 100; attempt += 1) {
+          const response = await fetch(`${base}/approvals`, { headers: { "x-matterhorn-host-token": openwork.hostToken } });
+          const body = await response.json();
+          const item = body.items.find((entry: { action: string }) => entry.action === "session.prompt");
+          if (typeof item?.id === "string") { approvalId = item.id; break; }
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        expect(approvalId).toBeDefined();
+        expect(mock.requests.filter(request => request.pathname.endsWith("/prompt_async"))).toHaveLength(0);
+        if (boundary === "key-revoked") {
+          const revoked = await fetch(`${base}/api/auth/account/mcp-access/${credential.id}`, {
+            method: "DELETE", headers: { Cookie: cookie },
+          });
+          expect(revoked.status).toBe(200);
+        } else if (boundary === "eligibility-removed") {
+          process.env.MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS = "";
+        } else if (boundary === "mode-disabled") {
+          process.env.MATTERHORN_HOSTED_MCP_ACCESS_MODE = "off";
+        } else if (boundary === "membership-removed") {
+          const db = new Database(authDb);
+          try {
+            db.query("DELETE FROM organization_members WHERE user_id = ? AND organization_id = ?")
+              .run(user.user.id, credential.activeOrgId);
+          } finally { db.close(); }
+        }
+        holdHistory = boundary === "history-revocation";
+        const approval = await fetch(`${base}/approvals/${approvalId}`, {
+          method: "POST", headers: { "x-matterhorn-host-token": openwork.hostToken, "Content-Type": "application/json" },
+          body: JSON.stringify({ reply: "allow" }),
+        });
+        expect(approval.status).toBe(200);
+        if (boundary === "permission-revocation" || boundary === "history-revocation") {
+          if (boundary === "history-revocation") await historyReached.promise;
+          else expect(await waitUntil(() => mock.requests.some(request => request.pathname === "/session/ses_1" && request.method === "PATCH"))).toBe(true);
+          const revoked = await fetch(`${base}/api/auth/account/mcp-access/${credential.id}`, {
+            method: "DELETE", headers: { Cookie: cookie },
+          });
+          expect(revoked.status).toBe(200);
+          permissionGate.resolve();
+        }
+        const response = await pending;
+        expect(response.status).toBe(200);
+        const result = await response.json();
+        expect(mock.requests.filter(request => request.pathname.endsWith("/prompt_async")))
+          .toHaveLength(boundary === "unchanged" ? 1 : 0);
+        expect(result.result?.isError === true).toBe(boundary !== "unchanged");
+        if (boundary === "history-revocation") {
+          expect(JSON.stringify(result)).toContain("Matterhorn denied this account-scoped request.");
+        }
+        if (boundary !== "unchanged") {
+          const db = new Database(join(workspaceRoot, ".model-usage.db"), { readonly: true });
+          try {
+            expect(db.query("SELECT COUNT(*) AS count FROM model_usage_operations WHERE status = 'pending'").get()).toEqual({ count: 0 });
+            expect(db.query("SELECT COUNT(*) AS count FROM model_message_dispatches").get()).toEqual({ count: 0 });
+          } finally { db.close(); }
+        }
+      } finally {
+        permissionGate.resolve();
+        controller.abort(); await pending.catch(() => undefined);
+      }
+    }, 15000);
+  }
+
   test("answer continuation is answer-only, consent-bound and idempotent", async () => {
     process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "enforce";
     process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "continuation-isolated-runtime-fixture";

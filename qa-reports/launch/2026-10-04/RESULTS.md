@@ -707,4 +707,31 @@ git diff --check
 
 Logs: `/tmp/matterhorn-workspace-authority-{red,focused-final,http,typecheck-final,build-final,node,safety}-2026-10-04.log`. The first typecheck failed because the test expected an array of non-null workspace IDs without checking its fixture account's nullable `activeOrgId`. An explicit fixture invariant fixes that error without a cast. The final typecheck/build pass, and the expanded gate exercises that final test source. The separate Node smoke uses the built auth store to verify normal workspace creation/selection, scoped key creation/resolution/revocation, cross-account denial and rejection of all four mutations after sign-out. Native-driver concurrency was not tested by that sequential smoke.
 
-The new concurrency suite and the existing four-test hosted-MCP credential integrity/expiry suite are now explicitly required by both the security workflow and platform safety gate. Remote CI has not run. No frontend code or new frontend/browser acceptance is claimed here. Next security coverage should examine request-level use of external-access credentials and in-flight revocation boundaries, including cookie/bearer precedence and workspace scope; do not infer those guarantees from management-method tests. Hosted five-desk responses, inbox delivery, accounting, wallet behavior, isolation, encryption/restore and full UI accessibility acceptance remain open. No push, merge or deployment occurred.
+The new concurrency suite and the existing four-test hosted-MCP credential integrity/expiry suite are now explicitly required by both the security workflow and platform safety gate. Remote CI has not run. No frontend code or new frontend/browser acceptance is claimed here. The subsequent request-level review is recorded below; cookie/bearer precedence and remaining in-flight boundaries still require coverage. Hosted five-desk responses, inbox delivery, accounting, wallet behavior, isolation, encryption/restore and full UI accessibility acceptance remain open. No push, merge or deployment occurred.
+
+## Guarded MCP request authority through dispatch
+
+The workspace/key-management correction above is committed as `927666688ea2dd6b91e440aede36126aa58b89e9`. The next local HTTP review reproduced an authorization gap in guarded MCP prompt submission: the internally constructed request did not inherit the original access key's revalidation check. Three pending prompts still reached the fake model runtime after key revocation, removal of account eligibility or removal of workspace membership, followed by host approval. An unchanged-key control succeeded normally. These are isolated HTTP reproductions, not observed production incidents.
+
+Internal guarded requests now carry the original request's authorization check and fail closed if it is missing. They do not copy credentials into internal headers. A second reproduction showed that revoking the key during runtime permission setup, after approval, also allowed dispatch. Chat submission now rechecks authority before runtime replacement, before guarded-run creation and immediately before prompt dispatch. Existing failure handling releases the token reservation, fails a newly created run when applicable and discards the unsent dispatch record.
+
+The new seven-case HTTP regression covers key revocation, account eligibility removal, membership removal, disabling MCP access, revocation during the post-replacement history read, revocation during permission setup, and unchanged access. All rejected cases assert zero fake model prompts, no pending token reservations and no unsent dispatch records. A deterministic history-read barrier also reproduced auth failures being remapped to a generic runtime error; the corrected catch preserves the safe access-denied result. The initial history fixture paused before runtime replacement and did not expose that mapper defect; only the final barrier and failing log below constitute its reproduction.
+
+The tests create disposable local accounts and keys, use a synthetic integrity secret, restore environment values, and use only a loopback fake runtime. The fixture must set the top-level runtime URL so newly provisioned account workspaces inherit it; the first test attempt lacked that configuration and failed before approval. That invalid fixture run is not product-failure evidence. No actual model/provider request, hosted signup, production key change or user-preview restart occurred.
+
+- Full local chat, auth, backend-security, rate-limit and guarded-MCP suites: **221 pass, zero fail, 2,052 assertions across five files**, including all seven new cases.
+- Server typecheck and build: pass.
+- Full platform safety gate: **all 11 stages pass**, with terminal exit zero.
+- Diff whitespace: pass.
+
+```sh
+bun test apps/server/src/session-read-model.e2e.test.ts apps/server/src/auth.e2e.test.ts apps/server/src/backend-security.e2e.test.ts apps/server/src/request-rate-limit-store.test.ts apps/server/src/hosted-guarded-mcp.test.ts --timeout 20000
+pnpm --filter matterhorn-work-server typecheck
+pnpm --filter matterhorn-work-server build
+pnpm test:matterhorn-platform-safety
+git diff --check
+```
+
+Valid failing evidence: `/tmp/matterhorn-mcp-request-red-final-2026-10-04.log`, `/tmp/matterhorn-mcp-request-late-red-2026-10-04.log` and `/tmp/matterhorn-mcp-history-red-final-2026-10-04.log`. Final broader checks: `/tmp/matterhorn-mcp-authority-{http,typecheck,build,safety}-2026-10-04.log`. The session-read-model suite is already part of the platform safety gate. No new workflow or dependency is required.
+
+This correction does not cancel inference already dispatched or undo completed side effects. It does not certify all MCP operations, native multi-process races or hosted execution. Next local security coverage is consistent cookie/bearer identity selection across workspace and account routes, plus error handling when access expires during MCP body upload. Those are review targets, not yet reproduced findings. Frontend and hosted acceptance remain separate open work; the prior frontend result was not rerun for this backend-only correction. No push, merge or deployment occurred.

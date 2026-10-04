@@ -11041,6 +11041,15 @@ function createRoutes(
         ...(body !== undefined ? { body } : {}),
         signal: controller.signal,
       });
+      // The internal request must retain the original key's authority checks.
+      // Re-authenticating without headers, or dropping the check, would let a
+      // revoked key continue after a body read or pending approval completes.
+      const checkAccess = requestAccessChecks.get(ctx.request);
+      if (!checkAccess) {
+        throw new HostedGuardedMcpToolError("Matterhorn could not verify this connection's access.");
+      }
+      checkAccess();
+      requestAccessChecks.set(targetRequest, checkAccess);
       if (!matterhornHostedMcpRouteIsAllowed(targetRequest)) {
         throw new HostedGuardedMcpToolError(
           "This operation is not available through Matterhorn's guarded connection.",
@@ -15997,6 +16006,7 @@ function createRoutes(
         // A follow-up is a replacement run. Abort any in-flight response before
         // consuming consent or starting the newly authorized guarded run; abort
         // is idempotent when the session is already idle.
+        assertRequestAccessCurrent(ctx.request);
         await abortWorkspaceSessionBeforeReplacement(config, workspace, sessionId);
       } catch (error) {
         modelUsageStore.cancel(usage.reservation.reservationId);
@@ -16012,6 +16022,7 @@ function createRoutes(
           guardedRuntime,
         });
         if (continuationOf) await validateAnswerContinuation(config, workspace, sessionId, body);
+        assertRequestAccessCurrent(ctx.request);
         guardedAcceptance = await guardedRuntime.startAuthorizedPrompt(
           {
             ...guardedInput,
@@ -16022,6 +16033,7 @@ function createRoutes(
         );
       } catch (error) {
         modelUsageStore.cancel(usage.reservation.reservationId);
+        if (error instanceof ApiError) throw error;
         throw guardedRuntimeApiError(error);
       }
       modelUsageStore.bindUserMessage(usage.reservation.reservationId, userMessageId);
@@ -16065,6 +16077,7 @@ function createRoutes(
           expectedAgentPromptHash: agentContext.promptHash,
           ...(requestToolProfiles.length ? { requestToolProfiles } : {}),
         });
+        assertRequestAccessCurrent(ctx.request);
         dispatchStarted = true;
         if (reasoningEffort) {
           const { sessionID: _sessionID, directory: _directory, ...upstreamBody } = promptBody;
