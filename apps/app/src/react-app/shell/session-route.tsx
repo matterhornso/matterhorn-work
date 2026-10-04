@@ -3192,9 +3192,14 @@ export function SessionRoute() {
                 durationMs: 4200,
               });
             }
-          } catch (error) {
+          } catch {
             if (!isCurrent()) return;
-            console.warn("[fork] failed", error);
+            showToast({
+              title: "Could not fork conversation",
+              description: "Check your recent chats before trying again; a fork may already have been created.",
+              tone: "error",
+              durationMs: 6000,
+            });
           }
         })();
       },

@@ -261,6 +261,9 @@ jobs:
       - name: Test real composer interactions
         run: pnpm --filter @matterhorn-work/app test:composer-browser
 
+      - name: Test mounted session navigation and logout lifetimes
+        run: bun test apps/app/scripts/session-route-lifetime.browser.test.ts --timeout 120000
+
       - name: Test optional Jev consent and chat fallback
         run: bun test apps/app/scripts/jev-chat.browser.test.ts
 

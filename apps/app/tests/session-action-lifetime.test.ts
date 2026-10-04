@@ -87,7 +87,7 @@ describe("session action lifetime", () => {
             : steps.slice(0, steps.indexOf(heldStep) + 1);
           if (boundary === "unchanged" && delivery === "reject") {
             const completed = steps.slice(0, steps.indexOf(heldStep) + 1);
-            if (action === "fork") expected = heldStep === "fork" ? [...completed, "warning"]
+            if (action === "fork") expected = heldStep === "fork" ? [...completed, "toast"]
               : [...completed, "model", "last-session", "pending", "sessions", "navigate", "refresh", "toast"];
             else if (heldStep !== "abort") expected = [...completed, "toast"];
           }

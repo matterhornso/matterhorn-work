@@ -943,3 +943,39 @@ pnpm test:matterhorn-platform-safety
 ```
 
 No user preview, chat or account was changed, and nothing was pushed, merged or deployed. Next: mounted fork/revert lifecycle and recovery tests, followed by the remaining outbound transport review and hosted launch gates. Whole-platform readiness remains unproven.
+
+## Mounted session actions and visible fork errors
+
+Following `fb50de413b28f9452afd7dd618a2feb0c955177d`, the new Chromium suite mounts production AuthenticatedApp, AppRoot, providers and SessionRoute against disposable same-origin HTTP fixtures. It exercises the actual fork/revert buttons, conversation navigation and Account settings sign-out. Cross-tab cases use two pages in one disposable browser context and the real browser storage event; no account-generation hook is manually invoked. Browser requests outside the fixture origin are blocked, environment-file loading is disabled and no real account, provider, wallet or existing preview is used.
+
+Twenty cases cover delayed success and failure for fork/revert while the originating conversation stays open, after switching conversations, after leaving and returning, after same-tab sign-out through settings, and after sign-out in another tab. They check navigation, follow-up binding/snapshot reads, stale notices, unchanged success/failure behavior and uncaught browser errors. The browser tests supplement—not replace—the 36 callback cases that hold each intermediate async step. Mounted intermediate binding/snapshot delays, full workspace/account switching and hosted authorization remain separate coverage.
+
+A fixture-only negative control replaces the two callback lifetime predicates in the in-memory test bundle. Before the error-feedback change below, this produced **14 failures and six passes**: the four unchanged controls passed, along with two reverted-error/logout cases where the signed-out UI no longer renders the toast viewport. Thus the matrix detects stale behavior but is not proof that every background state write is observable. The negative control changes neither source files nor production authentication; its command is deliberately expected to fail.
+
+The mounted review also reproduced a separate customer-facing defect: a rejected fork request only wrote a console warning. A new visible-error assertion failed before correction. The current callback now uses the shared error alert, explaining that the user should check recent chats before trying again because a fork may already have been created. It does not expose the raw runtime error, resend automatically or claim that accepted server work was undone. The existing account/route guards still suppress obsolete feedback.
+
+Six additional cases cover this error at 390, 768 and 1440 pixels in light and dark themes. They activate Fork by keyboard, preserve an unsent draft, assert a single dispatch, verify the alert role/live-region setting and recovery text, check horizontal bounds and page overflow, and dismiss the notice. Reduced-motion preference is enabled; this does not constitute a complete motion or screen-reader audit. Theme names are verified against the rendered root attribute, not inferred from browser emulation alone.
+
+Fixture setup initially prevented entry into the app: public-beta Cloud settings needed explicit same-origin build values, and inline dynamic imports evaluated an optional wallet dependency. Preserving normal lazy chunks corrected the latter without changing wallet code or installing a dependency. The first visual batch also showed that the fixture omitted the production theme bootstrap, so purported dark captures were light. The fixture now calls the same bootstrap as the production entry. These were test-harness defects, not reported product regressions. Two bounded visual rounds were used; confirmed dark desktop/mobile and light tablet captures show the new alert wrapping within the viewport, with the composer/draft still visible. No cosmetic redesign was made.
+
+- Mounted Chromium suite: **26 pass, zero fail, 228 assertions**. CI now runs it after the existing composer suite using the already-installed Chromium browser.
+- Callback plus initial mounted matrix: **56 pass, zero fail, 228 assertions** before adding the six responsive cases.
+- Full frontend suite: **1,456 pass, zero fail, 8,513 assertions across 193 files**.
+- Frontend typecheck and web build: pass. The existing large-chunk build warning remains.
+- Full platform safety gate: all 11 stages pass, terminal exit zero. Final diff whitespace and formatting checks for the new fixture files pass.
+
+```sh
+bun test apps/app/scripts/session-route-lifetime.browser.test.ts --timeout 120000
+QA_SESSION_LIFETIME_UNGUARDED=1 bun test apps/app/scripts/session-route-lifetime.browser.test.ts --timeout 120000
+pnpm --filter @matterhorn-work/app test
+pnpm --filter @matterhorn-work/app typecheck
+pnpm --filter @matterhorn-work/app build:web
+pnpm test:matterhorn-platform-safety
+git diff --check
+```
+
+The second command is an optional deliberately failing mutation check, not a release gate. Current tests also include the new error-feedback checks; do not assume its exact failure count remains the historical pre-feedback count above. For screenshots, set `MOUNTED_QA_CAPTURE_DIR` to a disposable local directory when running the normal browser suite.
+
+Evidence: `/tmp/matterhorn-mounted-lifecycle-negative-2026-10-04.log` (mutation check), `/tmp/matterhorn-mounted-fork-feedback-red-2026-10-04.log` (missing-feedback reproduction), `/tmp/matterhorn-mounted-lifecycle-final-2026-10-04.log` (56 cases), `/tmp/matterhorn-mounted-lifecycle-browser-confirmed-2026-10-04.log` (final 26 browser cases), and `/tmp/matterhorn-mounted-lifecycle-{frontend,typecheck,build,safety}-2026-10-04.log`. Confirmed screenshots: `/tmp/matterhorn-mounted-lifecycle-confirmed-captures-2026-10-04/`; the earlier `captures` directory does not establish dark-theme coverage.
+
+The fixture supplies synthetic completed messages and does not establish a connected model, real inference, live chain reads, backend fork/revert persistence, actual inbox recovery or production account isolation. No push, merge, deployment or existing-chat change occurred. Next: review remaining worker-control/realtime outbound transports and extend mounted intermediate-wait recovery coverage; hosted five-desk acceptance, provider accounting, email, backup restore/encryption and complete browser/accessibility checks remain open. Whole-platform readiness is still unproven.
