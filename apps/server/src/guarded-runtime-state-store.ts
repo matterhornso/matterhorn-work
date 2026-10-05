@@ -47,6 +47,7 @@ export type GuardedRuntimeStateKind =
   | "agent_file_record"
   | "agent_file_operation_claim"
   | "agent_file_renewal_intent"
+  | "receipt_append_intent"
   | "receipt_index";
 
 type StateRow = {

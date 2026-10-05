@@ -2189,8 +2189,16 @@ export class MatterhornGuardedAgentRuntime {
       );
       if (!index) throw new GuardedRuntimeError(409, "agent_run_receipt_unavailable", "The run receipt is unavailable; completion was not recorded.");
       const receipt = await this.receipts.get(index.workspaceId, input.runId);
+      // Loading can finish an authenticated append intent left by a partial
+      // write. Verify the newly committed index, never the stale pre-load hash.
+      const currentIndex = assertGuardedReceiptIndexState(
+        this.authorizedState("receipt_index", "agent_run_receipt_index_invalid")
+          .getRecord<unknown>(input.runId, nowMs), input.runId, nowMs,
+      );
       if (!receipt || receipt.id !== index.receiptId || receipt.sessionId !== index.sessionId
-        || receipt.integrity.recordHash !== index.recordHash) {
+        || !currentIndex || currentIndex.workspaceId !== index.workspaceId
+        || currentIndex.sessionId !== index.sessionId || currentIndex.receiptId !== index.receiptId
+        || receipt.integrity.recordHash !== currentIndex.recordHash) {
         throw new GuardedRuntimeError(409, "agent_run_receipt_unavailable", "The run receipt could not be verified; completion was not recorded.");
       }
       await this.finishRun(input.runId, input.status, input.usage);
@@ -2575,6 +2583,12 @@ export class MatterhornGuardedAgentRuntime {
     workspaceId: string;
     sessionId: string;
   }): void {
+    // An unresolved append can contain a terminal outcome whose index has not
+    // committed yet. Presence grants denial only; do not dispatch from the old
+    // pending index while crash recovery is outstanding.
+    if (this.stateStore.getRecord("receipt_append_intent", input.workspaceId, 0)) {
+      throw new Error("capability_run_or_tool_not_found");
+    }
     const nowMs = Date.now();
     const active = this.activeRunState(input.sessionId, nowMs);
     const scope = this.runScopeState(input.runId, nowMs);

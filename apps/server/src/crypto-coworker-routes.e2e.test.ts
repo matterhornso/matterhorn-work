@@ -740,7 +740,12 @@ async function seedPendingSuiIntent(input: {
       },
       reason: "Exact transaction terms remain inside the guarded runtime until wallet review.",
     };
-    const receipts = new MatterhornAgentRunReceiptStore(state);
+    // Seed the same authenticated receipt/index pair as the real runtime.
+    // Unsigned fixture indexes must not be promoted by wallet reconciliation.
+    const receipts = new MatterhornAgentRunReceiptStore(
+      state,
+      testDurableStateAuthority(process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET),
+    );
     await receipts.start({
       runId: intent.runId,
       workspaceId: input.workspaceId,
@@ -3451,7 +3456,7 @@ describe("crypto coworker HTTP boundary", () => {
       `/workspace/${workspaceA}/coworkers/${coworkerId}/wallet-intents/${pending.id}/receipt`,
       { cookie: cookieA, body: receiptBody },
     );
-    expect(reconciled.response.status).toBe(200);
+    expect(reconciled.response.status, JSON.stringify(reconciled.payload)).toBe(200);
     expect(reconciled.payload.item).toMatchObject({
       id: pending.id,
       revision: 2,

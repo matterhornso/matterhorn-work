@@ -98,9 +98,11 @@ errors and retain unknown-usage holds; the received request completes once with
 473 tokens and no hold. The native engine stays running in all three cases.
 See the [current QA evidence](../../qa-reports/launch/2026-10-05/RESULTS.md#in-flight-restart-and-receipt-persistence).
 Native engine restart, completion notification recovery during gateway downtime
-and concurrent replicas remain unverified. Two separate receipt-index write
-recovery tests fail; this patch does not fix that launch blocker or certify
-production artifacts or provider invoice accuracy.
+and concurrent replicas remain unverified. The server's separate authenticated
+append-journal correction now passes the two receipt-index recovery regressions;
+see [receipt recovery evidence](../../qa-reports/launch/2026-10-05/RESULTS.md#authenticated-receipt-append-recovery).
+This runtime patch alone does not provide receipt recovery or certify production
+artifacts or provider invoice accuracy.
 
 The reservation correction preserves a hold after any provider-system release,
 including a lost acknowledgement or later HTTP 400. It cancels only after this

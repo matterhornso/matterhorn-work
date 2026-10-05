@@ -167,17 +167,30 @@ chain before updating the receipt. These counters are runtime observations and
 estimated cost, not provider invoices or a mechanism for downward corrections.
 The separate usage ledger controls reservations and charged allowance.
 
-Known release blocker: the file append and sealed receipt-index write are not
-atomic. If the append succeeds but the index write fails, exact completion
-retries are rejected, including after backend restart. Execution authority is
-revoked, but the receipt cannot recover automatically. The repair must preserve
-authenticated write intent and the first terminal outcome; trusting an unmatched
-file tail or weakening index verification is not an acceptable recovery method.
-See the [failure reproductions](../../qa-reports/launch/2026-10-05/RESULTS.md#in-flight-restart-and-receipt-persistence).
+The authenticated receipt writer commits a sealed append intent before file IO.
+It binds the prior index, original file prefix and exact intended receipt bytes.
+After a partial append or failed index transaction, recovery checks those bindings,
+appends only the missing bytes, fsyncs the file and its directory, then commits
+the sealed index and removes the intent together. SQLite serializes these steps
+across stores sharing that database. Recovery never reruns a model or tool and
+cannot change the first terminal outcome. An unresolved intent blocks tool dispatch
+even if a process died before replacing its older pending index.
+
+Missing or unsigned indexes, altered prefixes, unexpected tails and invalid intents
+fail closed. Historical orphaned files without a valid intent are not automatically
+reindexed. Preserve the consistent receipt files, guarded-state database and signing
+authority through backup and restore; the hash chain alone is not authenticity proof.
+Abrupt Bun-process exits and two competing recovery processes pass locally, but this
+does not certify power-loss durability, other operating systems, multi-replica agent
+execution or production backup restoration. Reads and writes currently scan retained
+workspace receipts synchronously; large-history latency remains unverified. See
+[recovery evidence and limits](../../qa-reports/launch/2026-10-05/RESULTS.md#authenticated-receipt-append-recovery).
 
 Receipts are created in every guarded mode, including `off`, then written to
-date-segmented, hash-chained workspace storage and expired by the daily retention
-job after 365 days. Workspace purge deletes engine sessions, notes, outputs, memories,
+date-segmented, hash-chained workspace storage. Individual receipts stop appearing
+after 365 days; a daily segment is physically removed only once the entire day is
+older than that retention window. Earlier expired entries can therefore remain in
+that segment until the rest of the day expires and cleanup runs. Workspace purge deletes engine sessions, notes, outputs, memories,
 workflow content, and transient grants/consents immediately. It retains only the
 minimal content-free security chain until normal expiry. Purge fails before local
 deletion when engine content cannot first be deleted, preventing a false success.

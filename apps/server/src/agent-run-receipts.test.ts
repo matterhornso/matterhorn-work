@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setSystemTime, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -50,6 +50,223 @@ function publicPreflight(workspaceId: string, sessionId: string) {
 }
 
 describe("guarded agent run receipts", () => {
+  test("a missing authenticated receipt file is not silently replaced", async () => {
+    const workspaceId = "ws_missing_receipt_file";
+    const runId = "run_missing_receipt_file";
+    const state = new MatterhornGuardedRuntimeStateStore(join(root, "missing-receipt.db"));
+    const authority = testDurableStateAuthority();
+    const store = new MatterhornAgentRunReceiptStore(state, authority);
+    try {
+      await store.start({ workspaceId, runId, sessionId: "ses_missing", consentUsed: false,
+        preflight: publicPreflight(workspaceId, "ses_missing") });
+      const path = join(root, "security-receipts", workspaceId, `${new Date().toISOString().slice(0, 10)}.jsonl`);
+      await rm(path);
+      await expect(store.get(workspaceId, runId)).rejects.toThrow("agent_run_receipt_index_invalid");
+      await expect(store.start({ workspaceId, runId: "run_new_after_loss", sessionId: "ses_missing", consentUsed: false,
+        preflight: publicPreflight(workspaceId, "ses_missing") })).rejects.toThrow("agent_run_receipt_index_invalid");
+      expect(state.getRecord("receipt_index", runId)).not.toBeNull();
+    } finally { state.close(); authority.close(); }
+  });
+
+  test("daily retention keeps the unexpired part of a day alongside expired receipts", async () => {
+    const workspaceId = "ws_receipt_retention_boundary";
+    const state = new MatterhornGuardedRuntimeStateStore(join(root, "receipt-retention.db"));
+    const authority = testDurableStateAuthority();
+    const store = new MatterhornAgentRunReceiptStore(state, authority);
+    try {
+      for (const [runId, at] of [["run_expired", "2025-04-15T11:00:00.000Z"], ["run_retained", "2025-04-15T13:00:00.000Z"]]) {
+        setSystemTime(new Date(at));
+        await store.start({ workspaceId, runId, sessionId: "ses_retention", consentUsed: false,
+          preflight: publicPreflight(workspaceId, "ses_retention") });
+      }
+      setSystemTime(new Date("2026-04-15T12:00:00.000Z"));
+      expect(await store.purgeExpired(workspaceId)).toBe(0);
+      expect((await store.list(workspaceId)).map(receipt => receipt.runId)).toEqual(["run_retained"]);
+      setSystemTime(new Date("2026-04-16T00:00:00.000Z"));
+      expect(await store.purgeExpired(workspaceId)).toBe(1);
+      expect(await store.list(workspaceId)).toEqual([]);
+    } finally { setSystemTime(); state.close(); authority.close(); }
+  });
+
+  for (const boundary of ["before-append", "after-append", "after-index"]) {
+    test(`two processes recover an abrupt writer exit at ${boundary}`, async () => {
+      const workspaceId = `ws_process_journal_${boundary}`;
+      const runId = `run_process_journal_${boundary}`;
+      const db = join(root, `${workspaceId}.db`);
+      const state = new MatterhornGuardedRuntimeStateStore(db);
+      const authority = testDurableStateAuthority();
+      const store = new MatterhornAgentRunReceiptStore(state, authority);
+      const runWorker = async (mode: string) => {
+        const child = Bun.spawn([process.execPath, new URL("./fixtures/receipt-journal-worker.ts", import.meta.url).pathname,
+          mode, db, workspaceId, runId], { env: { OPENWORK_DATA_DIR: root }, stdout: "pipe", stderr: "pipe" });
+        const [code, error] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+        expect(code, error).toBe(mode === "recover" ? 0 : 71);
+      };
+      try {
+        await store.start({ workspaceId, runId, sessionId: "ses_process", consentUsed: false,
+          preflight: publicPreflight(workspaceId, "ses_process") });
+        await runWorker(boundary);
+        expect(state.getRecord("receipt_append_intent", workspaceId)).not.toBeNull();
+        await Promise.all([runWorker("recover"), runWorker("recover")]);
+        expect(state.getRecord("receipt_append_intent", workspaceId)).toBeNull();
+        expect(await store.get(workspaceId, runId)).toMatchObject({ status: "cancelled",
+          usage: { inputTokens: 300, outputTokens: 173 } });
+        const path = join(root, "security-receipts", workspaceId, `${new Date().toISOString().slice(0, 10)}.jsonl`);
+        expect((await readFile(path, "utf8")).trim().split("\n")).toHaveLength(2);
+      } finally { state.close(); authority.close(); }
+    }, 15000);
+  }
+
+  for (const boundary of ["before-append", "partial-append", "partial-utf8", "after-append", "index-commit"]) {
+    test(`sealed receipt intent recovers ${boundary} exactly once after reopen`, async () => {
+      const workspaceId = `ws_journal_${boundary}`;
+      const runId = `run_journal_${boundary}`;
+      const db = join(root, `${workspaceId}.db`);
+      const authority = testDurableStateAuthority();
+      let state = new MatterhornGuardedRuntimeStateStore(db);
+      let store = new MatterhornAgentRunReceiptStore(state, authority);
+      try {
+        const now = new Date();
+        const path = join(root, "security-receipts", workspaceId, `${now.toISOString().slice(0, 10)}.jsonl`);
+        const preflight = publicPreflight(workspaceId, "ses_journal");
+        preflight.provider.name = "Synthetic provider 🚀";
+        await store.start({ workspaceId, runId, sessionId: "ses_journal", consentUsed: false, preflight, now });
+        const prefix = await readFile(path);
+        const put = state.put.bind(state);
+        const remove = state.delete.bind(state);
+        state.put = (input) => {
+          if (boundary !== "index-commit" && input.kind === "receipt_index") throw new Error("fixture index failure");
+          return put(input);
+        };
+        state.delete = (kind, key) => {
+          if (boundary === "index-commit" && kind === "receipt_append_intent") throw new Error("fixture index commit failure");
+          return remove(kind, key);
+        };
+        await expect(store.complete({ runId, status: "cancelled", usage: { inputTokens: 300, outputTokens: 173 }, now }))
+          .rejects.toThrow("fixture index");
+        const intended = await readFile(path);
+        expect(intended.length).toBeGreaterThan(prefix.length);
+        expect(state.getRecord("receipt_append_intent", workspaceId)).not.toBeNull();
+        // Simulate crashes before or during the append. Only bytes belonging
+        // to the sealed intended suffix are eligible for automatic repair.
+        if (boundary === "before-append") await writeFile(path, prefix);
+        if (boundary === "partial-append") await writeFile(path, intended.subarray(0, prefix.length + 71));
+        if (boundary === "partial-utf8") await writeFile(path, intended.subarray(0, intended.indexOf(Buffer.from("🚀"), prefix.length) + 1));
+        state.close();
+        state = new MatterhornGuardedRuntimeStateStore(db);
+        store = new MatterhornAgentRunReceiptStore(state, authority);
+        const recovered = await store.get(workspaceId, runId);
+        expect(recovered).toMatchObject({ status: "cancelled", completedAt: now.toISOString(),
+          usage: { inputTokens: 300, outputTokens: 173 } });
+        expect(await readFile(path)).toEqual(intended);
+        expect(state.getRecord("receipt_append_intent", workspaceId)).toBeNull();
+        await store.get(workspaceId, runId);
+        expect(await readFile(path)).toEqual(intended);
+        await store.complete({ runId, status: "success", usage: { inputTokens: 1, outputTokens: 1 } });
+        expect(await store.get(workspaceId, runId)).toMatchObject({ status: "cancelled", completedAt: recovered?.completedAt,
+          usage: { inputTokens: 300, outputTokens: 173 } });
+      } finally { state.close(); authority.close(); }
+    });
+  }
+
+  test("a failed journal write leaves no file mutation or false terminal outcome", async () => {
+    const workspaceId = "ws_journal_prepare_failure";
+    const runId = "run_journal_prepare_failure";
+    const state = new MatterhornGuardedRuntimeStateStore(join(root, "journal-prepare.db"));
+    const authority = testDurableStateAuthority();
+    const store = new MatterhornAgentRunReceiptStore(state, authority);
+    try {
+      await store.start({ workspaceId, runId, sessionId: "ses_prepare", consentUsed: false,
+        preflight: publicPreflight(workspaceId, "ses_prepare") });
+      const path = join(root, "security-receipts", workspaceId, `${new Date().toISOString().slice(0, 10)}.jsonl`);
+      const before = await readFile(path);
+      const put = state.put.bind(state);
+      state.put = (input) => {
+        if (input.kind === "receipt_append_intent") throw new Error("fixture journal failure");
+        return put(input);
+      };
+      await expect(store.complete({ runId, status: "cancelled" })).rejects.toThrow("fixture journal failure");
+      expect(await readFile(path)).toEqual(before);
+      expect(await store.get(workspaceId, runId)).toMatchObject({ status: "pending" });
+      expect(state.getRecord("receipt_append_intent", workspaceId)).toBeNull();
+      state.put = put;
+      await store.complete({ runId, status: "success" });
+      expect(await store.get(workspaceId, runId)).toMatchObject({ status: "success" });
+    } finally { state.close(); authority.close(); }
+  });
+
+  for (const mutation of ["prefix", "suffix", "extra-tail", "missing-prefix", "unsealed-intent", "wrong-tenant", "missing-intent", "index"]) {
+    test(`receipt recovery rejects ${mutation} without modifying the file`, async () => {
+      const workspaceId = `ws_journal_tamper_${mutation}`;
+      const runId = `run_journal_tamper_${mutation}`;
+      const db = join(root, `${workspaceId}.db`);
+      const state = new MatterhornGuardedRuntimeStateStore(db);
+      const authority = testDurableStateAuthority();
+      const store = new MatterhornAgentRunReceiptStore(state, authority);
+      try {
+        const now = new Date();
+        const path = join(root, "security-receipts", workspaceId, `${now.toISOString().slice(0, 10)}.jsonl`);
+        await store.start({ workspaceId, runId, sessionId: "ses_tamper", consentUsed: false,
+          preflight: publicPreflight(workspaceId, "ses_tamper"), now });
+        const prefix = await readFile(path);
+        const originalIndex = state.getRecord("receipt_index", runId);
+        const put = state.put.bind(state);
+        state.put = (input) => {
+          if (input.kind === "receipt_index") throw new Error("fixture index failure");
+          return put(input);
+        };
+        await expect(store.complete({ runId, status: "success", usage: { inputTokens: 473 }, now })).rejects.toThrow("fixture index failure");
+        state.put = put;
+        const intended = await readFile(path);
+        if (mutation === "prefix") { const changed = Buffer.from(intended); changed[1] ^= 1; await writeFile(path, changed); }
+        if (mutation === "suffix") { const changed = Buffer.from(intended); changed[prefix.length + 1] ^= 1; await writeFile(path, changed); }
+        if (mutation === "extra-tail") await writeFile(path, Buffer.concat([intended, Buffer.from("unexpected\n")]));
+        if (mutation === "missing-prefix") await writeFile(path, intended.subarray(prefix.length));
+        if (mutation === "missing-intent") state.delete("receipt_append_intent", workspaceId);
+        if (mutation === "index") state.delete("receipt_index", runId);
+        if (mutation === "unsealed-intent" || mutation === "wrong-tenant") {
+          const record = state.getRecord("receipt_append_intent", workspaceId);
+          if (!record) throw new Error("Missing fixture intent");
+          state.put({ kind: record.kind, key: record.key,
+            workspaceId: mutation === "wrong-tenant" ? "ws_other" : workspaceId, sessionId: record.sessionId,
+            value: mutation === "unsealed-intent" ? { version: 1 } : record.value,
+            expiresAtMs: record.expiresAtMs, nowMs: record.updatedAtMs });
+        }
+        const before = await readFile(path);
+        const reloaded = new MatterhornAgentRunReceiptStore(state, authority);
+        await expect(reloaded.get(workspaceId, runId)).rejects.toThrow();
+        expect(await readFile(path)).toEqual(before);
+        if (mutation !== "index") expect(state.getRecord("receipt_index", runId)).toEqual(originalIndex);
+      } finally { state.close(); authority.close(); }
+    });
+  }
+
+  test("independent receipt stores preserve concurrent terminal status and memory observations", async () => {
+    const workspaceId = "ws_journal_concurrent";
+    const runId = "run_journal_concurrent";
+    const db = join(root, "receipt-concurrent.db");
+    const firstState = new MatterhornGuardedRuntimeStateStore(db);
+    const secondState = new MatterhornGuardedRuntimeStateStore(db);
+    const authority = testDurableStateAuthority();
+    const first = new MatterhornAgentRunReceiptStore(firstState, authority);
+    const second = new MatterhornAgentRunReceiptStore(secondState, authority);
+    try {
+      await first.start({ workspaceId, runId, sessionId: "ses_concurrent", consentUsed: false,
+        preflight: publicPreflight(workspaceId, "ses_concurrent") });
+      await second.get(workspaceId, runId);
+      await Promise.all([
+        first.complete({ runId, status: "cancelled", usage: { inputTokens: 300 } }),
+        second.complete({ runId, status: "success", usage: { outputTokens: 173 } }),
+        first.recordMemoryWrite({ runId, memoryId: "memory_a" }),
+        second.recordMemoryWrite({ runId, memoryId: "memory_b" }),
+      ]);
+      const result = await first.get(workspaceId, runId);
+      expect(result).toMatchObject({ status: "cancelled", usage: { inputTokens: 300, outputTokens: 173 },
+        memory: { writtenIds: ["memory_a", "memory_b"] } });
+      expect(await second.get(workspaceId, runId)).toEqual(result);
+    } finally { firstState.close(); secondState.close(); authority.close(); }
+  });
+
   const terminalStatuses: Array<Parameters<MatterhornAgentRunReceiptStore["complete"]>[0]["status"]> = ["success", "partial", "cancelled", "error"];
   for (const status of terminalStatuses) {
     test(`late usage preserves ${status} outcome and completion time across reload`, async () => {

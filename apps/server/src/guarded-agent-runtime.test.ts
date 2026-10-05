@@ -112,7 +112,7 @@ describe("guarded agent runtime transport", () => {
       const runtime = new MatterhornGuardedAgentRuntime(state);
       try {
         const system = "Summarize synthetic history only.";
-        const request = (purpose: "message" | "compaction"): GuardedPromptInput => ({ workspaceId: "ws_compact", sessionId: "ses_compact",
+        const request = (purpose: "message" | "compaction"): GuardedPromptInput => ({ workspaceId: `ws_compact_${mode}`, sessionId: "ses_compact",
           parts: [
             { type: "system_context", text: system, source: "system", label: "public", contentHash: sha256(system) },
             { type: "provider_system_manifest", source: "system", label: "public", contentHash: sha256(system),
@@ -628,19 +628,12 @@ describe("guarded agent runtime transport", () => {
     })).toThrow("capability_run_or_tool_not_found");
     expect(secondStore.list("staged_capability", { workspaceId: prompt.workspaceId })).toHaveLength(0);
 
-    const replacement = await second.acceptPrompt(prompt);
-    expect(replacement.runId).not.toBe(accepted.runId);
-    expect((await second.receipts.get(prompt.workspaceId, accepted.runId))?.status).toBe("cancelled");
-    expect(second.stageRuntimeTool({
-      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
-      runId: replacement.runId,
-      workspaceId: prompt.workspaceId,
-      sessionId: prompt.sessionId,
-      callId: "call_restored_replacement",
-      agentId: prompt.agentId,
-      toolName: "matterhorn-work_matterhorn_sui_get_balance",
-      args: { address: `0x${"2".repeat(64)}` },
-    })).toEqual(expect.objectContaining({ accepted: true, callId: "call_restored_replacement" }));
+    // A missing index without a sealed append intent is not a recoverable
+    // partial write. Replacement must not silently authenticate that file.
+    await expect(second.acceptPrompt(prompt)).rejects.toThrow("agent_run_receipt_index_invalid");
+    expect(second.capabilities.activeRun(prompt.sessionId)).toBeNull();
+    expect(secondStore.getRecord("receipt_index", accepted.runId)).toBeNull();
+    await expect(second.receipts.get(prompt.workspaceId, accepted.runId)).rejects.toThrow("agent_run_receipt_index_invalid");
     second.close();
   });
 
@@ -1339,6 +1332,36 @@ describe("guarded agent runtime transport", () => {
     });
   }
 
+  test("restored execution cannot use a pending index while a terminal append awaits recovery", async () => {
+    const path = join(dataDir, "receipt-terminal-intent-authority.db");
+    const state = new MatterhornGuardedRuntimeStateStore(path);
+    const first = new MatterhornGuardedAgentRuntime(state);
+    const scope = { workspaceId: "ws_terminal_intent", sessionId: "ses_terminal_intent" };
+    const accepted = await first.acceptPrompt({ ...scope,
+      parts: [{ type: "text", text: "Read public Sui state" }], providerId: "cudos", modelId: "asi1-mini",
+      agentId: "matterhorn-sui", executionMode: "work" });
+    const put = state.put.bind(state);
+    state.put = (input) => {
+      if (input.kind === "receipt_index") throw new Error("fixture terminal index failure");
+      return put(input);
+    };
+    // Persist terminal receipt intent without running the gateway's finally
+    // cleanup, matching authority left behind by an abrupt process exit.
+    await expect(first.receipts.complete({ runId: accepted.runId, status: "success" })).rejects.toThrow();
+    first.close();
+    const restored = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    const stage = () => restored.stageRuntimeTool({ ...scope, runId: accepted.runId,
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!, agentId: "matterhorn-sui", callId: "call_terminal_intent",
+      toolName: "matterhorn-work_matterhorn_sui_get_balance", args: { address: `0x${"1".repeat(64)}` } });
+    try {
+      expect(stage).toThrow("capability_run_or_tool_not_found");
+      expect(await restored.receipts.get(scope.workspaceId, accepted.runId)).toMatchObject({ status: "success" });
+      expect(stage).toThrow("capability_run_or_tool_not_found");
+      await restored.completeRun({ runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!, runId: accepted.runId, status: "success" });
+      expect(restored.capabilities.activeRun(scope.sessionId)).toBeNull();
+    } finally { restored.close(); }
+  });
+
   for (const restart of [false, true]) {
     for (const cancelled of [false, true]) {
       test(`late completion preserves terminal outcome and cumulative usage (restart=${restart}, cancelled=${cancelled})`, async () => {
@@ -1390,7 +1413,7 @@ describe("guarded agent runtime transport", () => {
       await expect(runtime.completeRun({ runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
         runId: accepted.runId, status: "success", usage: { inputTokens: 473 } })).rejects.toThrow();
       expect(runtime.capabilities.activeRun(sessionId)).toBeNull();
-      expect((await runtime.receipts.get(workspaceId, accepted.runId))?.status).toBe("pending");
+      await expect(runtime.receipts.get(workspaceId, accepted.runId)).rejects.toThrow();
       runtime.close();
     }
   });
@@ -1487,7 +1510,7 @@ describe("guarded agent runtime transport", () => {
       };
       const coworker = {
         id: "cw_polymarket_policy",
-        workspaceId: "ws_polymarket_policy",
+        workspaceId: `ws_polymarket_policy_${allowed}`,
         ownerId: "account_polymarket_policy",
         revision: 1,
         policyVersion: "coworker-policy-1",
@@ -1512,7 +1535,7 @@ describe("guarded agent runtime transport", () => {
         maxPrepareCallsPerFamily: 1,
       };
       const accepted = await runtime.acceptPrompt({
-        workspaceId: "ws_polymarket_policy",
+        workspaceId: `ws_polymarket_policy_${allowed}`,
         sessionId: "ses_polymarket_policy",
         parts: [{ type: "text", text: "Prepare a five dollar public market order for wallet review" }],
         providerId: "cudos",
@@ -1527,7 +1550,7 @@ describe("guarded agent runtime transport", () => {
       const stage = () => runtime.stageRuntimeTool({
         runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
         runId: accepted.runId,
-        workspaceId: "ws_polymarket_policy",
+        workspaceId: `ws_polymarket_policy_${allowed}`,
         sessionId: "ses_polymarket_policy",
         callId: "call_polymarket_policy",
         agentId: "matterhorn-polymarket",
@@ -1536,7 +1559,7 @@ describe("guarded agent runtime transport", () => {
       });
       if (!allowed) {
         expect(stage).toThrow("capability_polymarket_jurisdiction_denied");
-        const receipt = await runtime.receipts.get("ws_polymarket_policy", accepted.runId);
+        const receipt = await runtime.receipts.get(`ws_polymarket_policy_${allowed}`, accepted.runId);
         expect(JSON.stringify(receipt)).not.toContain(jurisdiction.country);
         expect(JSON.stringify(receipt)).not.toContain(jurisdiction.region);
         return;
@@ -1553,7 +1576,7 @@ describe("guarded agent runtime transport", () => {
       const serializedAuthorization = JSON.stringify(authorization);
       expect(serializedAuthorization).not.toContain(jurisdiction.country);
       expect(serializedAuthorization).not.toContain(jurisdiction.region);
-      const receipt = await runtime.receipts.get("ws_polymarket_policy", accepted.runId);
+      const receipt = await runtime.receipts.get(`ws_polymarket_policy_${allowed}`, accepted.runId);
       expect(JSON.stringify(receipt)).not.toContain(jurisdiction.country);
       expect(JSON.stringify(receipt)).not.toContain(jurisdiction.region);
     } finally {
@@ -2402,7 +2425,7 @@ describe("guarded agent runtime transport", () => {
       try {
         const system = "Summarize synthetic public information only.";
         const input: GuardedPromptInput = {
-          workspaceId: "ws_system_replacement", sessionId: "ses_system_replacement",
+          workspaceId: `ws_system_replacement_${purpose}`, sessionId: "ses_system_replacement",
           providerId: "ollama", modelId: "fixture", executionMode: "work",
           parts: [
             { type: "system_context", text: system, source: "system", label: "public", contentHash: sha256(system) },
