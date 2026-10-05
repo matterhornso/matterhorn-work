@@ -1,5 +1,6 @@
 import { MATTERHORN_CRYPTO_COMPACTION_CONTEXT } from "../opencode-compaction-policy.js";
 import { resolveConfinedWorkspacePath } from "../workspace-path-boundary.js";
+import { MATTERHORN_COMPACTION_REQUEST } from "../opencode-compaction-request.js";
 
 type PluginContext = {
   directory?: string;
@@ -36,6 +37,12 @@ type MessagesHookOutput = {
 type OpenCodeEvent = {
   type?: string;
   properties?: Record<string, unknown>;
+};
+
+type MessageHookInput = { sessionID: string; messageID?: string };
+type MessageHookOutput = {
+  message: { id: string; sessionID: string; model: { providerID: string; modelID: string } };
+  parts: Array<Record<string, unknown>>;
 };
 
 type AssistantUsage = {
@@ -233,6 +240,36 @@ export const MatterhornGuard = async (context: PluginContext) => {
   // a bounded, short-lived snapshot for that exact run; never persist its text.
   const retryMessages = new Map<string, { serialized: string; messages: unknown[]; runId: string; expiresAt: number; used: boolean }>();
   return ({
+  "chat.message": async (input: MessageHookInput, output: MessageHookOutput) => {
+    const markers = output.parts.filter(part => {
+      const metadata = part.metadata;
+      return metadata !== null && typeof metadata === "object" && Object.hasOwn(metadata, MATTERHORN_COMPACTION_REQUEST);
+    });
+    if (!markers.length) return;
+    const part = markers[0];
+    const metadata = part.metadata;
+    const runId = metadata !== null && typeof metadata === "object" ? Reflect.get(metadata, MATTERHORN_COMPACTION_REQUEST) : undefined;
+    if (markers.length !== 1 || output.parts.length !== 1 || typeof runId !== "string" || !runId.trim()
+      || part.type !== "text" || part.text !== "" || part.synthetic !== true || part.ignored !== true
+      || typeof part.id !== "string" || !part.id || !input.messageID
+      || output.message.id !== input.messageID || output.message.sessionID !== input.sessionID
+      || part.messageID !== input.messageID || part.sessionID !== input.sessionID) {
+      throw new Error("Matterhorn could not validate this compaction request.");
+    }
+    // Never fall back to ordinary chat, even with guarded tools switched off.
+    // Failed or stale authorization must occur before the runtime saves a part.
+    const claimed = await postInternal("/internal/agent-runs/claim-compaction", {
+      workspaceDirectory: context.directory ?? null, runId, sessionId: input.sessionID,
+      messageId: input.messageID, providerId: output.message.model.providerID, modelId: output.message.model.modelID,
+    });
+    if (claimed.runId !== runId || claimed.messageId !== input.messageID) {
+      throw new Error("Matterhorn could not bind this compaction request.");
+    }
+    // OpenCode keeps the original array reference after this hook. Mutate it
+    // in place so its own compaction engine consumes the exact bound parent.
+    output.parts.splice(0, output.parts.length, { id: part.id, sessionID: input.sessionID,
+      messageID: input.messageID, type: "compaction", auto: false });
+  },
   "experimental.chat.messages.transform": async (_input: Record<string, never>, output: MessagesHookOutput) => {
     if (!authoritativeMessageGatewayRequired()) return;
     if (!Array.isArray(output.messages)) {

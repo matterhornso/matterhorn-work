@@ -46,8 +46,10 @@
     "sdkVersion": "1.18.31",
     "reviewedAt": "2026-09-15",
     "requiredPluginHooks": [
+      "chat.message",
       "experimental.chat.messages.transform",
       "experimental.chat.system.transform",
+      "experimental.session.compacting",
       "tool.execute.before"
     ]
   }

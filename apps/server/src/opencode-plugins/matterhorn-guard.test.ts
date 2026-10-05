@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { MatterhornGuard } from "./matterhorn-guard.js";
+import { compactionPromptPart } from "../opencode-compaction-request.js";
 
 const original = {
   mode: process.env.MATTERHORN_GUARDED_RUNTIME_MODE,
@@ -65,6 +66,63 @@ afterAll(() => {
 });
 
 describe("matterhorn-guard OpenCode plugin", () => {
+  test.each(["enforce", "off"])("native compaction conversion requires an exact acknowledged claim in %s mode", async mode => {
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = mode;
+    const plugin = await MatterhornGuard({ directory: "/fixture" });
+    const input = { sessionID: "ses_claim", messageID: "msg_claim" };
+    type Output = Parameters<typeof plugin["chat.message"]>[1];
+    const output = (): Output => ({ message: { id: input.messageID, sessionID: input.sessionID,
+      model: { providerID: "ollama", modelID: "fixture" } },
+      parts: [{ ...compactionPromptPart("run_claim"), id: "prt_claim", messageID: input.messageID, sessionID: input.sessionID }] });
+    for (const acknowledgement of ["rejected", "wrong-run", "wrong-message", "accepted"]) {
+      globalThis.fetch = Object.assign(async (url: string | URL | Request, init?: RequestInit) => {
+        expect(String(url)).toEndWith("/internal/agent-runs/claim-compaction");
+        expect(JSON.parse(String(init?.body))).toEqual({ workspaceDirectory: "/fixture", runId: "run_claim", sessionId: "ses_claim",
+          messageId: "msg_claim", providerId: "ollama", modelId: "fixture" });
+        if (acknowledgement === "rejected") return Response.json({ message: "Request no longer active" }, { status: 409 });
+        return Response.json({ runId: acknowledgement === "wrong-run" ? "run_other" : "run_claim",
+          messageId: acknowledgement === "wrong-message" ? "msg_other" : "msg_claim" });
+      }, { preconnect: original.fetch.preconnect });
+      const value = output();
+      const parts = value.parts;
+      const conversion = plugin["chat.message"](input, value);
+      if (acknowledgement !== "accepted") {
+        await expect(conversion).rejects.toThrow();
+        expect(value).toEqual(output());
+      } else {
+        await conversion;
+        expect(value.parts).toBe(parts);
+        expect(parts).toEqual([{ id: "prt_claim", sessionID: "ses_claim", messageID: "msg_claim", type: "compaction", auto: false }]);
+      }
+    }
+    globalThis.fetch = mockFetch;
+    await expect(plugin["chat.message"]({ ...input, messageID: "msg_other" }, output())).rejects.toThrow("could not validate");
+    const mutations: Array<(value: Output) => void> = [
+      value => { value.parts.push({ ...value.parts[0] }); },
+      value => { value.parts[0].text = "Send this as ordinary text"; },
+      value => { value.parts[0].synthetic = false; },
+      value => { value.parts[0].ignored = false; },
+      value => { value.parts[0].sessionID = "ses_other"; },
+      value => { value.parts[0].messageID = "msg_other"; },
+      value => { value.parts[0].id = ""; },
+      value => { value.message.id = "msg_other"; },
+      value => { value.message.sessionID = "ses_other"; },
+    ];
+    for (const mutate of mutations) {
+      const value = output();
+      mutate(value);
+      const before = structuredClone(value);
+      await expect(plugin["chat.message"](input, value)).rejects.toThrow("could not validate");
+      expect(value).toEqual(before);
+    }
+    expect(requests).toHaveLength(0);
+    const ordinary = output();
+    ordinary.parts[0].metadata = {};
+    await plugin["chat.message"](input, ordinary);
+    expect(requests).toHaveLength(0);
+    expect(ordinary.parts[0].type).toBe("text");
+  });
+
   test.each(["enforce", "off"])("retains every usage step until settlement acknowledgement in %s mode", async (mode) => {
     process.env.MATTERHORN_GUARDED_RUNTIME_MODE = mode;
     const completions: unknown[] = [];

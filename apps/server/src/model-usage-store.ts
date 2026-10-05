@@ -386,6 +386,7 @@ export class MatterhornModelUsageStore {
     sessionId: string;
     providerId: string;
     modelId: string;
+    messageId?: string;
     now?: Date;
   }): ModelUsageReservation {
     return this.withImmediateTransaction(() => this.reserveUnlocked(input));
@@ -397,6 +398,7 @@ export class MatterhornModelUsageStore {
     sessionId: string;
     providerId: string;
     modelId: string;
+    messageId?: string;
     now?: Date;
   }): ModelUsageReservation {
     const now = input.now ?? new Date();
@@ -424,8 +426,8 @@ export class MatterhornModelUsageStore {
     statement(this.db, `
       INSERT INTO model_usage_operations (
         id, subject_id, workspace_id, session_id, provider_id, model_id,
-        weight_milli, status, reserved_tokens, charged_tokens, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+        weight_milli, status, reserved_tokens, charged_tokens, created_at, user_message_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
     `).run(
       id,
       input.subject.id,
@@ -437,6 +439,7 @@ export class MatterhornModelUsageStore {
       this.config.reservationTokens,
       chargedTokens,
       now.getTime(),
+      input.messageId ?? null,
     );
     return { allowed: true, reservationId: id, status: this.status(input.subject, now) };
   }

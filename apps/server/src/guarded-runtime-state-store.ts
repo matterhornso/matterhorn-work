@@ -30,6 +30,7 @@ export type GuardedRuntimeStateKind =
   | "session_privacy_floor"
   | "user_message_binding"
   | "assistant_message_binding"
+  | "compaction_message_claim"
   | "crypto_app_reservation"
   | "crypto_app_consumed_dispatch"
   | "crypto_pending_intent"

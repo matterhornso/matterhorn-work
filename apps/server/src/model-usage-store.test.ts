@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -34,6 +35,39 @@ async function store(config: Partial<MatterhornModelUsageConfig> = {}) {
 }
 
 describe("MatterhornModelUsageStore", () => {
+  test("persists compaction ownership in the reservation insert before another instance can reconcile", async () => {
+    const root = await mkdtemp(join(tmpdir(), "matterhorn-atomic-usage-"));
+    roots.push(root);
+    const options = { path: join(root, "usage.db"), config: resolveMatterhornModelUsageConfig({
+      MATTERHORN_MODEL_USAGE_ENFORCEMENT: "hard", MATTERHORN_MODEL_USAGE_RESERVATION_TOKENS: "20000",
+    }) };
+    const writer = new MatterhornModelUsageStore(options);
+    const reader = new MatterhornModelUsageStore(options);
+    const db = new Database(options.path);
+    try {
+      // This guard rejects a two-statement insert-then-bind implementation even
+      // if both statements usually run without an intervening event-loop yield.
+      db.exec(`CREATE TRIGGER require_compaction_binding BEFORE INSERT ON model_usage_operations
+        WHEN NEW.session_id = 'compaction' AND NEW.user_message_id IS NULL
+        BEGIN SELECT RAISE(ABORT, 'compaction must be born bound'); END`);
+      const scope = { subject: { id: "atomic" }, workspaceId: "ws", sessionId: "compaction", providerId: "fixture", modelId: "fixture" };
+      const bound = writer.reserve({ ...scope, messageId: "msg_compaction" });
+      expect(bound.allowed).toBe(true);
+      const result = (parentID: string, total: number) => ({ info: {
+        id: `assistant_${parentID}`, sessionID: scope.sessionId, parentID, role: "assistant", summary: true,
+        providerID: "fixture", modelID: "fixture", finish: "stop", tokens: { total },
+        time: { created: Date.now(), completed: Date.now() + 1 },
+      }, parts: [] });
+      const unrelated = result("msg_unrelated", 123);
+      expect(reader.reconcile({ ...scope, messages: [unrelated] })).toBe(0);
+      expect(reader.status(scope.subject)).toMatchObject({ pendingRequests: 1, monthly: { usedTokens: 0, reservedTokens: 20000 } });
+      const messages = [unrelated, result("msg_compaction", 473)];
+      expect(reader.reconcile({ ...scope, messages })).toBe(1);
+      expect(writer.reconcile({ ...scope, messages })).toBe(0);
+      expect(writer.status(scope.subject)).toMatchObject({ pendingRequests: 0, monthly: { usedTokens: 473, reservedTokens: 0 } });
+    } finally { db.close(); reader.close(); writer.close(); }
+  });
+
   for (const finish of ["unknown", "tool-calls", "stop"]) {
     for (const name of ["MessageAbortedError", "APIError"]) {
       test(`settles actual usage after terminal ${name} with stale ${finish} finish`, async () => {

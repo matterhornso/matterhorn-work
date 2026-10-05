@@ -18,8 +18,10 @@ assert.equal(upstream.openwork?.version, openworkVersion, "OpenWork compatibilit
 assert.equal(upstream.opencode?.version, `v${pinnedVersion}`, "OpenCode compatibility baseline must match constants.json");
 assert.equal(upstream.opencode?.sdkVersion, pinnedVersion, "OpenCode SDK and runtime must remain paired");
 assert.deepEqual(upstream.opencode?.requiredPluginHooks, [
+  "chat.message",
   "experimental.chat.messages.transform",
   "experimental.chat.system.transform",
+  "experimental.session.compacting",
   "tool.execute.before",
 ], "the guarded runtime must pin every OpenCode hook used as a security boundary");
 assert.equal(upstream.openwork?.integrationStrategy, "compatibility_port");

@@ -10,6 +10,7 @@ import { connect } from "node:net";
 import { pathToFileURL } from "node:url";
 
 import { startServer } from "./server.js";
+import { MATTERHORN_COMPACTION_REQUEST } from "./opencode-compaction-request.js";
 import * as workspaceUtils from "./utils.js";
 import type { ServerConfig } from "./types.js";
 import { configureVenicePrivateModelRegistry } from "./venice-provider.js";
@@ -207,7 +208,7 @@ function startMockOpencode(input?: {
   beforeMessages?: () => Promise<void>;
   onAbort?: () => void;
   beforeRead?: (pathname: string) => Promise<void>;
-  responseForRequest?: (pathname: string) => Response | undefined;
+  responseForRequest?: (pathname: string, method: string, body: unknown) => Response | undefined;
   holdEvent?: Promise<void>;
   sessionMessages?: unknown[] | (() => unknown[]);
   sessionAgent?: string;
@@ -248,7 +249,7 @@ function startMockOpencode(input?: {
         },
       });
       if (request.method === "GET") await input?.beforeRead?.(url.pathname);
-      const customResponse = input?.responseForRequest?.(url.pathname);
+      const customResponse = input?.responseForRequest?.(url.pathname, request.method, body);
       if (customResponse) return customResponse;
 
       if (url.pathname === "/provider") {
@@ -419,6 +420,20 @@ function startMockOpencode(input?: {
           ...(input?.sessionAgent ? { agent: input.sessionAgent } : {}),
           time: { created: 100, updated: 200 },
         });
+      }
+
+      if (url.pathname === "/session/ses_1/message" && request.method === "POST"
+        && body?.parts?.[0]?.metadata?.[MATTERHORN_COMPACTION_REQUEST]) {
+        await input?.holdSummary;
+        if (!body?.messageID || !body?.parts?.[0]?.metadata?.[MATTERHORN_COMPACTION_REQUEST]) {
+          return Response.json({ error: "Missing fixture compaction binding" }, { status: 400 });
+        }
+        return Response.json({ info: {
+          id: "msg_fixture_summary", sessionID: "ses_1", parentID: body.messageID,
+          providerID: body.model.providerID, modelID: body.model.modelID,
+          role: "assistant", summary: true, finish: "stop",
+          time: { created: Date.now(), completed: Date.now() },
+        }, parts: [] });
       }
 
       if (url.pathname === "/session/ses_1/message") {
@@ -2069,7 +2084,7 @@ describe("workspace session read APIs", () => {
               await gate.promise;
             }
           }, undefined, undefined, 1000);
-          const target = action === "messages" ? "prompt_async" : "summarize";
+          const target = action === "messages" ? "prompt_async" : "message";
           const path = `/workspace/${app.workspaceId}/sessions/ses_1/${action}`;
           const body = { model: { providerID: "ollama", modelID: "local-private" }, parts: [{ type: "text", text: "Synthetic authority check" }] };
           reading = true;
@@ -2148,7 +2163,7 @@ describe("workspace session read APIs", () => {
           });
           try {
             expect(await waitUntil(() => boundary === "accepted"
-              ? mock.requests.some(request => request.method === "POST" && request.pathname === `/session/ses_1/${action}`)
+              ? mock.requests.some(request => request.method === "POST" && request.pathname === `/session/ses_1/${action === "summarize" ? "message" : action}`)
               : reached)).toBe(true);
             const requestBoundary = mock.requests.length;
             if (change !== "unchanged") expect((await fetch(`${base}/tokens/${change === "revoked" ? actor.id : other.id}`, {
@@ -2157,7 +2172,7 @@ describe("workspace session read APIs", () => {
             gate.resolve();
             const response = await pending;
             const dispatches = () => mock.requests.filter(request => request.method === "POST"
-              && request.pathname === `/session/ses_1/${action}`).length;
+              && request.pathname === `/session/ses_1/${action === "summarize" ? "message" : action}`).length;
             const dispatched = boundary === "accepted" || change !== "revoked";
             if (dispatched) expect(await waitUntil(() => dispatches() === 1)).toBe(true);
             expect(dispatches()).toBe(dispatched ? 1 : 0);
@@ -2285,7 +2300,7 @@ describe("workspace session read APIs", () => {
             const response = await pending;
             expect(response.status).toBe(stopped ? 403 : 202);
             expect(mock.requests.filter(request => request.method === "POST" &&
-              (request.pathname.endsWith("/prompt_async") || request.pathname.endsWith("/summarize"))))
+              (request.pathname.endsWith("/prompt_async") || request.pathname.endsWith("/message"))))
               .toHaveLength(stopped ? 0 : 1);
             const db = new Database(join(workspaceRoot, ".model-usage.db"), { readonly: true });
             try {
@@ -2328,7 +2343,7 @@ describe("workspace session read APIs", () => {
           });
           const base = `http://127.0.0.1:${openwork.server.port}`;
           const primaryRoute = action === "messages" || action === "compact";
-          const target = action === "messages" ? "prompt_async" : action === "compact" ? "summarize" : action;
+          const target = action === "messages" ? "prompt_async" : action === "compact" || action === "summarize" ? "message" : action;
           const path = primaryRoute ? `/workspace/${identity.send}/sessions/ses_1/${action}`
             : `/w/${identity.send}/opencode/session/ses_1/${action}`;
           const body = action === "command" ? { command: "explain", arguments: "Synthetic identity check", model: "ollama/local-private" }
@@ -2382,9 +2397,9 @@ describe("workspace session read APIs", () => {
           opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false, hardModelUsageLimit: 1000,
         });
         const base = `http://127.0.0.1:${openwork.server.port}`;
-        const target = action === "command" ? "command" : action === "proxy-prompt" ? "prompt_async" : "summarize";
+        const target = action === "command" ? "command" : action === "proxy-prompt" ? "prompt_async" : "message";
         const path = action === "compact" ? "/workspace/ws_1/sessions/ses_1/compact"
-          : `/w/ws_1/opencode/session/ses_1/${target}`;
+          : `/w/ws_1/opencode/session/ses_1/${action === "proxy-summary" ? "summarize" : target}`;
         const body = action === "command" ? { command: "explain", arguments: "Synthetic cancellation check", model: "ollama/local-private" }
           : action === "proxy-summary" ? { providerID: "ollama", modelID: "local-private" }
           : { model: { providerID: "ollama", modelID: "local-private" }, parts: [{ type: "text", text: "Synthetic cancellation check" }] };
@@ -2432,7 +2447,7 @@ describe("workspace session read APIs", () => {
       const controller = new AbortController();
       const messageBody = JSON.stringify({ messageID: "msg_approval_retry", message: "Synthetic approval acceptance",
         model: operation === "messages" ? { providerID: "openai", modelID: "gpt-4.1" } : { providerID: "ollama", modelID: "local-private" } });
-      const dispatchPath = operation === "messages" ? "/prompt_async" : "/summarize";
+      const dispatchPath = operation === "messages" ? "/prompt_async" : "/message";
       const approvalAction = operation === "messages" ? "session.prompt" : "session.compact";
       const pendingResponse = fetch(`${base}/workspace/ws_1/sessions/ses_1/${operation}`, {
         method: "POST",
@@ -2453,7 +2468,7 @@ describe("workspace session read APIs", () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
       expect(approvalId).toBeDefined();
-      expect(mock.requests.filter((request) => request.pathname.endsWith(dispatchPath))).toHaveLength(0);
+      expect(mock.requests.filter((request) => request.method === "POST" && request.pathname.endsWith(dispatchPath))).toHaveLength(0);
       const clientList = await fetch(`${base}/approvals`, { headers: auth(openwork.token) });
       expect(clientList.status).toBe(401);
       const clientApproval = await fetch(`${base}/approvals/${approvalId}`, {
@@ -2496,7 +2511,7 @@ describe("workspace session read APIs", () => {
       if (result && reply !== "allow") {
         expect(await result.json()).toMatchObject({ code: "write_denied" });
       }
-      expect(mock.requests.filter((request) => request.pathname.endsWith(dispatchPath))).toHaveLength(reply === "allow" ? 1 : 0);
+      expect(mock.requests.filter((request) => request.method === "POST" && request.pathname.endsWith(dispatchPath))).toHaveLength(reply === "allow" ? 1 : 0);
       const after = await fetch(`${base}/approvals`, { headers: { "x-matterhorn-host-token": openwork.hostToken } });
       expect((await after.json()).items).toEqual([]);
       if (reply === "stop" || reply === "disconnect") {
@@ -2519,7 +2534,7 @@ describe("workspace session read APIs", () => {
         });
         expect(approved.status).toBe(200);
         expect((await retried).status).toBe(202);
-        expect(mock.requests.filter((request) => request.pathname.endsWith(dispatchPath))).toHaveLength(1);
+        expect(mock.requests.filter((request) => request.method === "POST" && request.pathname.endsWith(dispatchPath))).toHaveLength(1);
       }
     });
   }
@@ -2552,18 +2567,20 @@ describe("workspace session read APIs", () => {
       privacy: { decision: "allow", consentUsed: false },
     });
     const summarizeRequest = mock.requests.find(
-      (request) => request.method === "POST" && request.pathname === "/session/ses_1/summarize",
+      (request) => request.method === "POST" && request.pathname === "/session/ses_1/message",
     );
     expect(summarizeRequest?.directory).toBe(workspaceRoot);
     expect(summarizeRequest?.body).toMatchObject({
-      providerID: "ollama",
-      modelID: "local-private",
+      messageID: expect.stringMatching(/^msg_/),
+      model: { providerID: "ollama", modelID: "local-private" },
+      parts: [{ type: "text", text: "", synthetic: true, ignored: true,
+        metadata: { [MATTERHORN_COMPACTION_REQUEST]: expect.any(String) } }],
     });
 
     const blocked = await compact();
     expect(blocked.status).toBe(429);
     await expect(blocked.json()).resolves.toMatchObject({ code: "model_usage_limit_reached" });
-    expect(mock.requests.filter((request) => request.pathname === "/session/ses_1/summarize")).toHaveLength(1);
+    expect(mock.requests.filter((request) => request.method === "POST" && request.pathname === "/session/ses_1/message")).toHaveLength(1);
   });
 
   test("requires one-request consent for unverified-provider compaction and records a content-free receipt", async () => {
@@ -2615,7 +2632,7 @@ describe("workspace session read APIs", () => {
         challenge: { singleUse: true },
       },
     });
-    expect(mock.requests.filter((request) => request.pathname === "/session/ses_1/summarize")).toHaveLength(0);
+    expect(mock.requests.filter((request) => request.method === "POST" && request.pathname === "/session/ses_1/message")).toHaveLength(0);
 
     const confirmed = await fetch(
       `${base}/workspace/ws_1/privacy-consents/${encodeURIComponent(preflight.details.challenge.id)}/confirm`,
@@ -2638,7 +2655,7 @@ describe("workspace session read APIs", () => {
         consentUsed: true,
       },
     });
-    expect(mock.requests.filter((request) => request.pathname === "/session/ses_1/summarize")).toHaveLength(1);
+    expect(mock.requests.filter((request) => request.method === "POST" && request.pathname === "/session/ses_1/message")).toHaveLength(1);
 
     const receiptResponse = await fetch(
       `${base}/workspace/ws_1/agent-run-receipts/${encodeURIComponent(acceptedBody.runId)}`,
@@ -2662,7 +2679,7 @@ describe("workspace session read APIs", () => {
     const replayed = await compact(consent.consentToken);
     expect(replayed.status).toBe(409);
     await expect(replayed.json()).resolves.toMatchObject({ code: "agent_privacy_consent_required" });
-    expect(mock.requests.filter((request) => request.pathname === "/session/ses_1/summarize")).toHaveLength(1);
+    expect(mock.requests.filter((request) => request.method === "POST" && request.pathname === "/session/ses_1/message")).toHaveLength(1);
   });
 
   test("invalidates compaction consent when stored history changes and blocks stored secrets before usage", async () => {
@@ -2713,7 +2730,7 @@ describe("workspace session read APIs", () => {
     const staleBody = await stale.json();
     expect(staleBody).toMatchObject({ code: "agent_privacy_consent_required" });
     expect(staleBody.details.requestHash).not.toBe(preflight.details.requestHash);
-    expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/summarize")).toHaveLength(0);
+    expect(mock.requests.filter((entry) => entry.method === "POST" && entry.pathname === "/session/ses_1/message")).toHaveLength(0);
 
     messageParts[0]!.text = `private_key: 0x${"a".repeat(64)}`;
     const secret = await request({ providerID: "openai", modelID: "gpt-4.1" });
@@ -2728,12 +2745,12 @@ describe("workspace session read APIs", () => {
         },
       },
     });
-    expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/summarize")).toHaveLength(0);
+    expect(mock.requests.filter((entry) => entry.method === "POST" && entry.pathname === "/session/ses_1/message")).toHaveLength(0);
 
     messageParts[0]!.text = "Safe local note";
     const local = await request({ providerID: "ollama", modelID: "local-private" });
     expect(local.status).toBe(202);
-    expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/summarize")).toHaveLength(1);
+    expect(mock.requests.filter((entry) => entry.method === "POST" && entry.pathname === "/session/ses_1/message")).toHaveLength(1);
   });
 
   test("fails compaction closed when the transcript changes between authorization and provider dispatch", async () => {
@@ -2766,7 +2783,7 @@ describe("workspace session read APIs", () => {
     });
     expect(raced.status).toBe(409);
     await expect(raced.json()).resolves.toMatchObject({ code: "agent_privacy_request_changed" });
-    expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/summarize")).toHaveLength(0);
+    expect(mock.requests.filter((entry) => entry.method === "POST" && entry.pathname === "/session/ses_1/message")).toHaveLength(0);
 
     const stable = await fetch(`${base}/workspace/ws_1/sessions/ses_1/compact`, {
       method: "POST",
@@ -2774,9 +2791,9 @@ describe("workspace session read APIs", () => {
       body: JSON.stringify({ model: { providerID: "ollama", modelID: "local-private" } }),
     });
     expect(stable.status).toBe(202);
-    expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/summarize")).toHaveLength(1);
+    expect(mock.requests.filter((entry) => entry.method === "POST" && entry.pathname === "/session/ses_1/message")).toHaveLength(1);
     expect(mock.requests.findIndex((entry) => entry.pathname === "/session/ses_1/abort"))
-      .toBeLessThan(mock.requests.findIndex((entry) => entry.pathname === "/session/ses_1/summarize"));
+      .toBeLessThan(mock.requests.findIndex((entry) => entry.method === "POST" && entry.pathname === "/session/ses_1/message"));
   });
 
   test("binds compaction consent to the hidden agent prompt and rejects one-byte changes", async () => {
@@ -2840,7 +2857,7 @@ describe("workspace session read APIs", () => {
     const mutatedBody = await mutated.json();
     expect(mutatedBody).toMatchObject({ code: "agent_privacy_consent_required" });
     expect(mutatedBody.details.requestHash).not.toBe(preflight.details.requestHash);
-    expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/summarize")).toHaveLength(0);
+    expect(mock.requests.filter((entry) => entry.method === "POST" && entry.pathname === "/session/ses_1/message")).toHaveLength(0);
 
     compactionPrompt = "Custom compaction policy A";
     const accepted = await compact(consent.consentToken);
@@ -2852,7 +2869,7 @@ describe("workspace session read APIs", () => {
         consentUsed: true,
       },
     });
-    expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/summarize")).toHaveLength(1);
+    expect(mock.requests.filter((entry) => entry.method === "POST" && entry.pathname === "/session/ses_1/message")).toHaveLength(1);
   });
 
   test("blocks secrets in the hidden compaction agent on stable and trusted summarize paths", async () => {
@@ -2883,7 +2900,7 @@ describe("workspace session read APIs", () => {
     });
     expect(trusted.status).toBe(422);
     expect(JSON.stringify(await trusted.json())).not.toContain(secret);
-    expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/summarize")).toHaveLength(0);
+    expect(mock.requests.filter((entry) => entry.method === "POST" && entry.pathname === "/session/ses_1/message")).toHaveLength(0);
     expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/abort")).toHaveLength(0);
 
     const usage = await fetch(`${base}/workspace/ws_1/model-usage/status`, { headers: auth(openwork.token) });
@@ -2923,7 +2940,7 @@ describe("workspace session read APIs", () => {
       code: "agent_context_changed",
       message: "The selected agent changed after privacy review. Review the request again before sending.",
     });
-    expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/summarize")).toHaveLength(0);
+    expect(mock.requests.filter((entry) => entry.method === "POST" && entry.pathname === "/session/ses_1/message")).toHaveLength(0);
     expect(mock.requests.filter((entry) => entry.pathname === "/session/ses_1/abort")).toHaveLength(0);
     const usage = await fetch(`${base}/workspace/ws_1/model-usage/status`, { headers: auth(openwork.token) });
     await expect(usage.json()).resolves.toMatchObject({
@@ -3042,7 +3059,7 @@ describe("workspace session read APIs", () => {
     });
     expect(accepted.status).toBe(200);
     expect(mock.requests.findIndex((entry) => entry.pathname === "/session/ses_1/abort"))
-      .toBeLessThan(mock.requests.findIndex((entry) => entry.pathname === "/session/ses_1/summarize"));
+      .toBeLessThan(mock.requests.findIndex((entry) => entry.method === "POST" && entry.pathname === "/session/ses_1/message"));
 
     const blockedRoot = await createWorkspaceRoot();
     const blockedMock = startMockOpencode({ abortStatus: 503 });
@@ -3064,7 +3081,7 @@ describe("workspace session read APIs", () => {
       code: "agent_run_abort_failed",
       message: "Matterhorn could not stop the previous response. Nothing new was sent.",
     });
-    expect(blockedMock.requests.filter((entry) => entry.pathname === "/session/ses_1/summarize"))
+    expect(blockedMock.requests.filter((entry) => entry.method === "POST" && entry.pathname === "/session/ses_1/message"))
       .toHaveLength(0);
   });
 
@@ -3138,7 +3155,7 @@ describe("workspace session read APIs", () => {
         (request) => request.pathname === "/session/ses_1/prompt_async",
       ),
     ).toHaveLength(1);
-    expect(mock.requests.filter((request) => request.pathname === "/session/ses_1/summarize")).toHaveLength(0);
+    expect(mock.requests.filter((request) => request.method === "POST" && request.pathname === "/session/ses_1/message")).toHaveLength(0);
   });
 
   test("blocks secrets embedded in trusted-runtime system context before provider dispatch or usage", async () => {
@@ -4782,13 +4799,130 @@ describe("workspace session read APIs", () => {
   });
 
   for (const runtimeMode of ["off", "enforce"]) {
+    for (const action of ["summarize", "compact"]) {
+      for (const fault of ["none", "parent", "session", "provider", "model", "ordinary-answer", "error", "unfinished", "missing-id", "missing-time", "boolean", "empty", "malformed"]) {
+        test(`compaction acknowledgement verifies identity (${runtimeMode}, ${action}, ${fault})`, async () => {
+          process.env.MATTERHORN_GUARDED_RUNTIME_MODE = runtimeMode;
+          process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "isolated-compaction-response-fixture";
+          const workspaceRoot = await createWorkspaceRoot();
+          const mock = startMockOpencode({ sessionStatus: "idle", responseForRequest: (pathname, method, body) => {
+            if (pathname !== "/session/ses_1/message" || method !== "POST") return undefined;
+            if (!body || typeof body !== "object" || !("messageID" in body)) throw new Error("Missing fixture message");
+            if (fault === "boolean") return Response.json(true);
+            if (fault === "empty") return new Response(null, { status: 204 });
+            if (fault === "malformed") return new Response("{", { headers: { "content-type": "application/json" } });
+            return Response.json({ info: {
+              id: fault === "missing-id" ? "" : "msg_summary_ack",
+              sessionID: fault === "session" ? "ses_other" : "ses_1",
+              parentID: fault === "parent" ? "msg_other" : body.messageID,
+              providerID: fault === "provider" ? "other" : "ollama",
+              modelID: fault === "model" ? "other" : "local-private",
+              role: "assistant", summary: fault !== "ordinary-answer", finish: fault === "unfinished" ? "length" : "stop",
+              ...(fault === "error" ? { error: { name: "APIError", data: { message: "Synthetic failure" } } } : {}),
+              time: { created: Date.now(), ...(fault !== "missing-time" ? { completed: Date.now() } : {}) },
+            }, parts: [] });
+          } });
+          const openwork = await startOpenworkServer({ workspaceRoot, readOnly: false, hardModelUsageLimit: 1000,
+            opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}` });
+          const base = `http://127.0.0.1:${openwork.server.port}`;
+          const path = action === "compact" ? "/workspace/ws_1/sessions/ses_1/compact" : "/w/ws_1/opencode/session/ses_1/summarize";
+          const response = await fetch(`${base}${path}`, { method: "POST", headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+            body: JSON.stringify({ providerID: "ollama", modelID: "local-private" }) });
+          expect(response.status).toBe(fault === "none" ? action === "compact" ? 202 : 200 : 502);
+          if (fault === "none" && action === "summarize") expect(await response.json()).toBe(true);
+          const statusResponse = await fetch(`${base}/workspace/ws_1/model-usage/status`, { headers: auth(openwork.token) });
+          expect(statusResponse.status).toBe(200);
+          expect((await statusResponse.json()).status).toMatchObject({ pendingRequests: 1,
+            monthly: { usedTokens: 0, reservedTokens: 1000 } });
+          if (runtimeMode === "enforce") {
+            const receipts = await fetch(`${base}/workspace/ws_1/agent-run-receipts?sessionId=ses_1`, { headers: auth(openwork.token) });
+            expect(receipts.status).toBe(200);
+            const items = (await receipts.json()).items;
+            expect(items).toHaveLength(1);
+            expect(items[0].status).toBe(fault === "none" ? "success" : "pending");
+          }
+          expect(mock.requests.filter(request => request.method === "POST" && request.pathname === "/session/ses_1/message")).toHaveLength(1);
+          expect(mock.requests.some(request => request.pathname.endsWith("/summarize"))).toBe(false);
+        });
+      }
+    }
+  }
+
+  for (const runtimeMode of ["off", "enforce"]) {
+    for (const action of ["summarize", "compact"]) {
+      for (const otherResult of ["previous answer", "previous summary", "overlapping answer", "overlapping summary"]) {
+        test(`compaction accounting ignores unrelated results (${runtimeMode}, ${action}, ${otherResult})`, async () => {
+          process.env.MATTERHORN_GUARDED_RUNTIME_MODE = runtimeMode;
+          process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "isolated-compaction-correlation-fixture";
+          const workspaceRoot = await createWorkspaceRoot();
+          const previousAnswerAt = Date.now();
+          const oldAnswer = {
+            info: { id: "msg_previous_answer", parentID: "msg_previous_user", sessionID: "ses_1", role: "assistant",
+              providerID: "ollama", modelID: "local-private", finish: "stop", summary: otherResult.endsWith("summary"),
+              time: { created: previousAnswerAt, completed: previousAnswerAt + 1 }, tokens: { total: 123 } }, parts: [],
+          };
+          let completed = false;
+          let dispatched = false;
+          let compactionParent = "";
+          const mock = startMockOpencode({ sessionStatus: "idle",
+            responseForRequest: (pathname, method, body) => {
+              if (pathname === "/session/ses_1/message" && method === "POST") {
+                if (!body || typeof body !== "object" || !("messageID" in body) || typeof body.messageID !== "string") {
+                  throw new Error("Missing compaction message binding");
+                }
+                compactionParent = body.messageID;
+                dispatched = true;
+                if (otherResult.startsWith("overlapping")) {
+                  const now = Date.now();
+                  oldAnswer.info.time = { created: now, completed: now + 1 };
+                }
+              }
+              return undefined;
+            },
+            sessionMessages: () => [
+              ...(otherResult.startsWith("previous") || dispatched ? [oldAnswer] : []),
+              ...(completed ? [{ info: { ...oldAnswer.info, id: "msg_compaction_answer", parentID: compactionParent, summary: true,
+                time: { created: Date.now(), completed: Date.now() + 1 }, tokens: { total: 473 } }, parts: [] }] : []),
+            ] });
+          const openwork = await startOpenworkServer({ workspaceRoot, readOnly: false, hardModelUsageLimit: 1000,
+            opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}` });
+          const base = `http://127.0.0.1:${openwork.server.port}`;
+          const path = action === "compact" ? "/workspace/ws_1/sessions/ses_1/compact" : "/w/ws_1/opencode/session/ses_1/summarize";
+          // Keep the previous-result fixture inside the existing five-second
+          // matching window, and fail explicitly if unusually slow setup invalidates it.
+          expect(Date.now() - previousAnswerAt).toBeLessThan(5000);
+          const response = await fetch(`${base}${path}`, { method: "POST", headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+            body: JSON.stringify({ providerID: "ollama", modelID: "local-private" }) });
+          expect(response.status).toBe(action === "compact" ? 202 : 200);
+          const status = async () => {
+            const result = await fetch(`${base}/workspace/ws_1/model-usage/status`, { headers: auth(openwork.token) });
+            expect(result.status).toBe(200);
+            return (await result.json()).status;
+          };
+          const whileWaiting = await status();
+          completed = true;
+          const afterCompletion = await status();
+          const afterRepeat = await status();
+          expect(mock.requests.filter(request => request.method === "POST" && request.pathname === "/session/ses_1/message")).toHaveLength(1);
+          expect(mock.requests.filter(request => request.pathname.endsWith("/summarize"))).toHaveLength(0);
+          expect({ whileWaiting, afterCompletion, afterRepeat }).toMatchObject({
+            whileWaiting: { pendingRequests: 1, monthly: { usedTokens: 0, reservedTokens: 1000 } },
+            afterCompletion: { pendingRequests: 0, monthly: { usedTokens: 473, reservedTokens: 0 } },
+            afterRepeat: { pendingRequests: 0, monthly: { usedTokens: 473, reservedTokens: 0 } },
+          });
+        });
+      }
+    }
+  }
+
+  for (const runtimeMode of ["off", "enforce"]) {
     for (const action of ["prompt_async", "command", "summarize", "compact"]) {
       for (const acknowledgement of ["lost", "accepted", "uncertain", "rejected"]) {
         test(`alternate dispatch accounting ${runtimeMode} ${action} ${acknowledgement} retains usage until history reconciles`, async () => {
           process.env.MATTERHORN_GUARDED_RUNTIME_MODE = runtimeMode;
           process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "isolated-dispatch-accounting-runtime-fixture";
           const workspaceRoot = await createWorkspaceRoot();
-          const targetPath = `/session/ses_1/${action === "compact" ? "summarize" : action}`;
+          const targetPath = `/session/ses_1/${action === "compact" || action === "summarize" ? "message" : action}`;
           let acceptedAt = 0;
           let parentId = "";
           let historyPhase = 0;
@@ -4800,7 +4934,7 @@ describe("workspace session read APIs", () => {
           });
           const hasMessageId = action === "command" || action === "prompt_async";
           const mock = startMockOpencode({ sessionStatus: "idle",
-            responseForRequest: pathname => pathname === targetPath && acknowledgement === "rejected"
+            responseForRequest: (pathname, method) => method === "POST" && pathname === targetPath && acknowledgement === "rejected"
               ? Response.json({ code: "rejected" }, { status: 400 }) : undefined,
             sessionMessages: () => acceptedAt && historyPhase > 0 ? [
               ...(hasMessageId ? [answer("msg_other_answer", "msg_other_parent", 123),
@@ -4823,7 +4957,7 @@ describe("workspace session read APIs", () => {
                 const responseBytes = await target.arrayBuffer();
                 if (request.method === "POST" && request.url?.split("?")[0] === targetPath) {
                   const payload = JSON.parse(bytes.toString("utf8"));
-                  parentId = action === "compact" || action === "summarize" ? "msg_runtime_compaction" : payload.messageID;
+                  parentId = payload.messageID;
                   if (typeof parentId !== "string" || !parentId) throw new Error("Missing fixture message ID");
                   if (acknowledgement !== "rejected") acceptedAt = Date.now();
                   if (acknowledgement === "lost") {

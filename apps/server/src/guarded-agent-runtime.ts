@@ -1472,6 +1472,46 @@ export class MatterhornGuardedAgentRuntime {
     }
   }
 
+  claimRuntimeCompactionMessage(input: {
+    runtimeSecret: string;
+    runId: string;
+    workspaceId: string;
+    sessionId: string;
+    messageId: string;
+    providerId: string;
+    modelId: string;
+  }): { runId: string; messageId: string } {
+    this.assertRuntimeSecret(input.runtimeSecret);
+    return this.stateStore.transaction(() => {
+      const nowMs = Date.now();
+      const binding = assertGuardedMessageBindingState(
+        this.authorizedState("user_message_binding", "guarded_message_binding_state_invalid")
+          .getRecord<unknown>(input.messageId, nowMs),
+        "user_message_binding", input.messageId, nowMs,
+      );
+      const active = this.activeRunState(input.sessionId, nowMs);
+      const scope = this.runScopeState(input.runId, nowMs);
+      const context = this.providerSystemByRunId.get(input.runId);
+      if (this.stateStore.isWorkspaceDeleted(input.workspaceId)
+        || !binding || binding.runId !== input.runId || binding.workspaceId !== input.workspaceId
+        || binding.sessionId !== input.sessionId || active?.runId !== input.runId
+        || scope?.workspaceId !== input.workspaceId || scope.sessionId !== input.sessionId
+        || !context || context.purpose !== "compaction" || context.expiresAtMs <= nowMs
+        || context.workspaceId !== input.workspaceId || context.sessionId !== input.sessionId
+        || context.providerId !== input.providerId || context.modelId !== input.modelId) {
+        throw new GuardedRuntimeError(409, "agent_compaction_message_not_bound", "Compaction is not bound to this accepted request. Retry from the chat.");
+      }
+      const claimed = this.authorizedState("compaction_message_claim", "guarded_message_binding_state_invalid").putIfAbsent({
+        key: input.messageId, workspaceId: input.workspaceId, sessionId: input.sessionId,
+        value: binding, expiresAtMs: context.expiresAtMs, nowMs,
+      });
+      if (!claimed) {
+        throw new GuardedRuntimeError(409, "agent_compaction_message_already_claimed", "This compaction request has already been submitted. Check its status before retrying.");
+      }
+      return { runId: input.runId, messageId: input.messageId };
+    });
+  }
+
   resolveRuntimeProviderSystem(input: {
     runtimeSecret: string;
     workspaceId: string;
@@ -2184,7 +2224,7 @@ export class MatterhornGuardedAgentRuntime {
     for (const callId of capabilities.callIds) this.stagedCapabilities.delete(callId);
     this.stateStore.purgeWorkspace(
       workspaceId,
-      ["active_agent_run", "agent_run_scope", "session_privacy_floor", "staged_capability", "rollout_bypass", "user_message_binding", "assistant_message_binding", "crypto_app_reservation", "crypto_app_consumed_dispatch", "crypto_pending_intent", "crypto_evidence_publication_claim", "crypto_evidence_operation_claim", "crypto_evidence_finalization", "crypto_evidence_renewal_intent", "crypto_evidence_deletion_intent", "crypto_evidence_sui_anchor_intent"],
+      ["active_agent_run", "agent_run_scope", "session_privacy_floor", "staged_capability", "rollout_bypass", "user_message_binding", "assistant_message_binding", "compaction_message_claim", "crypto_app_reservation", "crypto_app_consumed_dispatch", "crypto_pending_intent", "crypto_evidence_publication_claim", "crypto_evidence_operation_claim", "crypto_evidence_finalization", "crypto_evidence_renewal_intent", "crypto_evidence_deletion_intent", "crypto_evidence_sui_anchor_intent"],
       { includeConsumedCapabilities: false },
     );
     return {
@@ -2494,6 +2534,7 @@ export class MatterhornGuardedAgentRuntime {
       ["rollout_bypass", "guarded_rollout_bypass_state_invalid"],
       ["user_message_binding", "guarded_message_binding_state_invalid"],
       ["assistant_message_binding", "guarded_message_binding_state_invalid"],
+      ["compaction_message_claim", "guarded_message_binding_state_invalid"],
     ] as const) {
       const state = this.authorizedState(kind, invalidCode);
       for (const record of state.listRecords<{ runId: string }>({ workspaceId })) {

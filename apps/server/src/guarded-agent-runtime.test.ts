@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, setSystemTime, test } from "bun:
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MatterhornGuardedAgentRuntime } from "./guarded-agent-runtime.js";
+import { MatterhornGuardedAgentRuntime, type GuardedPromptInput } from "./guarded-agent-runtime.js";
 import type { MatterhornCoworkerRunBinding } from "./agent-capability.js";
 import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
 import { sha256 } from "./guarded-runtime-crypto.js";
@@ -104,6 +104,68 @@ function replaceAuthorizedRecord(
 }
 
 describe("guarded agent runtime transport", () => {
+  for (const mode of ["off", "enforce"]) {
+    test(`compaction claims require exact authority and cannot be replayed (${mode})`, async () => {
+      const oldMode = process.env.MATTERHORN_GUARDED_RUNTIME_MODE;
+      process.env.MATTERHORN_GUARDED_RUNTIME_MODE = mode;
+      const state = new MatterhornGuardedRuntimeStateStore(join(dataDir, `compaction-claim-${mode}.db`));
+      const runtime = new MatterhornGuardedAgentRuntime(state);
+      try {
+        const system = "Summarize synthetic history only.";
+        const request = (purpose: "message" | "compaction"): GuardedPromptInput => ({ workspaceId: "ws_compact", sessionId: "ses_compact",
+          parts: [
+            { type: "system_context", text: system, source: "system", label: "public", contentHash: sha256(system) },
+            { type: "provider_system_manifest", source: "system", label: "public", contentHash: sha256(system),
+              version: `matterhorn.provider-system.${purpose}.v1` },
+          ], providerId: "ollama", modelId: "fixture", executionMode: "work" });
+        const input = request("compaction");
+        const accepted = await runtime.startAuthorizedPrompt(input, runtime.authorizePrompt(input), {
+          purpose: "compaction", sections: [system],
+        });
+        const claim = { runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!, runId: accepted.runId,
+          workspaceId: input.workspaceId, sessionId: input.sessionId, messageId: "msg_exact_compaction", providerId: input.providerId, modelId: input.modelId };
+        expect(() => runtime.claimRuntimeCompactionMessage(claim)).toThrow("not bound");
+        runtime.bindUserMessage({ runId: accepted.runId, sessionId: input.sessionId, messageId: claim.messageId });
+        for (const mutation of [
+          { runtimeSecret: "wrong-secret" }, { runId: "wrong-run" }, { workspaceId: "ws_other" },
+          { sessionId: "ses_other" }, { messageId: "msg_other" }, { providerId: "wrong-provider" }, { modelId: "wrong-model" },
+        ]) expect(() => runtime.claimRuntimeCompactionMessage({ ...claim, ...mutation })).toThrow();
+        expect(runtime.claimRuntimeCompactionMessage(claim)).toEqual({ runId: accepted.runId, messageId: claim.messageId });
+        expect(() => runtime.claimRuntimeCompactionMessage(claim)).toThrow("already been submitted");
+        expect(state.list("compaction_message_claim", { workspaceId: input.workspaceId })).toHaveLength(1);
+        await runtime.failRun(accepted.runId);
+        expect(() => runtime.claimRuntimeCompactionMessage(claim)).toThrow("not bound");
+        expect(state.list("compaction_message_claim", { workspaceId: input.workspaceId })).toHaveLength(0);
+
+        const ordinaryInput = request("message");
+        const ordinary = await runtime.startAuthorizedPrompt(ordinaryInput, runtime.authorizePrompt(ordinaryInput), {
+          purpose: "message", sections: [system],
+        });
+        runtime.bindUserMessage({ runId: ordinary.runId, sessionId: input.sessionId, messageId: "msg_ordinary" });
+        expect(() => runtime.claimRuntimeCompactionMessage({ ...claim, runId: ordinary.runId, messageId: "msg_ordinary" })).toThrow("not bound");
+        const replacement = await runtime.startAuthorizedPrompt(input, runtime.authorizePrompt(input), { purpose: "compaction", sections: [system] });
+        runtime.bindUserMessage({ runId: replacement.runId, sessionId: input.sessionId, messageId: "msg_replacement" });
+        expect(() => runtime.claimRuntimeCompactionMessage(claim)).toThrow("not bound");
+        const replacementClaim = { ...claim, runId: replacement.runId, messageId: "msg_replacement" };
+        const restored = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(join(dataDir, `compaction-claim-${mode}.db`)));
+        try {
+          // Provider consent context is intentionally not restored from disk.
+          // An instance without it must not claim another instance's request.
+          expect(() => restored.claimRuntimeCompactionMessage(replacementClaim)).toThrow("not bound");
+        } finally { restored.close(); }
+        runtime.beginWorkspaceDeletion(input.workspaceId);
+        expect(() => runtime.claimRuntimeCompactionMessage(replacementClaim)).toThrow("not bound");
+        expect(state.list("compaction_message_claim", { workspaceId: input.workspaceId })).toHaveLength(0);
+        runtime.purgeWorkspace(input.workspaceId);
+        expect(state.list("user_message_binding", { workspaceId: input.workspaceId })).toHaveLength(0);
+      } finally {
+        runtime.close();
+        if (oldMode === undefined) delete process.env.MATTERHORN_GUARDED_RUNTIME_MODE;
+        else process.env.MATTERHORN_GUARDED_RUNTIME_MODE = oldMode;
+      }
+    });
+  }
+
   test("persists a monotonic session privacy floor and purges it with the chat", async () => {
     const path = join(dataDir, "session-privacy-floor.db");
     const first = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));

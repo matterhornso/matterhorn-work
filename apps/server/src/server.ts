@@ -1,4 +1,5 @@
 import { getPortfolio } from "./tools/portfolio-tracker.js";
+import { compactionPromptPart } from "./opencode-compaction-request.js";
 import { CHAT_ATTACHMENT_MAX_BYTES } from "@matterhorn-work/types/chat-attachments";
 import { resolveConfinedWorkspacePath } from "./workspace-path-boundary.js";
 import { hostBackupFresh } from "./host-backup-readiness.js";
@@ -2898,6 +2899,7 @@ async function reserveModelUsage(input: {
   sessionId: string;
   providerId: string;
   modelId: string;
+  messageId?: string;
 }) {
   const subject = modelUsageSubject(input.access);
   await reconcileModelUsageSession({
@@ -2913,6 +2915,7 @@ async function reserveModelUsage(input: {
     sessionId: input.sessionId,
     providerId: input.providerId,
     modelId: input.modelId,
+    messageId: input.messageId,
   });
   if (!reservation.allowed) {
     const resetAt = reservation.status.blockReason === "monthly_limit" ||
@@ -2968,7 +2971,7 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
   }
 
   const proxyPath = input.proxyPath ?? input.url.pathname;
-  const targetUrl = buildOpencodeProxyUrl(baseUrl, proxyPath, input.url.search);
+  let targetUrl = buildOpencodeProxyUrl(baseUrl, proxyPath, input.url.search);
   // Browser/account and edge credentials belong to Matterhorn, not the runtime.
   // Copy protocol metadata only; runtime auth and directory are set below from
   // the authorized workspace, never inherited from the inbound request.
@@ -3048,6 +3051,7 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
     input: GuardedPromptInput;
     authorization: GuardedPromptAuthorization;
     sessionId: string;
+    messageId: string;
     agentId: string;
     agentPromptHash: string;
     privacyParts: MatterhornAgentPrivacyPart[];
@@ -3439,6 +3443,7 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
         input: guardedInput,
         authorization: input.guardedRuntime.authorizePrompt(guardedInput),
         sessionId,
+        messageId: `msg_${randomUUID().replaceAll("-", "")}`,
         agentId: compactionAgentContext.agentId,
         agentPromptHash: compactionAgentContext.promptHash,
         privacyParts: guardedCompactionPrivacyParts,
@@ -3456,6 +3461,7 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
         sessionId,
         providerId: modelResolution.model.providerID,
         modelId: modelResolution.model.modelID,
+        messageId: guardedSummaryStart.messageId,
       });
       usageReservationId = usage.reservation.reservationId;
       usageSubject = usage.subject;
@@ -3540,6 +3546,20 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
         guardedSummaryStart.providerSystem,
       );
       guardedRunId = acceptance.runId;
+      input.guardedRuntime.bindUserMessage({
+        runId: guardedRunId,
+        sessionId: guardedSummaryStart.sessionId,
+        messageId: guardedSummaryStart.messageId,
+      });
+      const lastUser = [...currentMessages].reverse().find(message => message.info.role === "user");
+      body = JSON.stringify({
+        messageID: guardedSummaryStart.messageId,
+        model: { providerID: guardedSummaryStart.input.providerId, modelID: guardedSummaryStart.input.modelId },
+        ...(typeof lastUser?.info.agent === "string" ? { agent: lastUser.info.agent } : {}),
+        parts: [compactionPromptPart(guardedRunId)],
+      });
+      targetUrl = buildOpencodeProxyUrl(baseUrl,
+        `/session/${encodeURIComponent(guardedSummaryStart.sessionId)}/message`, input.url.search);
       completeGuardedRunAfterResponse = true;
     } catch (error) {
       input.modelUsageStore?.cancel(usageReservationId);
@@ -3664,8 +3684,19 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
   }
 
   if (response.ok && completeGuardedRunAfterResponse && guardedRunId) {
-    await input.guardedRuntime.completeTrustedGatewayRun(guardedRunId, "success");
+    const result: unknown = await response.json().catch(() => null);
     reconcileUsage();
+    if (!guardedSummaryStart) throw new Error("Missing compaction binding");
+    assertCompactionResponse(result, {
+      sessionId: guardedSummaryStart.sessionId,
+      messageId: guardedSummaryStart.messageId,
+      providerId: guardedSummaryStart.input.providerId,
+      modelId: guardedSummaryStart.input.modelId,
+    });
+    await input.guardedRuntime.completeTrustedGatewayRun(guardedRunId, "success");
+    // Keep the trusted summarize API's boolean response, not the internal
+    // native prompt response used to establish exact accounting ownership.
+    response = jsonResponse(true);
   }
 
   // The runtime may respond long after authentication. Do not expose its
@@ -3681,6 +3712,20 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
     requestAccessChecks.get(input.request));
   if (guardedRunId) sanitized.headers.set("X-Matterhorn-Agent-Run-Id", guardedRunId);
   return sanitized;
+}
+
+function assertCompactionResponse(value: unknown, expected: {
+  sessionId: string; messageId: string; providerId: string; modelId: string;
+}): void {
+  const info = recordLike(recordLike(value)?.info);
+  const time = recordLike(info?.time);
+  if (!info || info.sessionID !== expected.sessionId || info.parentID !== expected.messageId
+    || info.providerID !== expected.providerId || info.modelID !== expected.modelId
+    || info.role !== "assistant" || info.summary !== true || info.finish !== "stop" || info.error != null
+    || typeof info.id !== "string" || !info.id || typeof time?.completed !== "number" || !Number.isFinite(time.completed)) {
+    throw new ApiError(502, "compaction_result_unverified",
+      "The runtime did not confirm this chat summary. Check chat history before retrying; usage remains pending until verified.");
+  }
 }
 
 /**
@@ -11397,6 +11442,27 @@ function createRoutes(
     }
   });
 
+  addRoute(routes, "POST", "/internal/agent-runs/claim-compaction", "none", async (ctx) => {
+    const runtimeSecret = ctx.request.headers.get("x-matterhorn-agent-runtime-secret") ?? "";
+    try {
+      guardedRuntime.authenticateRuntime(runtimeSecret);
+      const body = await readJsonBody(ctx.request, 32_000, "Compaction message binding");
+      const workspace = resolveGuardedRuntimeWorkspace(body.workspaceDirectory);
+      if (typeof body.runId !== "string" || typeof body.sessionId !== "string" || typeof body.messageId !== "string"
+        || typeof body.providerId !== "string" || typeof body.modelId !== "string") {
+        throw new ApiError(400, "invalid_payload", "A complete compaction message binding is required");
+      }
+      const bound = guardedRuntime.claimRuntimeCompactionMessage({ runtimeSecret, workspaceId: workspace.id,
+        runId: body.runId, sessionId: body.sessionId, messageId: body.messageId, providerId: body.providerId, modelId: body.modelId });
+      const response = jsonResponse(bound);
+      response.headers.set("Cache-Control", "no-store");
+      return response;
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw guardedRuntimeApiError(error);
+    }
+  });
+
   addRoute(routes, "POST", "/internal/agent-runs/bind-message", "none", async (ctx) => {
     const body = await readJsonBody(ctx.request, 32_000, "Agent run message binding");
     const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
@@ -15845,6 +15911,7 @@ function createRoutes(
     }, { sessionId, subjectId: modelUsageSubject(clientAccessFromRequestContext(ctx, workspace)).id });
     sessionPreparations.assertActive(ctx.request);
 
+    const userMessageId = `msg_${randomUUID().replaceAll("-", "")}`;
     const usage = await reserveModelUsage({
       config,
       workspace,
@@ -15853,18 +15920,11 @@ function createRoutes(
       sessionId,
       providerId: modelResolution.model.providerID,
       modelId: modelResolution.model.modelID,
+      messageId: userMessageId,
     });
 
     const directory = resolveOpencodeDirectory(workspace) ?? undefined;
     const opencode = createWorkspaceOpencodeClient(config, workspace);
-    const sessionApi = opencode.session as typeof opencode.session & {
-      summarize: (parameters: {
-        sessionID: string;
-        directory?: string;
-        providerID: string;
-        modelID: string;
-      }) => Promise<OpencodeClientResult<unknown, unknown>>;
-    };
     let guardedAcceptance: GuardedPromptAcceptance | null = null;
     let dispatchStarted = false;
     try {
@@ -15893,17 +15953,23 @@ function createRoutes(
         guardedAuthorization,
         providerSystem,
       );
+      guardedRuntime.bindUserMessage({ runId: guardedAcceptance.runId, sessionId, messageId: userMessageId });
       sessionPreparations.assertActive(ctx.request);
       dispatchStarted = true;
-      unwrapOpencodeResult(
-        await sessionApi.summarize({
+      const lastUser = [...currentMessages].reverse().find(message => message.info.role === "user");
+      const result = unwrapOpencodeResult(
+        await opencode.session.prompt({
           sessionID: sessionId,
           ...(directory ? { directory } : {}),
-          providerID: modelResolution.model.providerID,
-          modelID: modelResolution.model.modelID,
+          messageID: userMessageId,
+          model: modelResolution.model,
+          ...(typeof lastUser?.info.agent === "string" ? { agent: lastUser.info.agent } : {}),
+          parts: [compactionPromptPart(guardedAcceptance.runId)],
         }),
-        `/session/${encodeURIComponent(sessionId)}/summarize`,
+        `/session/${encodeURIComponent(sessionId)}/message`,
       );
+      assertCompactionResponse(result, { sessionId, messageId: userMessageId,
+        providerId: modelResolution.model.providerID, modelId: modelResolution.model.modelID });
     } catch (error) {
       const rejectedStatus = error instanceof ApiError && isRecord(error.details) ? error.details.status : undefined;
       if (!dispatchStarted || (typeof rejectedStatus === "number" && rejectedStatus >= 400 && rejectedStatus < 500)) {
@@ -15912,6 +15978,10 @@ function createRoutes(
       } else {
         // The runtime may have accepted compaction before losing its reply.
         scheduleModelUsageReconciliation({ config, workspace, store: modelUsageStore, subject: usage.subject, sessionId });
+      }
+      if (dispatchStarted && error instanceof SyntaxError) {
+        throw new ApiError(502, "compaction_result_unverified",
+          "The runtime returned an unreadable chat summary. Check chat history before retrying; usage remains pending until verified.");
       }
       if (error instanceof GuardedRuntimeError) {
         throw guardedRuntimeApiError(error);

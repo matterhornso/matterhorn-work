@@ -698,4 +698,95 @@ Evidence uses `/tmp/matterhorn-alternate-dispatch-accounting-`: `red-2026-10-05.
 
 Final broader-suite and safety evidence is in `/tmp/matterhorn-alternate-dispatch-accounting-backend-2026-10-05.log` and `/tmp/matterhorn-alternate-dispatch-accounting-safety-2026-10-05.log`.
 
-The compaction API in the pinned OpenCode SDK 1.18.31 does not accept a caller-supplied message ID. These summary cases exercise one accepted compaction per session; they do not prove exact correlation between concurrent summaries or exclude another matching answer under the existing unbound-history fallback. Review that matching next, together with repeated raw-client submissions, persistent unknown-outcome recovery and cross-client mutation/Stop ordering. No schema migration, real provider call, hosted acceptance, frontend redesign, preview/chat reset, production setting, push, merge or deployment occurred. All broader launch gates remain open where earlier evidence marks them unverified.
+The compaction API in the pinned OpenCode SDK 1.18.31 does not accept a caller-supplied message ID. These summary cases exercise one accepted compaction per session; they do not prove exact correlation between concurrent summaries or exclude another matching answer under the existing unbound-history fallback. The follow-up below now reproduces that problem. No schema migration, real provider call, hosted acceptance, frontend redesign, preview/chat reset, production setting, push, merge or deployment occurred. All broader launch gates remain open where earlier evidence marks them unverified.
+
+## Unbound compaction usage attribution
+
+**Baseline reproduction; corrected locally by the gateway integration below.** Against local source commit `c0c31591463627f8ead34c5c2bd0f971f900d7ea`, disposable HTTP regressions showed the accounting store charging an unrelated 123-token result to a new compaction reservation. The hold was released before the intended compaction completed. Its later 473-token summary remained unaccounted for. This differs from the earlier lost-acknowledgement defect: here the runtime acknowledged normally and received exactly one compaction request. This section records the failing baseline, not the current test result.
+
+The first four regressions cover a pre-existing ordinary answer on the main and trusted raw compaction routes in guarded modes `off` and `enforce`; all four fail. The expanded matrix also covers previous summaries and unrelated answers/summaries appearing after dispatch. It has **16 failures, 35 passing existing accounting controls, 541 assertions, and terminal exit 1**. The fixture marks summaries explicitly and checks both status before completion and two reads after completion. It uses synthetic runtime history, not concurrent real OpenCode requests, a real provider bill, or hosted accounts. The after-dispatch cases prove susceptibility to unrelated history; they do not certify real runtime concurrency behavior.
+
+The cause is visible in `MatterhornModelUsageStore.reconcileUnlocked`: a reservation without `user_message_id` selects the first unused same-model result whose creation time is within five seconds before the reservation or later. Both compaction routes leave that binding unset. Bound prompts/commands have exact parent correlation, but a missing compaction binding permits the fallback to consume another result. Merely checking `summary: true` still accepts unrelated summaries; moving the timestamp cutoff does not establish ownership.
+
+The installed SDK 1.18.31 declares the legacy summarize response as a boolean and does not expose a caller-supplied message ID. The v2 compact endpoint returns no content and is not a drop-in correlation remedy. The pinned upstream [compaction implementation](https://github.com/anomalyco/opencode/blob/014614d35b397775e5d397a490fc72368c894ec2/packages/opencode/src/session/compaction.ts) generates the parent internally and calls the compaction hook with only the session ID. The follow-up below verifies a native `chat.message` integration rather than relying on a timestamp or whichever run happens to be active at a later callback.
+
+### Reproduction
+
+The regressions in `apps/server/src/session-read-model.e2e.test.ts`, named `compaction accounting ignores unrelated results`, assert the required correct accounting. They failed before the correction and pass afterward; they were neither skipped nor changed to expect the bug. Passing this group alone does not certify the release candidate.
+
+```sh
+bun test apps/server/src/session-read-model.e2e.test.ts --test-name-pattern 'compaction accounting ignores unrelated|alternate dispatch accounting|retains accounting after a lost'
+```
+
+Initial log: `/tmp/matterhorn-compaction-correlation-red-2026-10-05.log`. Expanded log: `/tmp/matterhorn-compaction-correlation-expanded-2026-10-05.log`. The initial run has four failures; the expanded run includes sixteen. Disposable server handles completed and fixture cleanup ran. Server typecheck and diff whitespace checks pass; typecheck output is in `/tmp/matterhorn-compaction-correlation-typecheck-2026-10-05.log`. The broader safety/build suites were not rerun because there is no implementation correction yet; their prior green results do not supersede these new failures.
+
+### Next correction and acceptance
+
+1. Establish a durable, one-to-one binding between the accepted compaction reservation, guarded run and actual runtime parent before billable execution. Verify the pinned runtime hook/endpoint contract before selecting the integration. Do not create a second compaction implementation that silently changes transcript or consent semantics.
+2. Reject conflicting or stale bindings. Cover overlapping summaries, replaced/cancelled runs, two callers, restart, delayed callbacks and lost acknowledgements. If a binding cannot be proven, keep it unresolved with an explicit recovery path rather than charging another result or silently releasing the hold.
+3. Bind result settlement to that identity; prove exactly 473 tokens settled once and zero remaining hold for the intended completion. Add mismatched workspace/session/provider/model controls and preserve 4xx rejection and pre-dispatch cancellation behavior.
+4. Prove the integration with the pinned real runtime and a disposable local provider fixture, then run backend regressions, typecheck/build and the full safety gate. Hosted real-provider acceptance remains separate.
+
+At the reproduction stage there was no source correction or committed regression change. The gateway integration below supplies the local correction; it does not establish a production deployment or full QA completion.
+
+## Native compaction binding foundation
+
+This section records the initial binding foundation against `c0c31591463627f8ead34c5c2bd0f971f900d7ea`. At that stage, both gateway routes still used legacy summarize and the sixteen regressions still failed. The subsequent gateway integration below supersedes that implementation status; the foundation evidence remains useful but was not complete accounting acceptance.
+
+The pinned upstream [message preparation code](https://github.com/anomalyco/opencode/blob/014614d35b397775e5d397a490fc72368c894ec2/packages/opencode/src/session/prompt.ts) runs `chat.message` before saving the user message and parts. Its normal loop processes a compaction part through the native compaction engine. An isolated test of OpenCode 1.18.31 verified this with the actual Matterhorn plugin: it preserves a supplied parent ID, converts the marker in place, produces one native summary, retains the original agent and history, and does not send the marker/run identifier to the provider. The synthetic streaming provider reports 300 input and 173 output tokens. Health/version is checked against repository constants. A fixture assertion initially needed correction for macOS `/var` versus canonical `/private/var`; the final probe passes.
+
+The local implementation adds:
+
+- `opencode-compaction-request.ts`: an ignored synthetic marker for the trusted message hook. The marker is not authority.
+- `MatterhornGuardedAgentRuntime.claimRuntimeCompactionMessage`: verifies runtime authentication, exact sealed user binding, active run and scope, compaction purpose, provider/model, expiry and workspace deletion in a database transaction. It persists a one-use claim to reject replay. Claims are removed with run/workspace cleanup.
+- `/internal/agent-runs/claim-compaction`: an authenticated internal claim endpoint with no-store responses.
+- Managed `chat.message` hook: validates the complete marker shape, obtains the exact claim acknowledgement and mutates the existing parts array to a native `compaction` part with `auto: false`. Rejection never falls back to an ordinary prompt, including when guarded tools are off.
+
+The focused suites pass **76 tests, zero failures, 405 assertions**. They cover exact/mismatched claims, missing bindings, ordinary-message purpose, replay, replaced runs, an instance without restored provider consent context, workspace deletion, marker tampering, denied or mismatched acknowledgements, and existing guarded-runtime/plugin controls. The native probe uses a synthetic control endpoint; it does **not** prove the new HTTP claim route and gateway together. The claim implementation is exercised separately in runtime unit tests. Initial unprivileged execution of an existing redirect test could not bind a local port; the final permitted loopback run passes.
+
+```sh
+MATTERHORN_TEST_OPENCODE_BIN=/path/to/pinned/opencode bun test apps/server/src/opencode-compaction-contract.e2e.test.ts apps/server/src/guarded-agent-runtime.test.ts apps/server/src/opencode-plugins/matterhorn-guard.test.ts
+pnpm --filter matterhorn-work-server typecheck
+```
+
+The native probe is explicitly skipped without `MATTERHORN_TEST_OPENCODE_BIN`; that skip is not acceptance. The binary used here was `/private/tmp/matterhorn-overnight-runtime.ddJMOU/bin/opencode`, with a fresh workspace, XDG/config/state directories, synthetic credentials and child process. Existing engine processes/chats were not reused. Temporary fixture resources were closed and removed.
+
+Evidence: `/tmp/matterhorn-compaction-native-contract-2026-10-05.log` records the initial 14-assertion native hook experiment. `/tmp/matterhorn-compaction-binding-contract-tests-2026-10-05.log` records the final actual-plugin/runtime-unit run. Server typecheck and build exit zero in `/tmp/matterhorn-compaction-binding-typecheck-2026-10-05.log` and `/tmp/matterhorn-compaction-binding-build-2026-10-05.log`. A post-foundation accounting rerun still has **16 failures and 35 passes**, with terminal exit 1 in `/tmp/matterhorn-compaction-correlation-foundation-2026-10-05.log`, confirming that the untouched gateway wiring remains the immediate blocker. Diff whitespace checks pass; the full safety suite has not been rerun for this incomplete implementation.
+
+### Gateway integration requirements
+
+1. Generate the compaction parent ID at gateway admission and immediately bind its usage reservation; bind the same ID to the accepted guarded run before dispatch. Use both the main `/compact` and trusted raw `/summarize` entry points.
+2. Dispatch the marker through the supported synchronous message endpoint with that ID and the prior user agent, preserving model resolution, transcript revalidation, consent and Stop checks. Keep the public API response contract. Do not send a second compaction request or fall back to legacy summarize on failure.
+3. Preserve holds on lost/ambiguous dispatch acknowledgements, release them only for proven pre-dispatch rejection, and settle through exact parent history. Review completion/error receipts against the actual native response rather than assuming HTTP success means inference success.
+4. Update the HTTP fixture to distinguish native compaction POSTs from history GETs and to return/use the supplied parent ID. Keep all sixteen unrelated-history regressions and thirty-five controls. Add claim-route authentication/scoping, replacement, delayed claim, restart and lost-acknowledgement coverage.
+5. Run the complete gateway plus actual plugin plus pinned runtime with a local provider, then rerun broader backend, typecheck/build and all safety stages. Add the message hook to required runtime compatibility contracts when gateway dispatch depends on it. Do not claim the partial foundation makes the release ready.
+
+No commit, push, merge, deployment, runtime fork, real provider request, production setting, or existing chat change occurred. The full QA and hosted launch gates remain open.
+
+## Compaction gateway integration
+
+Both the main `/compact` route and trusted raw `/summarize` now dispatch native compaction through an explicitly identified synchronous runtime message. The usage store inserts the parent ID in the same transaction as the reservation, eliminating an insert-then-bind interval visible to another instance. The gateway binds that parent to the accepted guarded run before sending the marker. The prior user agent, chosen model, exact transcript consent, approval and cancellation checks remain in place. The public compact response remains HTTP 202; trusted summarize still returns a boolean. There is no legacy summarize fallback.
+
+Successful HTTP status alone no longer completes the guarded receipt. The reply must identify the expected parent, session, provider and model, be an assistant summary, and carry a completed stop result without an error. Mismatched, incomplete, malformed or empty replies preserve uncertain accounting for history reconciliation. Explicit 4xx rejection and cancellation before dispatch still release unused holds. The compatibility manifest now requires `chat.message` and `experimental.session.compacting` alongside the existing privacy and tool hooks.
+
+The initial focused accounting run passes all **51 cases**, including all sixteen unrelated-history regressions and the thirty-five existing accounting controls. A 52-case response-validation matrix covers both routes in guarded modes off/enforce, unchanged success, wrong parent/session/provider/model, ordinary answers, errors, unfinished results, missing identifiers/timestamps, booleans, empty responses and malformed JSON. The expanded run exposed malformed JSON returning a generic 500 from the SDK path; it now returns an explicit 502 without releasing the hold. Earlier full-suite fixture failures incorrectly counted history GETs as compaction POSTs or rejected ordinary synchronous messages; those fixtures were corrected without relaxing product assertions.
+
+The real-runtime probe now includes the actual gateway and internal claim route, not only a synthetic control endpoint. Both routes pass against isolated OpenCode **1.18.31**, the actual managed plugin, enforced final-message/system privacy hooks and a synthetic loopback provider. Each makes exactly one provider call, retains the original agent and native transcript structure, records **300 input + 173 output = 473 tokens** once, releases the reservation and produces a success receipt. Repeated usage reads remain stable. The direct plugin contract remains a third control. The initial combined fixture used a too-short synthetic runtime credential and was correctly rejected; the fixture was corrected, not the authentication requirement.
+
+Final combined contract/runtime/accounting suites pass **113 tests, 637 assertions**, including a database-trigger test that rejects any unbound compaction insertion and an independent store instance that ignores unrelated history before settling the bound 473-token result. The final broader backend run passes **1,020 tests, zero failures, 7,488 assertions across six files**. Its log is `/tmp/matterhorn-compaction-gateway-backend-final-2026-10-05.log`. The preceding 1,019-case run lacked the final atomic-insertion regression.
+
+Final server typecheck and build pass, and the full platform safety gate passes **all 11 stages with terminal exit zero**. They ran serially against the final source; logs are `/tmp/matterhorn-compaction-gateway-build-final-2026-10-05.log` and `/tmp/matterhorn-compaction-gateway-safety-final-2026-10-05.log`. The gate includes offline desk, billing, privacy, memory, perimeter and product-readiness contracts, not hosted acceptance. Diff whitespace checks pass. The documentation skill was used to preserve these evidence distinctions in the report and release handoff.
+
+```sh
+MATTERHORN_TEST_OPENCODE_BIN=/private/tmp/matterhorn-overnight-runtime.ddJMOU/bin/opencode bun test apps/server/src/opencode-compaction-contract.e2e.test.ts apps/server/src/guarded-agent-runtime.test.ts apps/server/src/opencode-plugins/matterhorn-guard.test.ts apps/server/src/model-usage-store.test.ts
+bun test apps/server/src/session-preparation.test.ts apps/server/src/session-read-model.e2e.test.ts apps/server/src/approvals.test.ts apps/server/src/model-usage-store.test.ts apps/server/src/token-authority.e2e.test.ts apps/server/src/auth.e2e.test.ts --timeout 15000
+pnpm --filter matterhorn-work-server typecheck
+pnpm --filter matterhorn-work-server build
+pnpm test:matterhorn-platform-safety
+```
+
+Evidence: `/tmp/matterhorn-compaction-gateway-focused-2026-10-05.log` records the first 51-case pass; `gateway-expanded` records the two malformed-JSON failures; `gateway-backend` records the preceding 1,019-case pass. `/tmp/matterhorn-compaction-gateway-native-full2-2026-10-05.log` records the three native probes with 60 assertions. `/tmp/matterhorn-compaction-gateway-contract-final-2026-10-05.log` records the 113-case combined pass. A final fixture refinement lets OpenCode generate the seed message ID, rather than preselecting an ID that might conceal ordering problems; all 113 cases still pass with 637 assertions in `/tmp/matterhorn-compaction-gateway-native-order-2026-10-05.log`. The other abbreviated log names share the `/tmp/matterhorn-compaction-` prefix and `-2026-10-05.log` suffix.
+
+Deployment requires the matching server and managed runtime plugin, followed by a runtime restart that preserves existing workspace data. Do not deploy the gateway alone against an old plugin. Existing legacy unbound reservations and historical undercharges are not repaired by this change; review them separately rather than guessing ownership or releasing holds. No schema migration, production deployment or real provider invoice acceptance occurred.
+
+Next review: delay native execution after the claim but before provider-context release, then exercise replacement/Stop from another client, restart and lost acknowledgement. This turn does not prove cross-instance cancellation or atomic mutation ordering, raw-client retry idempotency, provider-side cancellation, or a rendered chat summarization journey. Hosted five-desk responses, inbox flows, isolation, backup restoration, encryption and cross-browser accessibility remain independent open launch gates. Existing previews/chats and production configuration are untouched.
