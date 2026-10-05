@@ -11404,30 +11404,32 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/internal/agent-runs/provider-system", "none", async (ctx) => {
-    const body = await readJsonBody(ctx.request, 32_000, "Agent provider system context");
     const runtimeSecret = ctx.request.headers.get("x-matterhorn-agent-runtime-secret") ?? "";
     try {
       guardedRuntime.authenticateRuntime(runtimeSecret);
     } catch (error) {
       throw guardedRuntimeApiError(error);
     }
+    const body = await readJsonBody(ctx.request, 32_000, "Agent provider system context");
     const workspace = resolveGuardedRuntimeWorkspace(body.workspaceDirectory);
+    const expectedRunId = typeof body.expectedRunId === "string" ? body.expectedRunId.trim() : "";
     const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
     const providerId = typeof body.providerId === "string" ? body.providerId.trim() : "";
     const modelId = typeof body.modelId === "string" ? body.modelId.trim() : "";
     const purpose = body.purpose === "message" || body.purpose === "compaction"
       ? body.purpose
       : null;
-    if (!sessionId || !providerId || !modelId || !purpose) {
+    if (!expectedRunId || !sessionId || !providerId || !modelId || !purpose) {
       throw new ApiError(
         400,
         "invalid_payload",
-        "sessionId, providerId, modelId, and a valid purpose are required",
+        "expectedRunId, sessionId, providerId, modelId, and a valid purpose are required",
       );
     }
     try {
       const bound = guardedRuntime.resolveRuntimeProviderSystem({
         runtimeSecret,
+        expectedRunId,
         workspaceId: workspace.id,
         sessionId,
         providerId,

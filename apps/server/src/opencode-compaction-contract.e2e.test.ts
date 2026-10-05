@@ -11,8 +11,13 @@ import { resolveMatterhornManagedAgentPrompt } from "./workspace-init.js";
 
 // This is a pinned-runtime contract probe, not production guard acceptance.
 // No live provider, account, workspace or existing engine is used.
-for (const route of ["contract", "compact", "summarize"]) {
-test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native compaction preserves a gateway-chosen parent: ${route}`, async () => {
+for (const { route, replacement, throttle } of [
+  { route: "contract", replacement: false }, { route: "compact", replacement: false }, { route: "summarize", replacement: false },
+  { route: "compact", replacement: "messages" }, { route: "summarize", replacement: "messages" },
+  { route: "compact", replacement: "system" }, { route: "summarize", replacement: "system" },
+  { route: "compact", replacement: false, throttle: true }, { route: "summarize", replacement: false, throttle: true },
+]) {
+test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native compaction preserves a gateway-chosen parent: ${route}, replacement=${replacement}, throttle=${Boolean(throttle)}`, async () => {
   const binary = process.env.MATTERHORN_TEST_OPENCODE_BIN;
   if (!binary) throw new Error("An explicit isolated test runtime is required");
   const root = await mkdtemp(join(tmpdir(), "matterhorn-compaction-contract-"));
@@ -28,6 +33,20 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native compaction preser
   let claims = 0;
   const providerInputs: unknown[] = [];
   const controlFailures: string[] = [];
+  let releaseOld = () => {};
+  let releaseNew = () => {};
+  let reachedOld = () => {};
+  let reachedNew = () => {};
+  const oldGate = new Promise<void>(resolve => { releaseOld = resolve; });
+  const newGate = new Promise<void>(resolve => { releaseNew = resolve; });
+  const oldReached = new Promise<void>(resolve => { reachedOld = resolve; });
+  const newReached = new Promise<void>(resolve => { reachedNew = resolve; });
+  let delayed = false;
+  let delayedStatus = 0;
+  let delayedBody: unknown;
+  let delayedInput: unknown;
+  const claimedRuns: string[] = [];
+  const pendingRequests: Promise<Response>[] = [];
   try {
     await mkdir(workspace);
     const canonicalWorkspace = await realpath(workspace);
@@ -37,10 +56,28 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native compaction preser
       if (route !== "contract") {
         if (!gateway) return new Response(null, { status: 503 });
         const path = new URL(request.url).pathname;
-        if (path === "/internal/agent-runs/claim-compaction") claims += 1;
+        const forwardedBody = await request.text();
+        if (path === "/internal/agent-runs/claim-compaction") {
+          claims += 1;
+          const claim: unknown = JSON.parse(forwardedBody);
+          if (claim && typeof claim === "object" && "runId" in claim && typeof claim.runId === "string") claimedRuns.push(claim.runId);
+        }
+        if ((replacement === "messages" && path === "/internal/agent-runs/claim-compaction" && claims === 2)
+          || (replacement === "system" && path === "/internal/agent-runs/provider-system" && delayed)) {
+          reachedNew();
+          await newGate;
+        }
+        const holdOld = Boolean(replacement) && !delayed && path === `/internal/agent-runs/provider-${replacement}`;
+        if (holdOld) {
+          delayedInput = JSON.parse(forwardedBody);
+          delayed = true;
+          reachedOld();
+          await oldGate;
+        }
         const response = await fetch(`http://127.0.0.1:${gateway.port}${path}`, { method: "POST",
           headers: { "content-type": "application/json", "x-matterhorn-agent-runtime-secret": "disposable-compaction-control-key-at-least-32-bytes" },
-          body: await request.text() });
+          body: forwardedBody });
+        if (holdOld) { delayedStatus = response.status; delayedBody = await response.clone().json(); }
         if (!response.ok) controlFailures.push(`${path}: ${await response.clone().text()}`);
         return response;
       }
@@ -62,7 +99,12 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native compaction preser
     provider = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
       if (new URL(request.url).pathname !== "/v1/chat/completions") return new Response(null, { status: 404 });
       providerInputs.push(await request.json());
-      if (++providerCalls > 1) return new Response("Unexpected additional inference", { status: 429 });
+      providerCalls += 1;
+      if (throttle && providerCalls === 1) {
+        return Response.json({ error: { message: "Synthetic rate limit", type: "rate_limit_error" } },
+          { status: 429, headers: { "retry-after": "0" } });
+      }
+      if (providerCalls > (throttle ? 2 : 1)) return new Response("Unexpected additional inference", { status: 429 });
       const common = { id: "fixture_compaction", object: "chat.completion.chunk", created: 1, model: "fixture" };
       const chunks = [
         { ...common, choices: [{ index: 0, delta: { role: "assistant", content: "Fixture summary of the synthetic conversation." }, finish_reason: null }] },
@@ -152,16 +194,48 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native compaction preser
       const auth = { authorization: "Bearer disposable-compaction-user", "content-type": "application/json" };
       const path = route === "compact" ? `/workspace/ws_contract/sessions/${session.id}/compact`
         : `/w/ws_contract/opencode/session/${session.id}/summarize`;
-      const reply = await fetch(`${base}${path}`, { method: "POST", headers: auth,
-        body: JSON.stringify({ providerID: providerId, modelID: "fixture" }), signal: AbortSignal.timeout(20000) });
+      const send = () => {
+        const request = fetch(`${base}${path}`, { method: "POST", headers: auth,
+          body: JSON.stringify({ providerID: providerId, modelID: "fixture" }), signal: AbortSignal.timeout(20000) });
+        pendingRequests.push(request);
+        void request.catch(() => {}); // Cleanup still awaits every request on an early assertion failure.
+        return request;
+      };
+      let reply: Response;
+      if (replacement) {
+        const first = send();
+        const waitFor = async (promise: Promise<void>) => {
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            await Promise.race([promise, new Promise<never>((_, reject) => {
+              timer = setTimeout(() => reject(new Error(`Native boundary timeout: ${JSON.stringify(controlFailures)}`)), 10000);
+            })]);
+          } finally { clearTimeout(timer); }
+        };
+        await waitFor(oldReached);
+        const second = send();
+        await waitFor(newReached);
+        releaseOld();
+        const oldResponse = await first;
+        expect(oldResponse.status).toBeGreaterThanOrEqual(400);
+        releaseNew();
+        reply = await second;
+        expect(delayedStatus, JSON.stringify({ delayedBody, delayedInput, claimedRuns })).toBe(409);
+        if (replacement === "system") {
+          expect(delayedInput).toMatchObject({ expectedRunId: claimedRuns[0] });
+          expect(delayedBody).toMatchObject({ code: "agent_provider_system_not_bound" });
+        }
+      } else reply = await send();
       const response: unknown = await reply.json();
       expect(reply.status, JSON.stringify({ response, controlFailures, runtimeLog: output })).toBe(route === "compact" ? 202 : 200);
       if (route === "summarize") expect(response).toBe(true);
       const history = await call(`/session/${session.id}/message`);
-      expect(history).toHaveLength(3);
-      expect(history[1].info).toMatchObject({ role: "user", agent: "fixture" });
-      expect(history[1].parts).toEqual([expect.objectContaining({ type: "compaction", auto: false, messageID: history[1].info.id })]);
-      expect(history[2].info).toMatchObject({ parentID: history[1].info.id, summary: true, finish: "stop", tokens: { input: 300, output: 173 } });
+      expect(history).toHaveLength(replacement ? (replacement === "system" ? 5 : 4) : 3);
+      const parent = history.at(-2);
+      const summary = history.at(-1);
+      expect(parent.info).toMatchObject({ role: "user", agent: "fixture" });
+      expect(parent.parts).toEqual([expect.objectContaining({ type: "compaction", auto: false, messageID: parent.info.id })]);
+      expect(summary.info).toMatchObject({ parentID: parent.info.id, summary: true, finish: "stop", tokens: { input: 300, output: 173 } });
       for (let i = 0; i < 2; i++) {
         const usage = await fetch(`${base}/workspace/ws_contract/model-usage/status`, { headers: auth });
         expect(usage.status).toBe(200);
@@ -170,10 +244,14 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native compaction preser
       const receipts = await fetch(`${base}/workspace/ws_contract/agent-run-receipts?sessionId=${session.id}`, { headers: auth });
       expect(receipts.status).toBe(200);
       const items = (await receipts.json()).items;
-      expect(items).toHaveLength(1);
-      expect(items[0].status).toBe("success");
-      expect(providerCalls).toBe(1);
-      expect(claims).toBe(1);
+      expect(items).toHaveLength(replacement ? 2 : 1);
+      expect(items.filter((item: { status: string }) => item.status === "success")).toHaveLength(1);
+      expect(items.find((item: { runId: string }) => item.runId === claimedRuns.at(-1))?.status).toBe("success");
+      if (replacement) {
+        expect(items.find((item: { runId: string }) => item.runId === claimedRuns[0])?.status).toMatch(/^(cancelled|error)$/);
+      }
+      expect(providerCalls).toBe(throttle ? 2 : 1);
+      expect(claims).toBe(replacement ? 2 : 1);
       expect(JSON.stringify(providerInputs)).toContain("synthetic project color is blue");
       expect(JSON.stringify(providerInputs)).not.toContain("matterhornCompactionRun");
       return;
@@ -194,7 +272,10 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native compaction preser
     expect(history[1].parts).toEqual([expect.objectContaining({ type: "compaction", auto: false, messageID })]);
     expect(history[2].info.id).toBe(result.info.id);
   } finally {
+    releaseOld();
+    releaseNew();
     if (engine) await createManagedProcessClose(engine).close();
+    await Promise.allSettled(pendingRequests);
     await gateway?.stop();
     provider?.stop(true);
     control?.stop(true);

@@ -60,8 +60,13 @@ The internal capability and completion routes require
 `X-Matterhorn-Agent-Runtime-Secret`. They are not client APIs.
 
 The same runtime-only credential protects the provider-message validation and
-provider-system binding routes. The final-message request is bound to one active
-workspace, session, and run. The following system response is additionally
+provider-system binding routes. Final-message validation checks the active
+workspace, session and run; retries also supply the expected run ID. Initial
+compaction validation still has an unresolved replacement race because the native
+hook omits its parent identity. See the [current native-runtime evidence](../../qa-reports/launch/2026-10-05/RESULTS.md#delayed-runtime-authorization);
+this boundary is not fully certified. The following system request must supply
+the exact run ID returned by message validation. A stale ID is rejected before
+consuming the replacement run's authorization. Its response is additionally
 bound to provider, model, request purpose, and the single-use message-validation
 digest; it carries a SHA-256 digest checked by the plugin and is held in memory
 only until the run ends. A restart discards these private bytes and makes the

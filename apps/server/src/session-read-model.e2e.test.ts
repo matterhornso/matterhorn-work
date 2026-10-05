@@ -4337,6 +4337,7 @@ describe("workspace session read APIs", () => {
         "X-Matterhorn-Agent-Runtime-Secret": process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
       },
       body: JSON.stringify({
+        expectedRunId: accepted.runId,
         workspaceDirectory: workspaceRoot,
         sessionId: "ses_1",
         providerId: "openai",
@@ -4386,6 +4387,21 @@ describe("workspace session read APIs", () => {
       messagesHash: expect.stringMatching(/^[a-f0-9]{64}$/),
     });
 
+    const deniedSystem = await fetch(`${base}/internal/agent-runs/provider-system`, {
+      method: "POST", headers: { "Content-Type": "application/json", "X-Matterhorn-Agent-Runtime-Secret": "wrong-secret" },
+      body: "not-json",
+    });
+    expect(deniedSystem.status).toBe(401);
+    for (const expectedRunId of [undefined, null, 7, {}, [], "", " ", "run_stale"]) {
+      const rejectedSystem = await fetch(`${base}/internal/agent-runs/provider-system`, {
+        method: "POST", headers: { "Content-Type": "application/json",
+          "X-Matterhorn-Agent-Runtime-Secret": process.env.MATTERHORN_AGENT_RUNTIME_SECRET! },
+        body: JSON.stringify({ workspaceDirectory: workspaceRoot, sessionId: "ses_1",
+          providerId: "openai", modelId: "gpt-4.1", purpose: "message", expectedRunId }),
+      });
+      expect(rejectedSystem.status).toBe(expectedRunId === "run_stale" ? 409 : 400);
+    }
+    // Rejections above must not consume the accepted run's one-use validation.
     const providerSystemResponse = await fetch(`${base}/internal/agent-runs/provider-system`, {
       method: "POST",
       headers: {
@@ -4393,6 +4409,7 @@ describe("workspace session read APIs", () => {
         "X-Matterhorn-Agent-Runtime-Secret": process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
       },
       body: JSON.stringify({
+        expectedRunId: accepted.runId,
         workspaceDirectory: workspaceRoot,
         sessionId: "ses_1",
         providerId: "openai",
@@ -4418,6 +4435,7 @@ describe("workspace session read APIs", () => {
         "X-Matterhorn-Agent-Runtime-Secret": process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
       },
       body: JSON.stringify({
+        expectedRunId: accepted.runId,
         workspaceDirectory: workspaceRoot,
         sessionId: "ses_1",
         providerId: "openai",

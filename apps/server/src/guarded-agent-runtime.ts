@@ -1514,6 +1514,7 @@ export class MatterhornGuardedAgentRuntime {
 
   resolveRuntimeProviderSystem(input: {
     runtimeSecret: string;
+    expectedRunId: string;
     workspaceId: string;
     sessionId: string;
     providerId: string;
@@ -1527,6 +1528,7 @@ export class MatterhornGuardedAgentRuntime {
     const nowMs = Date.now();
     if (
       !runId
+      || input.expectedRunId !== runId
       || !context
       || !scope
       || context.expiresAtMs <= Date.now()

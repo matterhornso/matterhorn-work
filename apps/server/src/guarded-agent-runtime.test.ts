@@ -2333,6 +2333,46 @@ describe("guarded agent runtime transport", () => {
     }
   });
 
+  for (const purpose of ["message", "compaction"] satisfies Array<"message" | "compaction">) {
+    test(`stale ${purpose} system release cannot consume a replacement run's validation`, async () => {
+      const runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(join(dataDir, `stale-system-${purpose}.db`)));
+      try {
+        const system = "Summarize synthetic public information only.";
+        const input: GuardedPromptInput = {
+          workspaceId: "ws_system_replacement", sessionId: "ses_system_replacement",
+          providerId: "ollama", modelId: "fixture", executionMode: "work",
+          parts: [
+            { type: "system_context", text: system, source: "system", label: "public", contentHash: sha256(system) },
+            { type: "provider_system_manifest", source: "system", label: "public", contentHash: sha256(system),
+              version: `matterhorn.provider-system.${purpose}.v1` },
+          ],
+        };
+        const start = () => runtime.startAuthorizedPrompt(input, runtime.authorizePrompt(input), { purpose, sections: [system] });
+        const first = await start();
+        const second = await start();
+        const scope = { runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!, workspaceId: input.workspaceId,
+          sessionId: input.sessionId, providerId: input.providerId, modelId: input.modelId, purpose };
+        runtime.validateRuntimeProviderMessages({ ...scope, expectedRunId: second.runId, messages: [{
+          info: { role: "user", sessionID: input.sessionId, id: "msg_system_replacement" },
+          parts: [{ type: "text", text: "Read public data" }],
+        }] });
+        const stale = { ...scope, expectedRunId: first.runId };
+        expect(() => runtime.resolveRuntimeProviderSystem(stale)).toThrow("Provider system context is not bound");
+        for (const expectedRunId of [undefined, null, "", " ", 7, {}, []]) {
+          expect(() => Reflect.apply(runtime.resolveRuntimeProviderSystem, runtime, [{ ...scope, expectedRunId }]))
+            .toThrow("Provider system context is not bound");
+        }
+        for (const mutation of [{ runtimeSecret: "wrong-secret" }, { workspaceId: "ws_other" },
+          { sessionId: "ses_other" }, { providerId: "other" }, { modelId: "other" }]) {
+          expect(() => runtime.resolveRuntimeProviderSystem({ ...scope, expectedRunId: second.runId, ...mutation })).toThrow();
+        }
+        const fresh = { ...scope, expectedRunId: second.runId };
+        expect(runtime.resolveRuntimeProviderSystem(fresh)).toEqual({ runId: second.runId, system: [system], systemHash: sha256(system) });
+        expect(() => runtime.resolveRuntimeProviderSystem(fresh)).toThrow("Provider system context is not bound");
+      } finally { runtime.close(); }
+    });
+  }
+
   test("releases provider system context only for the exact active run scope", async () => {
     const path = join(dataDir, "provider-system-exact-scope.db");
     const runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
@@ -2364,6 +2404,7 @@ describe("guarded agent runtime transport", () => {
       purpose: "message",
     });
     expect(() => runtime.resolveRuntimeProviderSystem({
+      expectedRunId: accepted.runId,
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
@@ -2398,6 +2439,7 @@ describe("guarded agent runtime transport", () => {
       expectedRunId: "replaced_run", messages,
     })).toThrow("not bound to this active Matterhorn run");
     const exact = runtime.resolveRuntimeProviderSystem({
+      expectedRunId: accepted.runId,
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
@@ -2407,6 +2449,7 @@ describe("guarded agent runtime transport", () => {
     });
     expect(exact).toEqual({ runId: accepted.runId, system: [system], systemHash: sha256(system) });
     expect(() => runtime.resolveRuntimeProviderSystem({
+      expectedRunId: accepted.runId,
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
@@ -2423,6 +2466,7 @@ describe("guarded agent runtime transport", () => {
       { purpose: "compaction" as const },
     ]) {
       expect(() => runtime.resolveRuntimeProviderSystem({
+        expectedRunId: accepted.runId,
         runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
         workspaceId: input.workspaceId,
         sessionId: input.sessionId,
@@ -2437,6 +2481,7 @@ describe("guarded agent runtime transport", () => {
 
     const restored = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
     expect(() => restored.resolveRuntimeProviderSystem({
+      expectedRunId: accepted.runId,
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
@@ -2471,7 +2516,7 @@ describe("guarded agent runtime transport", () => {
       executionMode: "work" as const,
     };
     const authorization = runtime.authorizePrompt(input);
-    await runtime.startAuthorizedPrompt(input, authorization, { sections: [system], purpose: "message" });
+    const accepted = await runtime.startAuthorizedPrompt(input, authorization, { sections: [system], purpose: "message" });
 
     expect(() => runtime.validateRuntimeProviderMessages({
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
@@ -2483,6 +2528,7 @@ describe("guarded agent runtime transport", () => {
       }],
     })).toThrow("blocked sensitive material");
     expect(() => runtime.resolveRuntimeProviderSystem({
+      expectedRunId: accepted.runId,
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
@@ -2524,7 +2570,7 @@ describe("guarded agent runtime transport", () => {
         executionMode: "work" as const,
       };
       const authorization = runtime.authorizePrompt(input);
-      await runtime.startAuthorizedPrompt(input, authorization, { sections: [system], purpose: "message" });
+      const accepted = await runtime.startAuthorizedPrompt(input, authorization, { sections: [system], purpose: "message" });
 
       expect(() => runtime.validateRuntimeProviderMessages({
         runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
@@ -2536,6 +2582,7 @@ describe("guarded agent runtime transport", () => {
         }],
       })).toThrow("became more sensitive");
       expect(() => runtime.resolveRuntimeProviderSystem({
+        expectedRunId: accepted.runId,
         runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
         workspaceId: input.workspaceId,
         sessionId: input.sessionId,
