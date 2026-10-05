@@ -183,14 +183,24 @@ authority through backup and restore; the hash chain alone is not authenticity p
 Abrupt Bun-process exits and two competing recovery processes pass locally, but this
 does not certify power-loss durability, other operating systems, multi-replica agent
 execution or production backup restoration. Reads and writes currently scan retained
-workspace receipts synchronously; large-history latency remains unverified. See
+workspace receipts synchronously; a small synthetic history benchmark is recorded,
+but production-scale latency remains unverified. See
 [recovery evidence and limits](../../qa-reports/launch/2026-10-05/RESULTS.md#authenticated-receipt-append-recovery).
 
 Receipts are created in every guarded mode, including `off`, then written to
 date-segmented, hash-chained workspace storage. Individual receipts stop appearing
 after 365 days; a daily segment is physically removed only once the entire day is
 older than that retention window. Earlier expired entries can therefore remain in
-that segment until the rest of the day expires and cleanup runs. Workspace purge deletes engine sessions, notes, outputs, memories,
+that segment until the rest of the day expires and cleanup runs. Cleanup never
+deletes a newer durable index based on a stale in-memory receipt. It resolves a
+live append intent under the writer lock before deleting segments. Global expiry
+temporarily retains expired receipt indexes for a workspace with a live matching
+append intent, so recovery can authenticate its exact predecessor. They remain
+expired for ordinary reads and execution; retention grants no new authority.
+The protection ends when the intent is resolved or expires. Historical orphaned
+indexes without valid recovery evidence are not revived.
+
+Workspace purge deletes engine sessions, notes, outputs, memories,
 workflow content, and transient grants/consents immediately. It retains only the
 minimal content-free security chain until normal expiry. Purge fails before local
 deletion when engine content cannot first be deleted, preventing a false success.

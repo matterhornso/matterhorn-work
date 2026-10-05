@@ -1,5 +1,5 @@
-import { readdir, rm } from "node:fs/promises";
-import { closeSync, constants, fsyncSync, mkdirSync, openSync, readFileSync, readdirSync, writeSync } from "node:fs";
+import { readdir } from "node:fs/promises";
+import { closeSync, constants, fsyncSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, writeSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -331,33 +331,38 @@ export class MatterhornAgentRunReceiptStore {
   }
 
   async purgeExpired(workspaceId: string, now = new Date()): Promise<number> {
-    this.stateStore?.deleteExpired(now.getTime());
-    const directory = agentSecurityReceiptDirectory(workspaceId);
-    let files: string[];
-    try {
-      files = await readdir(directory);
-    } catch {
-      return 0;
-    }
-    let removed = 0;
-    for (const file of files) {
-      const match = /^(\d{4}-\d{2}-\d{2})\.jsonl$/.exec(file);
-      if (!match) continue;
-      const timestamp = Date.parse(`${match[1]}T00:00:00.000Z`);
-      if (!Number.isFinite(timestamp) || now.getTime() - (timestamp + DAY_MS) < RETENTION_MS) continue;
-      await rm(join(directory, file), { force: true });
-      removed += 1;
-    }
-    for (const [runId, receipt] of this.latest) {
-      if (receipt.workspaceId !== workspaceId) continue;
-      const timestamp = Date.parse(receipt.completedAt ?? receipt.startedAt);
-      if (Number.isFinite(timestamp) && now.getTime() - timestamp > RETENTION_MS) {
-        this.latest.delete(runId);
-        if (this.receiptIndexState) this.receiptIndexState.delete(runId);
-        else this.stateStore?.delete("receipt_index", runId);
+    return this.transaction(() => {
+      // Finish a committed append before removing any of its recovery evidence.
+      // Keep file cleanup in the same writer lock; no async filesystem gap.
+      this.recoverAppend(workspaceId, now);
+      this.stateStore?.deleteExpired(now.getTime());
+      const directory = agentSecurityReceiptDirectory(workspaceId);
+      let files: string[];
+      try { files = readdirSync(directory); }
+      catch (error) {
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+        files = [];
       }
-    }
-    return removed;
+      let removed = 0;
+      for (const file of files) {
+        const match = /^(\d{4}-\d{2}-\d{2})\.jsonl$/.exec(file);
+        if (!match) continue;
+        const timestamp = Date.parse(`${match[1]}T00:00:00.000Z`);
+        if (!Number.isFinite(timestamp) || now.getTime() - (timestamp + DAY_MS) < RETENTION_MS) continue;
+        rmSync(join(directory, file), { force: true });
+        removed += 1;
+      }
+      for (const [runId, receipt] of this.latest) {
+        if (receipt.workspaceId !== workspaceId) continue;
+        const timestamp = Date.parse(receipt.completedAt ?? receipt.startedAt);
+        if (Number.isFinite(timestamp) && now.getTime() - timestamp >= RETENTION_MS) {
+          // Another store may have committed a newer completion since this cache
+          // was read. Durable expiry above uses the current row, never this copy.
+          this.latest.delete(runId);
+        }
+      }
+      return removed;
+    });
   }
 
   private async load(workspaceId: string, now = new Date()): Promise<void> {
@@ -511,7 +516,9 @@ export class MatterhornAgentRunReceiptStore {
       || !receipt.integrity || receipt.integrity.recordHash !== recordHash(receipt)) {
       throw new Error("agent_run_receipt_intent_invalid");
     }
-    const index = this.receiptIndexState?.getRecord<unknown>(receipt.runId, now.getTime()) ?? null;
+    // A completion intent can outlive its prior pending index's retention date.
+    // Read that exact sealed predecessor for hash comparison only, not authority.
+    const index = this.receiptIndexState?.getRecord<unknown>(receipt.runId, 0) ?? null;
     if (sha256(index) !== intent.previousIndexHash) throw new Error("agent_run_receipt_intent_invalid");
     this.finishAppend(intent);
     this.appendIntentState?.delete(workspaceId);

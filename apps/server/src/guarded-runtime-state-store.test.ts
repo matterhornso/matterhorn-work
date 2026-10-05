@@ -5,6 +5,34 @@ import { join } from "node:path";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
 describe("durable guarded runtime state", () => {
+  test("expiry retains only receipt predecessors with a live same-workspace append intent", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-guarded-receipt-expiry-"));
+    const state = new MatterhornGuardedRuntimeStateStore(join(root, "state.db"));
+    try {
+      for (const workspaceId of ["ws_pending", "ws_no_intent", "ws_wrong_key", "ws_wrong_workspace"]) {
+        state.put({ kind: "receipt_index", key: `run_${workspaceId}`, workspaceId,
+          value: { fixture: true }, expiresAtMs: 90, nowMs: 10 });
+      }
+      state.put({ kind: "receipt_append_intent", key: "ws_pending", workspaceId: "ws_pending",
+        value: { fixture: true }, expiresAtMs: 200, nowMs: 80 });
+      state.put({ kind: "receipt_append_intent", key: "wrong", workspaceId: "ws_wrong_key",
+        value: { fixture: true }, expiresAtMs: 200, nowMs: 80 });
+      state.put({ kind: "receipt_append_intent", key: "ws_wrong_workspace", workspaceId: "ws_other",
+        value: { fixture: true }, expiresAtMs: 200, nowMs: 80 });
+      state.put({ kind: "privacy_challenge", key: "expired_challenge", workspaceId: "ws_pending",
+        value: { fixture: true }, expiresAtMs: 90, nowMs: 10 });
+      expect(state.deleteExpired(100).states).toBe(4);
+      expect(state.getRecord("receipt_index", "run_ws_pending", 100)).toBeNull();
+      expect(state.getRecord("receipt_index", "run_ws_pending", 0)).not.toBeNull();
+      for (const workspaceId of ["ws_no_intent", "ws_wrong_key", "ws_wrong_workspace"]) {
+        expect(state.getRecord("receipt_index", `run_${workspaceId}`, 0)).toBeNull();
+      }
+      expect(state.getRecord("privacy_challenge", "expired_challenge", 0)).toBeNull();
+      expect(state.deleteExpired(200).states).toBe(4);
+      expect(state.getRecord("receipt_index", "run_ws_pending", 0)).toBeNull();
+    } finally { state.close(); rmSync(root, { recursive: true, force: true }); }
+  });
+
   test("workspace deletion barriers survive other connections, cleanup, mutation and restart", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-deletion-barrier-"));
     const path = join(root, "state.db");

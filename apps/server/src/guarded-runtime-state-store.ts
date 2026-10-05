@@ -426,7 +426,16 @@ export class MatterhornGuardedRuntimeStateStore {
   }
 
   deleteExpired(nowMs = Date.now()): { states: number; capabilities: number } {
-    const states = statement(this.db, "DELETE FROM guarded_state WHERE kind <> 'workspace_deletion_barrier' AND expires_at IS NOT NULL AND expires_at <= ?").run(nowMs).changes ?? 0;
+    // A live append intent needs the exact predecessor index for authenticated
+    // recovery, even if that predecessor just reached its retention date.
+    // Retention grants no execution authority; ordinary reads still check expiry.
+    const states = statement(this.db, `DELETE FROM guarded_state
+      WHERE kind <> 'workspace_deletion_barrier' AND expires_at IS NOT NULL AND expires_at <= ?
+      AND NOT (kind = 'receipt_index' AND EXISTS (
+        SELECT 1 FROM guarded_state AS intent
+        WHERE intent.kind = 'receipt_append_intent' AND intent.state_key = guarded_state.workspace_id
+          AND intent.workspace_id = guarded_state.workspace_id AND intent.expires_at > ?
+      ))`).run(nowMs, nowMs).changes ?? 0;
     const capabilities = statement(this.db, "DELETE FROM consumed_capabilities WHERE expires_at <= ?").run(nowMs).changes ?? 0;
     return { states, capabilities };
   }

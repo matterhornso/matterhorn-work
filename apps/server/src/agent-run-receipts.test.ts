@@ -88,6 +88,66 @@ describe("guarded agent run receipts", () => {
     } finally { setSystemTime(); state.close(); authority.close(); }
   });
 
+  test("retention cannot delete a newer authenticated completion from a stale store cache", async () => {
+    const workspaceId = "ws_retention_stale_cache";
+    const runId = "run_retention_stale_cache";
+    const db = join(root, "receipt-stale-retention.db");
+    const firstState = new MatterhornGuardedRuntimeStateStore(db);
+    const secondState = new MatterhornGuardedRuntimeStateStore(db);
+    const authority = testDurableStateAuthority();
+    const first = new MatterhornAgentRunReceiptStore(firstState, authority);
+    const second = new MatterhornAgentRunReceiptStore(secondState, authority);
+    try {
+      setSystemTime(new Date("2025-04-15T12:00:00.000Z"));
+      await first.start({ workspaceId, runId, sessionId: "ses_retention_stale", consentUsed: false,
+        preflight: publicPreflight(workspaceId, "ses_retention_stale") });
+      expect(await second.get(workspaceId, runId)).toMatchObject({ status: "pending" });
+      setSystemTime(new Date("2026-04-14T12:00:00.000Z"));
+      await first.complete({ runId, status: "cancelled", usage: { inputTokens: 300, outputTokens: 173 } });
+      const committedIndex = firstState.getRecord("receipt_index", runId);
+      expect(committedIndex).not.toBeNull();
+      setSystemTime(new Date("2026-04-16T12:00:00.000Z"));
+      expect(await second.purgeExpired(workspaceId)).toBe(1);
+      expect(firstState.getRecord("receipt_index", runId)).toEqual(committedIndex);
+      expect(await second.get(workspaceId, runId)).toMatchObject({ status: "cancelled",
+        completedAt: "2026-04-14T12:00:00.000Z", usage: { inputTokens: 300, outputTokens: 173 } });
+      expect(await first.get(workspaceId, runId)).toEqual(await second.get(workspaceId, runId));
+    } finally { setSystemTime(); firstState.close(); secondState.close(); authority.close(); }
+  });
+
+  for (const cleanup of ["none", "state", "receipt"]) {
+    test(`pending completion survives prior index expiry with ${cleanup} cleanup`, async () => {
+      const workspaceId = `ws_retention_journal_${cleanup}`;
+      const runId = `run_retention_journal_${cleanup}`;
+      const state = new MatterhornGuardedRuntimeStateStore(join(root, `${workspaceId}.db`));
+      const authority = testDurableStateAuthority();
+      const store = new MatterhornAgentRunReceiptStore(state, authority);
+      const put = state.put.bind(state);
+      try {
+        setSystemTime(new Date("2025-04-15T12:00:00.000Z"));
+        await store.start({ workspaceId, runId, sessionId: "ses_journal_retention", consentUsed: false,
+          preflight: publicPreflight(workspaceId, "ses_journal_retention") });
+        setSystemTime(new Date("2026-04-15T11:59:00.000Z"));
+        state.put = input => {
+          if (input.kind === "receipt_index") throw new Error("fixture index expiry failure");
+          return put(input);
+        };
+        await expect(store.complete({ runId, status: "cancelled", usage: { inputTokens: 300, outputTokens: 173 } }))
+          .rejects.toThrow("fixture index expiry failure");
+        state.put = put;
+        setSystemTime(new Date("2026-04-16T00:00:00.000Z"));
+        if (cleanup === "state") state.deleteExpired();
+        if (cleanup === "receipt") await store.purgeExpired(workspaceId);
+        const recovered = new MatterhornAgentRunReceiptStore(state, authority);
+        expect(await recovered.get(workspaceId, runId)).toMatchObject({ status: "cancelled",
+          completedAt: "2026-04-15T11:59:00.000Z", usage: { inputTokens: 300, outputTokens: 173 } });
+        expect(state.getRecord("receipt_append_intent", workspaceId)).toBeNull();
+        expect(await recovered.purgeExpired(workspaceId)).toBe(cleanup === "receipt" ? 0 : 1);
+        expect(await recovered.get(workspaceId, runId)).toMatchObject({ status: "cancelled" });
+      } finally { state.put = put; setSystemTime(); state.close(); authority.close(); }
+    });
+  }
+
   for (const boundary of ["before-append", "after-append", "after-index"]) {
     test(`two processes recover an abrupt writer exit at ${boundary}`, async () => {
       const workspaceId = `ws_process_journal_${boundary}`;
