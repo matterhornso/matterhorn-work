@@ -296,6 +296,10 @@ if (!normalizedOpencodeVersion) {
   process.exit(1);
 }
 
+if (normalizedOpencodeVersion.includes("-matterhorn.")) {
+  throw new Error("The maintained Matterhorn runtime is currently source-build only. Desktop sidecar packaging is blocked until compatible per-platform artifacts and native acceptance are available; stock OpenCode must not be substituted.");
+}
+
 const opencodeAssetByTarget = {
   "aarch64-apple-darwin": "opencode-darwin-arm64.zip",
   "x86_64-apple-darwin": "opencode-darwin-x64-baseline.zip",

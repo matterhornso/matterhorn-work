@@ -4,23 +4,28 @@ WORKDIR /src
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl git unzip \
-  && npm install -g bun \
   && corepack enable \
+  && corepack prepare pnpm@10.27.0 --activate \
+  && pnpm --allow-build=bun add --global --global-dir /opt/runtime-toolchain --global-bin-dir /usr/local/bin bun@1.3.14 \
+  && test "$(bun --version)" = "1.3.14" \
   && rm -rf /var/lib/apt/lists/*
 
 COPY . .
 
-RUN pnpm install --frozen-lockfile --filter openwork-orchestrator... --filter openwork-server... \
-  && pnpm --filter openwork-orchestrator build:bin \
-  && pnpm --filter openwork-server build:bin
+RUN mkdir -p /out && chown node:node /out
+USER node
+RUN node scripts/build-pinned-opencode.mjs --output /out/opencode
+USER root
+
+RUN pnpm install --frozen-lockfile --filter matterhorn-work-orchestrator... --filter matterhorn-work-server... \
+  && pnpm --filter matterhorn-work-orchestrator build:bin \
+  && pnpm --filter matterhorn-work-server build:bin
 
 FROM node:22-bookworm-slim
 
 ARG OPENWORK_ORCHESTRATOR_VERSION
 ARG OPENWORK_SERVER_VERSION
 ARG OPENCODE_VERSION
-ARG OPENCODE_DOWNLOAD_URL=
-ARG OPENCODE_DOWNLOAD_SHA256=
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl tar unzip \
@@ -32,22 +37,17 @@ COPY --from=openwork-builder /src/apps/server/dist/bin/matterhorn-work-server /u
 COPY --from=openwork-builder /src/apps/server/dist/bin/openwork-server /usr/local/bin/openwork-server
 COPY --from=openwork-builder /src/constants.json /usr/local/constants.json
 COPY packaging/docker/microsandbox-entrypoint.sh /usr/local/bin/microsandbox-entrypoint.sh
-COPY packaging/docker/opencode-release-checksums.json /usr/local/share/matterhorn/opencode-release-checksums.json
-COPY scripts/install-pinned-opencode.sh /usr/local/bin/install-pinned-opencode.sh
+COPY --from=openwork-builder /out/opencode /usr/local/bin/opencode
+COPY --from=openwork-builder /out/opencode.provenance.json /usr/local/share/matterhorn/opencode.provenance.json
+COPY --from=openwork-builder /out/opencode.LICENSE /usr/local/share/matterhorn/opencode.LICENSE
+COPY --from=openwork-builder /out/opencode.models.dev-LICENSE /usr/local/share/matterhorn/opencode.models.dev-LICENSE
 
 RUN set -eux; \
   test -n "$OPENWORK_ORCHESTRATOR_VERSION"; \
   test -n "$OPENWORK_SERVER_VERSION"; \
   test -n "$OPENCODE_VERSION"; \
-  OPENCODE_CONSTANTS_FILE=/usr/local/constants.json \
-  OPENCODE_CHECKSUM_FILE=/usr/local/share/matterhorn/opencode-release-checksums.json \
-  OPENCODE_INSTALL_DIR=/usr/local/bin \
-  OPENCODE_VERSION="$OPENCODE_VERSION" \
-  OPENCODE_DOWNLOAD_URL="$OPENCODE_DOWNLOAD_URL" \
-  OPENCODE_DOWNLOAD_SHA256="$OPENCODE_DOWNLOAD_SHA256" \
-    /usr/local/bin/install-pinned-opencode.sh; \
-  chmod +x /usr/local/bin/microsandbox-entrypoint.sh; \
-  chmod +x /usr/local/bin/install-pinned-opencode.sh
+  test "$(opencode --version)" = "$OPENCODE_VERSION"; \
+  chmod +x /usr/local/bin/microsandbox-entrypoint.sh
 
 RUN test "$(matterhorn-work --version)" = "$OPENWORK_ORCHESTRATOR_VERSION" \
   && test "$(matterhorn-work-server --version)" = "$OPENWORK_SERVER_VERSION" \
@@ -56,6 +56,8 @@ RUN test "$(matterhorn-work --version)" = "$OPENWORK_ORCHESTRATOR_VERSION" \
 ENV OPENWORK_DATA_DIR=/data/openwork-orchestrator
 ENV OPENWORK_SIDECAR_DIR=/data/sidecars
 ENV OPENWORK_WORKSPACE=/workspace
+ENV OPENCODE_DISABLE_AUTOUPDATE=true
+ENV OPENCODE_DISABLE_MODELS_FETCH=true
 
 EXPOSE 8787
 

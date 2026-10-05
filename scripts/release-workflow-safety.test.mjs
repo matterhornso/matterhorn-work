@@ -12,7 +12,7 @@ const microSandboxDockerfile = readFileSync("packaging/docker/Dockerfile.microsa
 const microSandboxEntrypoint = readFileSync("packaging/docker/microsandbox-entrypoint.sh", "utf8");
 const productionCompose = readFileSync("packaging/docker/docker-compose.yml", "utf8");
 const legacyDockerfile = readFileSync("packaging/docker/Dockerfile", "utf8");
-const engineChecksums = JSON.parse(readFileSync("packaging/docker/opencode-release-checksums.json", "utf8"));
+const engineDistribution = JSON.parse(readFileSync("patches/runtime/distribution.json", "utf8"));
 const constants = JSON.parse(readFileSync("constants.json", "utf8"));
 const appPackage = JSON.parse(readFileSync("apps/app/package.json", "utf8"));
 
@@ -159,32 +159,30 @@ assert.ok(
   "both agent jobs must use the repository-pinned engine installer",
 );
 for (const phrase of [
-  "curl --proto '=https' --tlsv1.2",
-  "ACTUAL_SHA256",
-  "OpenCode archive checksum verification failed",
-  "opencode-release-checksums.json",
-  "OPENCODE_DOWNLOAD_SHA256 is required",
+  "scripts/build-pinned-opencode.mjs",
+  "patches/runtime/distribution.json",
+  "opencode.provenance.json",
+  "Prebuilt runtime overrides are unavailable",
 ]) {
   assert.ok(pinnedEngineInstaller.includes(phrase), `pinned engine installer missing integrity policy: ${phrase}`);
 }
 const engineVersion = String(constants.opencodeVersion ?? "").replace(/^v/, "");
-assert.ok(engineChecksums[engineVersion], `checksums must cover the pinned engine version ${engineVersion}`);
-for (const asset of [
-  "opencode-darwin-arm64.zip",
-  "opencode-darwin-x64-baseline.zip",
-  "opencode-linux-arm64.tar.gz",
-  "opencode-linux-x64-baseline.tar.gz",
-]) {
-  assert.match(
-    engineChecksums[engineVersion][asset] ?? "",
-    /^[a-f0-9]{64}$/,
-    `checksums must include a SHA-256 for ${asset}`,
-  );
-}
+assert.equal(engineDistribution.version, engineVersion, "source distribution must match the runtime pin");
+assert.equal(engineDistribution.publishedArtifacts, false, "unpublished binary downloads must remain unavailable");
 assert.ok(
-  microSandboxDockerfile.includes("/usr/local/bin/install-pinned-opencode.sh"),
-  "micro-sandbox Docker builds must use the verified engine installer",
+  microSandboxDockerfile.includes("node scripts/build-pinned-opencode.mjs --output /out/opencode"),
+  "micro-sandbox Docker builds must use the maintained source builder",
 );
+for (const packagePath of ["apps/orchestrator/package.json", "apps/server/package.json"]) {
+  const pkg = JSON.parse(readFileSync(packagePath, "utf8"));
+  assert.ok(pkg.scripts?.["build:bin"], `${packagePath} must expose the micro-sandbox binary build`);
+  assert.ok(microSandboxDockerfile.includes(`--filter ${pkg.name}...`),
+    `micro-sandbox dependency installation must select the actual ${pkg.name} workspace`);
+  assert.ok(microSandboxDockerfile.includes(`pnpm --filter ${pkg.name} build:bin`),
+    `micro-sandbox binary build must select the actual ${pkg.name} workspace`);
+}
+assert.doesNotMatch(microSandboxDockerfile, /--filter openwork-(?:orchestrator|server)(?:\s|\.\.\.)/,
+  "micro-sandbox must not use removed package names");
 assert.doesNotMatch(
   microSandboxEntrypoint,
   /microsandbox-(?:host-)?token/,

@@ -1,4 +1,76 @@
-# OpenCode runtime compatibility experiments
+# Maintained OpenCode source distribution and compatibility experiments
+
+## Maintained source-build path
+
+`distribution.json` now pins the maintained `1.18.31-matterhorn.1` source
+distribution. Its HTTP SDK remains `1.18.31`: these patches change plugin hook
+identity, terminal preparation-error handling and local locks, not the HTTP API.
+The prior `.2`/`.3` binaries below remain experiments and are never copied into
+CI, images or installers.
+
+The build recipe verifies the exact upstream commit, all four patch SHA-256 values,
+the complete vendored model catalog and Bun `1.3.14`. The catalog is the full
+response downloaded from the official `https://models.dev/api.json` endpoint on
+2026-10-05 (226 providers, 8,388 models), not the empty synthetic fixture. Its
+original bytes, SHA-256 and MIT license are retained. The API does not identify
+a source commit; the manifest records the retrieval date and content hash,
+without claiming a repository revision for that response. Review a new catalog
+as a coordinated manifest update; builds never fetch a moving model catalog.
+
+From a checkout with Node, Git and exactly Bun `1.3.14` available:
+
+```sh
+node scripts/build-pinned-opencode.mjs --output /absolute/new/directory/opencode
+OPENCODE_INSTALL_DIR=/absolute/install/directory bash scripts/install-pinned-opencode.sh
+```
+
+The first command builds only; the second builds and installs. Both require
+public network access for immutable upstream source and frozen dependencies.
+The builder uses disposable HOME/XDG/source directories, drops inherited
+credentials and release flags, verifies and applies the four reviewed patches,
+keeps the upstream lockfile unchanged, runs package typecheck and prompt/lock
+tests, and builds the native target (x64 baseline where applicable). The prompt
+suite has one pre-existing skip. It intentionally excludes OpenCode's separate
+web UI: Matterhorn supplies its own client. Upstream release-upload mode is
+never enabled. The binary is accompanied by a provenance JSON file with its
+actual SHA-256, source/patch/catalog identities, and both licenses. Native and
+hosted acceptance are explicitly not claimed by the source-build receipt.
+
+The third, packaging-only patch keeps plugin auto-installation on the source
+package baseline `1.18.31` for the `matterhorn` channel, while the executable
+continues to report `1.18.31-matterhorn.1`. Without it, upstream would request a
+nonexistent `@opencode-ai/plugin@1.18.31-matterhorn.1`. Tests cover Matterhorn,
+ordinary upstream and local-development version behavior. Plugin installation
+is not disabled and the identity/lock-recovery patches are unchanged.
+
+The fourth packaging patch intrinsically blocks automatic and manual stock
+upgrades for the `matterhorn` channel, including all installation methods.
+Neither the default raw installer path nor an omitted environment flag can
+silently replace the maintained binary. A mocked source test verifies zero
+network/process calls, the ordinary upstream installation suite still runs,
+and the built executable must reject a manual upgrade with auto-update flags
+removed while retaining its exact SHA-256.
+
+Linux/macOS x64 and arm64 are supported build targets, not blanket acceptance
+claims. CI executes the unchanged 30-case native verifier on its actual Linux
+x64 and macOS arm64 outputs. The public-beta Linux image builds the same source
+recipe in a separate stage and runs the native verifier against the copied
+binary in the final runtime environment. The model catalog and auto-updates
+are frozen in the hosted image. Linux/container evidence must come from those
+actual executions; local Darwin results do not certify Linux PID namespaces.
+
+There are **no published prebuilt artifacts** for this distribution. No binary
+download URL or checksum is invented. The old checksum file is historical only.
+Desktop sidecar preparation and guided installation fail closed, and the
+orchestrator refuses an automatic stock-runtime download for this version.
+Desktop/macOS x64 cross-builds and Windows remain blocked until a maintained
+artifact path and per-platform native acceptance are supplied. A runtime owner
+must maintain the pinned source recipe, patch rebases and catalog refreshes;
+release owners must separately approve artifact publication and hosted rollout.
+No publishing, deployment, hosted provider acceptance or invoice reconciliation
+is performed by this recipe.
+
+## Historical local experiments
 
 This source patch carries the current user-message ID through the early message,
 compaction and system hooks used by Matterhorn's provider authorization. It is a
@@ -62,7 +134,8 @@ install/lock and plugin/MCP-auth groups pass 36 and 28 cases. See
 [commands, evidence and limits](../../qa-reports/launch/2026-10-05/RESULTS.md#local-orphan-lock-recovery-candidate).
 Use the isolated verifier below with this exact candidate path and expected
 version `.3`. It remains a synthetic-provider experiment, not a production
-artifact or hosted acceptance result. Release pins still refer to stock 1.18.31.
+artifact or hosted acceptance result. At that time release pins still referred
+to stock 1.18.31; the source-build path above supersedes that packaging state.
 
 ## Reproducing the isolated experiment
 
@@ -105,9 +178,9 @@ MATTERHORN_TEST_OPENCODE_VERSION=1.18.31-matterhorn-identity.2 \
 bun test apps/server/src/opencode-compaction-contract.e2e.test.ts
 ```
 
-The version override belongs only to this opt-in test harness. Repository runtime
-pins, production download URLs and checksums still refer to official OpenCode
-1.18.31 and have not been replaced with this experimental build.
+The version override belongs only to this opt-in test harness. No production
+download URL or checksum was replaced with this experimental build. The source
+distribution above builds fresh artifacts from reviewed inputs instead.
 
 ## Native release verification
 
@@ -134,9 +207,9 @@ PATH. Without a binary it reports metadata checks only, not native compatibility
 `MATTERHORN_REQUIRE_OPENCODE_BINARY=1` makes that absence fail. CI requires the
 binary and runs after dependency installation, Bun setup and Crypto App SDK
 build on Linux and macOS. A healthy endpoint or matching version no longer
-suffices. **The unchanged stock runtime pin still lacks the required identity
-contract, so release CI must remain blocked until a maintained compatible
-distribution and coordinated pins are supplied.** Do not waive the native test,
+suffices. **Stock 1.18.31 lacks the required identity contract; the maintained
+source distribution must pass this gate on the actual target platform before
+release.** Do not waive the native test,
 substitute the fixture binary as a release artifact, or call a metadata-only
 local safety pass a production-runtime pass.
 

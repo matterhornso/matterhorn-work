@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { findRuntimeBinary, verifyNativeRuntime } from "./verify-opencode-native-contract.mjs";
+import { verifyDistribution } from "./build-pinned-opencode.mjs";
 
 const readText = (path) => readFileSync(path, "utf8");
 const readJson = (path) => JSON.parse(readText(path));
@@ -9,13 +10,16 @@ const constants = readJson("constants.json");
 const upstream = readJson("upstream-compatibility.json");
 const pinnedVersion = String(constants.opencodeVersion ?? "").trim().replace(/^v/, "");
 const openworkVersion = String(constants.openworkUpstreamVersion ?? "").trim();
+const distribution = verifyDistribution();
 
-assert.match(pinnedVersion, /^\d+\.\d+\.\d+$/, "constants.json must pin an exact OpenCode version");
+assert.equal(pinnedVersion, distribution.version, "constants.json must pin the maintained runtime distribution");
 assert.match(openworkVersion, /^v\d+\.\d+\.\d+$/, "constants.json must pin an exact OpenWork upstream version");
 assert.equal(upstream.version, "matterhorn.upstream-compatibility.v1");
 assert.equal(upstream.openwork?.version, openworkVersion, "OpenWork compatibility baseline must match constants.json");
 assert.equal(upstream.opencode?.version, `v${pinnedVersion}`, "OpenCode compatibility baseline must match constants.json");
-assert.equal(upstream.opencode?.sdkVersion, pinnedVersion, "OpenCode SDK and runtime must remain paired");
+assert.equal(upstream.opencode?.sdkVersion, distribution.sdkVersion, "The unchanged HTTP SDK must match the source baseline");
+assert.equal(upstream.opencode?.commit, distribution.source.commit);
+assert.equal(upstream.opencode?.distributionManifest, "patches/runtime/distribution.json");
 assert.deepEqual(upstream.opencode?.requiredPluginHooks, [
   "chat.message",
   "experimental.chat.messages.transform",
@@ -39,21 +43,21 @@ for (const path of packagePaths) {
   const pkg = readJson(path);
   assert.equal(
     pkg.dependencies?.["@opencode-ai/sdk"],
-    pinnedVersion,
-    `${path} must use the exact SDK version paired with the runtime`,
+    distribution.sdkVersion,
+    `${path} must use the exact SDK version paired with the patched source baseline`,
   );
 }
 
 const dockerfile = readText("packaging/docker/Dockerfile.public-beta");
 assert.match(
   dockerfile,
-  new RegExp(`ARG OPENCODE_VERSION=${pinnedVersion.replaceAll(".", "\\.")}`),
-  "the public-beta image must default to the repository-pinned OpenCode version",
+  /node scripts\/build-pinned-opencode\.mjs --output \/out\/opencode/,
+  "the public-beta image must build the pinned compatible source distribution",
 );
 assert.match(
   dockerfile,
-  /bash scripts\/install-pinned-opencode\.sh/,
-  "the public-beta image must use the checksum-verifying installer",
+  /node scripts\/verify-opencode-native-contract\.mjs/,
+  "the public-beta image must execute native acceptance against its exact installed binary",
 );
 assert.doesNotMatch(
   dockerfile,
@@ -61,19 +65,8 @@ assert.doesNotMatch(
   "the public-beta image must not bypass the checksum-verifying installer",
 );
 
-const checksums = readJson("packaging/docker/opencode-release-checksums.json");
-for (const asset of [
-  "opencode-darwin-arm64.zip",
-  "opencode-darwin-x64-baseline.zip",
-  "opencode-linux-arm64.tar.gz",
-  "opencode-linux-x64-baseline.tar.gz",
-]) {
-  assert.match(
-    checksums[pinnedVersion]?.[asset] ?? "",
-    /^[a-f0-9]{64}$/,
-    `the pinned runtime must include a SHA-256 for ${asset}`,
-  );
-}
+assert.deepEqual(distribution.sourceBuildPlatforms, ["linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64"]);
+assert.equal(distribution.publishedArtifacts, false, "Source builds must not claim unpublished prebuilt artifacts exist");
 
 const runtimeConfig = readText("apps/server/src/managed-opencode-runtime-config.ts");
 for (const contract of [

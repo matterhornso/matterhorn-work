@@ -1,0 +1,111 @@
+diff --git a/packages/opencode/src/installation/index.ts b/packages/opencode/src/installation/index.ts
+--- a/packages/opencode/src/installation/index.ts
++++ b/packages/opencode/src/installation/index.ts
+@@ -174,6 +174,7 @@
+         }
+       }),
+       method: Effect.fn("Installation.method")(function* () {
++        if (InstallationChannel === "matterhorn") return "unknown"
+         if (process.execPath.includes(path.join(".opencode", "bin"))) return "curl" as Method
+         if (process.execPath.includes(path.join(".local", "bin"))) return "curl" as Method
+         const exec = process.execPath.toLowerCase()
+@@ -211,6 +212,7 @@
+         return "unknown" as Method
+       }),
+       latest: Effect.fn("Installation.latest")(function* (installMethod?: Method) {
++        if (InstallationChannel === "matterhorn") return InstallationVersion
+         const detectedMethod = installMethod || (yield* result.method())
+ 
+         if (detectedMethod === "brew") {
+@@ -266,6 +268,9 @@
+         return data.tag_name.replace(/^v/, "")
+       }, Effect.orDie),
+       upgrade: Effect.fn("Installation.upgrade")(function* (m: Method, target: string) {
++        if (InstallationChannel === "matterhorn") {
++          return yield* new UpgradeFailedError({ stderr: "This runtime is managed by Matterhorn. Update it through the maintained Matterhorn source distribution; stock OpenCode upgrades are disabled." })
++        }
+         let upgradeResult: { code: number; stdout: string; stderr: string } | undefined
+         switch (m) {
+           case "curl":
+diff --git a/packages/opencode/src/cli/upgrade.ts b/packages/opencode/src/cli/upgrade.ts
+--- a/packages/opencode/src/cli/upgrade.ts
++++ b/packages/opencode/src/cli/upgrade.ts
+@@ -2,10 +2,11 @@
+ import { AppRuntime } from "@/effect/app-runtime"
+ import { Flag } from "@opencode-ai/core/flag/flag"
+ import { Installation } from "@/installation"
+-import { InstallationVersion } from "@opencode-ai/core/installation/version"
++import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
+ import { GlobalBus } from "@/bus/global"
+ 
+ export async function upgrade() {
++  if (InstallationChannel === "matterhorn") return
+   const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal()))
+   if (config.autoupdate === false || Flag.OPENCODE_DISABLE_AUTOUPDATE) return
+   const method = await Installation.method()
+diff --git a/packages/opencode/src/cli/cmd/upgrade.ts b/packages/opencode/src/cli/cmd/upgrade.ts
+--- a/packages/opencode/src/cli/cmd/upgrade.ts
++++ b/packages/opencode/src/cli/cmd/upgrade.ts
+@@ -2,7 +2,7 @@
+ import { UI } from "../ui"
+ import * as prompts from "@clack/prompts"
+ import { Installation } from "../../installation"
+-import { InstallationVersion } from "@opencode-ai/core/installation/version"
++import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
+ 
+ export const UpgradeCommand = {
+   command: "upgrade [target]",
+@@ -22,6 +22,9 @@
+       })
+   },
+   handler: async (args: { target?: string; method?: string }) => {
++    if (InstallationChannel === "matterhorn") {
++      throw new Installation.UpgradeFailedError({ stderr: "This runtime is managed by Matterhorn. Update it through the maintained Matterhorn source distribution; stock OpenCode upgrades are disabled." })
++    }
+     UI.empty()
+     UI.println(UI.logo("  "))
+     UI.empty()
+diff --git a/packages/opencode/test/installation/matterhorn.test.ts b/packages/opencode/test/installation/matterhorn.test.ts
+new file mode 100644
+--- /dev/null
++++ b/packages/opencode/test/installation/matterhorn.test.ts
+@@ -0,0 +1,39 @@
++import { expect } from "bun:test"
++import { Effect, Layer } from "effect"
++import { HttpClient } from "effect/unstable/http"
++import { ChildProcessSpawner } from "effect/unstable/process"
++import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
++import { LayerNode } from "@opencode-ai/core/effect/layer-node"
++import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
++import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
++import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
++import { Installation } from "../../src/installation"
++import { testEffect } from "../lib/effect"
++
++let networkCalls = 0
++let processCalls = 0
++const http = HttpClient.make(() => {
++  networkCalls++
++  return Effect.die("Managed upgrades must not access the network")
++})
++const spawner = ChildProcessSpawner.make(() => {
++  processCalls++
++  return Effect.die("Managed upgrades must not spawn a package manager")
++})
++const spawnerNode = makeGlobalNode({ service: ChildProcessSpawner.ChildProcessSpawner,
++  layer: Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner), deps: [] })
++const layer = LayerNode.compile(Installation.node, [
++  [httpClient, Layer.succeed(HttpClient.HttpClient, http)], [CrossSpawnSpawner.node, spawnerNode],
++])
++testEffect(layer).effect("managed upgrades cannot fetch or execute stock installers", () => Effect.gen(function* () {
++  expect(InstallationChannel).toBe("matterhorn")
++  expect(yield* Installation.use.method()).toBe("unknown")
++  expect(yield* Installation.use.latest()).toBe(InstallationVersion)
++  const methods: Installation.Method[] = ["curl", "npm", "yarn", "pnpm", "bun", "brew", "scoop", "choco", "unknown"]
++  for (const method of methods) {
++    const error = yield* Effect.flip(Installation.use.upgrade(method, "9.9.9"))
++    expect(error).toBeInstanceOf(Installation.UpgradeFailedError)
++    expect(error.stderr).toContain("managed by Matterhorn")
++  }
++  expect([networkCalls, processCalls]).toEqual([0, 0])
++}))

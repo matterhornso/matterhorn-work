@@ -2227,6 +2227,9 @@ async function resolveVerifiedOpencodeReleaseAsset(
   version: string,
   assetName: string,
 ): Promise<{ url: string; sha256: string }> {
+  if (version.includes("-matterhorn.")) {
+    throw new Error("The maintained Matterhorn runtime is source-build only. Supply the source-built engine explicitly; no compatible prebuilt release is published, and stock OpenCode cannot be substituted.");
+  }
   const releaseUrl = `https://api.github.com/repos/anomalyco/opencode/releases/tags/v${encodeURIComponent(version)}`;
   const response = await fetch(releaseUrl, {
     headers: {

@@ -1,0 +1,30 @@
+{
+  "schema": "matterhorn.opencode-source-distribution.v1",
+  "version": "1.18.31-matterhorn.1",
+  "sdkVersion": "1.18.31",
+  "channel": "matterhorn",
+  "source": {
+    "repository": "https://github.com/anomalyco/opencode.git",
+    "commit": "014614d35b397775e5d397a490fc72368c894ec2",
+    "tag": "v1.18.31"
+  },
+  "bunVersion": "1.3.14",
+  "patches": [
+    { "file": "opencode-1.18.31-request-identity.patch", "sha256": "fe5ea43bb2fc4aba455fa85a8026426951e6caf27e993a464b50f50ef7c408eb" },
+    { "file": "opencode-1.18.31-lock-recovery.patch", "sha256": "676994e9a0cecc7dc0d46f9ccccfeab95ecdc78bf7fe048004595432f3b1f248" },
+    { "file": "opencode-1.18.31-distribution-version.patch", "sha256": "5bfc61a7b5576778c3e72ab255b03d92b169d92ea8e759b16f880e0ac0bc452e" },
+    { "file": "opencode-1.18.31-managed-upgrade.patch", "sha256": "6cf3692d12613607715a7909cc921d3307fcebdcdce0311cf990ce8a8f8425a5" }
+  ],
+  "catalog": {
+    "file": "models.dev-api.json",
+    "source": "https://models.dev/api.json",
+    "retrievedAt": "2026-10-05",
+    "sha256": "73a543d93e16c34651631db4f475793b35d532ffc062dc56c8bf43caea816161",
+    "providers": 226,
+    "models": 8388,
+    "license": "models.dev-LICENSE"
+  },
+  "sourceBuildPlatforms": ["linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64"],
+  "publishedArtifacts": false,
+  "hostedAcceptance": false
+}

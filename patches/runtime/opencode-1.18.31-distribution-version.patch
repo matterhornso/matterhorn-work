@@ -1,0 +1,87 @@
+diff --git a/packages/core/src/installation/version.ts b/packages/core/src/installation/version.ts
+--- a/packages/core/src/installation/version.ts
++++ b/packages/core/src/installation/version.ts
+@@ -1,3 +1,5 @@
++import pkg from "../../package.json"
++
+ declare global {
+   const OPENCODE_VERSION: string
+   const OPENCODE_CHANNEL: string
+@@ -6,3 +8,7 @@
+ export const InstallationVersion = typeof OPENCODE_VERSION === "string" ? OPENCODE_VERSION : "local"
+ export const InstallationChannel = typeof OPENCODE_CHANNEL === "string" ? OPENCODE_CHANNEL : "local"
+ export const InstallationLocal = InstallationChannel === "local"
++// A maintained binary version is not a published @opencode-ai/plugin version.
++// Keep dependency installation on this source baseline, without changing display identity.
++export const InstallationDependencyVersion =
++  InstallationChannel === "matterhorn" ? pkg.version : InstallationVersion
+diff --git a/packages/opencode/src/config/config.ts b/packages/opencode/src/config/config.ts
+--- a/packages/opencode/src/config/config.ts
++++ b/packages/opencode/src/config/config.ts
+@@ -11,7 +11,7 @@
+ import { Auth } from "../auth"
+ import { Env } from "../env"
+ import { applyEdits, modify } from "jsonc-parser"
+-import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
++import { InstallationDependencyVersion, InstallationLocal } from "@opencode-ai/core/installation/version"
+ import { existsSync } from "fs"
+ import { Account } from "@/account/account"
+ import { isRecord } from "@/util/record"
+@@ -454,7 +454,7 @@
+               add: [
+                 {
+                   name: "@opencode-ai/plugin",
+-                  version: InstallationLocal ? undefined : InstallationVersion,
++                  version: InstallationLocal ? undefined : InstallationDependencyVersion,
+                 },
+               ],
+             })
+diff --git a/packages/opencode/src/config/tui.ts b/packages/opencode/src/config/tui.ts
+--- a/packages/opencode/src/config/tui.ts
++++ b/packages/opencode/src/config/tui.ts
+@@ -16,7 +16,7 @@
+ import { CurrentWorkingDirectory } from "./tui-cwd"
+ import { ConfigPlugin } from "@/config/plugin"
+ import { TuiKeybind } from "@opencode-ai/tui/config/keybind"
+-import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
++import { InstallationDependencyVersion, InstallationLocal } from "@opencode-ai/core/installation/version"
+ import { makeRuntime } from "@opencode-ai/core/effect/runtime"
+ import { Filesystem } from "@/util/filesystem"
+ import { ConfigVariable } from "@/config/variable"
+@@ -239,7 +239,7 @@
+             add: [
+               {
+                 name: "@opencode-ai/plugin",
+-                version: InstallationLocal ? undefined : InstallationVersion,
++                version: InstallationLocal ? undefined : InstallationDependencyVersion,
+               },
+             ],
+           })
+diff --git a/packages/core/test/installation-version.test.ts b/packages/core/test/installation-version.test.ts
+new file mode 100644
+--- /dev/null
++++ b/packages/core/test/installation-version.test.ts
+@@ -0,0 +1,23 @@
++import { expect, test } from "bun:test"
++
++for (const [channel, version, dependency, local] of [
++  ["matterhorn", "1.18.31-matterhorn.1", "1.18.31", false],
++  ["latest", "1.18.31", "1.18.31", false],
++  ["local", "local", "local", true],
++]) {
++  test(`installation dependency version remains correct for ${channel}`, async () => {
++    const url = new URL("../src/installation/version.ts", import.meta.url).href
++    const script = `globalThis.OPENCODE_CHANNEL = ${JSON.stringify(channel)};
++      globalThis.OPENCODE_VERSION = ${JSON.stringify(version)};
++      const value = await import(${JSON.stringify(url)});
++      console.log(JSON.stringify([value.InstallationVersion, value.InstallationDependencyVersion, value.InstallationLocal]));`
++    const proc = Bun.spawn([process.execPath, "--eval", script], { stdout: "pipe", stderr: "pipe" })
++    const [code, stdout, stderr] = await Promise.all([
++      proc.exited, new Response(proc.stdout).text(), new Response(proc.stderr).text(),
++    ])
++    expect(stderr).toBe("")
++    expect(code).toBe(0)
++    expect(JSON.parse(stdout)).toEqual([version, dependency, local])
++  })
++}
++

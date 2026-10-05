@@ -1,7 +1,22 @@
+FROM node:22-bookworm-slim AS opencode-builder
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates curl git unzip \
+  && corepack enable \
+  && corepack prepare pnpm@10.27.0 --activate \
+  && pnpm --allow-build=bun add --global --global-dir /opt/runtime-toolchain --global-bin-dir /usr/local/bin bun@1.3.14 \
+  && test "$(bun --version)" = "1.3.14" \
+  && rm -rf /var/lib/apt/lists/*
+WORKDIR /build
+COPY scripts/build-pinned-opencode.mjs /build/scripts/build-pinned-opencode.mjs
+COPY patches/runtime /build/patches/runtime
+RUN mkdir -p /out && chown node:node /out
+USER node
+RUN node scripts/build-pinned-opencode.mjs --output /out/opencode
+
 FROM node:22-bookworm-slim AS runtime
 
 ARG BUN_VERSION=1.3.11
-ARG OPENCODE_VERSION=1.18.31
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl git gosu tar unzip \
@@ -16,9 +31,13 @@ RUN pnpm install --frozen-lockfile --ignore-scripts --prefer-offline \
   && pnpm --dir packages/crypto-app-sdk build \
   && pnpm store prune
 
-RUN OPENCODE_VERSION="${OPENCODE_VERSION}" \
-  OPENCODE_INSTALL_DIR=/usr/local/bin \
-  bash scripts/install-pinned-opencode.sh
+COPY --from=opencode-builder /out/opencode /usr/local/bin/opencode
+COPY --from=opencode-builder /out/opencode.provenance.json /usr/local/share/matterhorn/opencode.provenance.json
+COPY --from=opencode-builder /out/opencode.LICENSE /usr/local/share/matterhorn/opencode.LICENSE
+COPY --from=opencode-builder /out/opencode.models.dev-LICENSE /usr/local/share/matterhorn/opencode.models.dev-LICENSE
+RUN gosu node node scripts/verify-opencode-native-contract.mjs \
+  --binary /usr/local/bin/opencode \
+  --expected-version "$(node -p 'require("./constants.json").opencodeVersion.replace(/^v/, "")')"
 
 RUN mkdir -p /data/matterhorn /data/workspace /data/opencode/xdg/data /data/opencode/xdg/state /home/node/.config \
   && chown -R node:node /app /data /home/node
@@ -27,6 +46,8 @@ ENV NODE_ENV=production \
   OPENWORK_HOST=0.0.0.0 \
   OPENWORK_MANAGE_OPENCODE=1 \
   OPENWORK_OPENCODE_BIN=/usr/local/bin/opencode \
+  OPENCODE_DISABLE_AUTOUPDATE=true \
+  OPENCODE_DISABLE_MODELS_FETCH=true \
   OPENWORK_LOG_FORMAT=json \
   XDG_DATA_HOME=/data/opencode/xdg/data \
   XDG_STATE_HOME=/data/opencode/xdg/state \
