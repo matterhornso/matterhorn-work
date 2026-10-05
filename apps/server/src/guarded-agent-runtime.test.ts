@@ -1308,6 +1308,38 @@ describe("guarded agent runtime transport", () => {
     runtime.close();
   });
 
+  for (const restart of [false, true]) {
+    for (const cancelled of [false, true]) {
+      test(`late completion preserves terminal outcome and cumulative usage (restart=${restart}, cancelled=${cancelled})`, async () => {
+        const path = join(dataDir, `late-completion-${restart}-${cancelled}.db`);
+        let runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+        const workspaceId = `ws_late_${restart}_${cancelled}`;
+        const sessionId = `ses_late_${restart}_${cancelled}`;
+        try {
+          const accepted = await runtime.acceptPrompt({ workspaceId, sessionId,
+            parts: [{ type: "text", text: "Read public Sui balance" }], providerId: "cudos",
+            modelId: "asi1-mini", agentId: "matterhorn-sui", executionMode: "work" });
+          const report = { runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!, runId: accepted.runId };
+          const status = cancelled ? "cancelled" : "success";
+          if (cancelled) await runtime.cancelSessionRun({ workspaceId, sessionId });
+          else await runtime.completeRun({ ...report, status, usage: { inputTokens: 100, outputTokens: 23 } });
+          const before = await runtime.receipts.get(workspaceId, accepted.runId);
+          if (restart) { runtime.close(); runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path)); }
+          await runtime.completeRun({ ...report, status: "success", usage: { inputTokens: 400, outputTokens: 73 } });
+          await runtime.completeRun({ ...report, status: "error", usage: { inputTokens: 50, outputTokens: 10 } });
+          const after = await runtime.receipts.get(workspaceId, accepted.runId);
+          expect(after).toMatchObject({ status, completedAt: before?.completedAt, responseDurationMs: before?.responseDurationMs,
+            usage: { inputTokens: 400, outputTokens: 73 } });
+          expect(after?.capabilities).toEqual(before?.capabilities);
+          expect(runtime.capabilities.activeRun(sessionId)).toBeNull();
+          const reloaded = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+          try { expect(await reloaded.receipts.get(workspaceId, accepted.runId)).toEqual(after); }
+          finally { reloaded.close(); }
+        } finally { runtime.close(); }
+      });
+    }
+  }
+
   test("refuses a mismatched or missing receipt index and revokes remaining authority", async () => {
     for (const variant of ["missing", "hash", "workspace"]) {
       const path = join(dataDir, `completion-index-${variant}.db`);

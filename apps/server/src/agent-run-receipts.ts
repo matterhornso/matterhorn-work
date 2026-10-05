@@ -260,18 +260,24 @@ export class MatterhornAgentRunReceiptStore {
     const receipt = this.latest.get(input.runId);
     if (!receipt) return;
     const now = input.now ?? new Date();
-    receipt.status = input.status;
-    receipt.completedAt = now.toISOString();
-    receipt.responseDurationMs = Math.max(0, now.getTime() - Date.parse(receipt.startedAt));
+    // The first terminal outcome closes execution. A delayed usage report is
+    // not a new run or permission to turn a cancelled/error run into success.
+    if (receipt.status === "pending") {
+      receipt.status = input.status;
+      receipt.completedAt = now.toISOString();
+      receipt.responseDurationMs = Math.max(0, now.getTime() - Date.parse(receipt.startedAt));
+    }
     if (input.usage) {
+      // Runtime reports are cumulative snapshots without revision ordering.
+      // Accept later observed usage, but never subtract on an older replay.
       receipt.usage = {
         ...receipt.usage,
-        inputTokens: Math.max(0, input.usage.inputTokens ?? receipt.usage.inputTokens),
-        outputTokens: Math.max(0, input.usage.outputTokens ?? receipt.usage.outputTokens),
-        reasoningTokens: Math.max(0, input.usage.reasoningTokens ?? receipt.usage.reasoningTokens),
-        cacheReadTokens: Math.max(0, input.usage.cacheReadTokens ?? receipt.usage.cacheReadTokens),
-        cacheWriteTokens: Math.max(0, input.usage.cacheWriteTokens ?? receipt.usage.cacheWriteTokens),
-        estimatedCostUsd: Math.max(0, input.usage.estimatedCostUsd ?? receipt.usage.estimatedCostUsd),
+        inputTokens: Math.max(receipt.usage.inputTokens, input.usage.inputTokens ?? 0),
+        outputTokens: Math.max(receipt.usage.outputTokens, input.usage.outputTokens ?? 0),
+        reasoningTokens: Math.max(receipt.usage.reasoningTokens, input.usage.reasoningTokens ?? 0),
+        cacheReadTokens: Math.max(receipt.usage.cacheReadTokens, input.usage.cacheReadTokens ?? 0),
+        cacheWriteTokens: Math.max(receipt.usage.cacheWriteTokens, input.usage.cacheWriteTokens ?? 0),
+        estimatedCostUsd: Math.max(receipt.usage.estimatedCostUsd, input.usage.estimatedCostUsd ?? 0),
       };
     }
     if (input.memoryWrittenIds) receipt.memory.writtenIds = [...new Set(input.memoryWrittenIds)].sort();

@@ -23,6 +23,7 @@ for (const { route, replacement, throttle } of [
   { route: "chat-stop-provider", replacement: false },
   { route: "chat-tool-stop-provider", replacement: false },
   { route: "chat-stop-stream", replacement: false },
+  { route: "chat-replay", replacement: false }, { route: "chat-replay-restart", replacement: false },
 ]) {
 test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves request identity: ${route}, replacement=${replacement}, throttle=${Boolean(throttle)}`, async () => {
   const binary = process.env.MATTERHORN_TEST_OPENCODE_BIN;
@@ -34,6 +35,7 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
   let provider: ReturnType<typeof Bun.serve> | undefined;
   let control: ReturnType<typeof Bun.serve> | undefined;
   let gateway: Awaited<ReturnType<typeof startServer>> | undefined;
+  let gatewayConfig: ServerConfig | undefined;
   const providerId = route === "contract" ? "fixture" : "ollama";
   const chat = route.startsWith("chat");
   const tool = route.startsWith("chat-tool");
@@ -63,6 +65,9 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
   const eventAbort = new AbortController();
   let eventRead: Promise<void> | undefined;
   let eventDiagnostic = "";
+  let completionBody = "";
+  let completedRun = () => {};
+  const completionRecorded = new Promise<void>(resolve => { completedRun = resolve; });
   const waitFor = async (promise: Promise<void>) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -107,6 +112,10 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
           headers: { "content-type": "application/json", "x-matterhorn-agent-runtime-secret": "disposable-compaction-control-key-at-least-32-bytes" },
           body: forwardedBody });
         if (holdOld) { delayedStatus = response.status; delayedBody = await response.clone().json(); checkedOld(); }
+        if (path === "/internal/agent-runs/complete" && response.ok) {
+          completionBody = forwardedBody;
+          completedRun();
+        }
         if (!response.ok) controlFailures.push(`${path}: ${await response.clone().text()}`);
         return response;
       }
@@ -245,6 +254,7 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
         logFormat: "pretty", logRequests: false, reloadWatchers: false,
       };
       gateway = await startServer(config);
+      gatewayConfig = config;
     }
     const session = await call("/session", { title: "Compaction contract fixture" });
     await call(`/session/${session.id}/message`, {
@@ -346,7 +356,7 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
           } while (Date.now() < deadline);
           expect(items).toHaveLength(1);
           expect(items[0].runId).toBe(accepted.runId);
-          expect(items[0].status).toMatch(/^(cancelled|error)$/);
+          expect(items[0].status).toBe("cancelled");
           const usage = await fetch(`${base}/workspace/ws_contract/model-usage/status`, { headers: auth });
           expect((await usage.json()).status).toMatchObject({ pendingRequests: 0,
             monthly: { usedTokens: 0, reservedTokens: 0 } });
@@ -408,6 +418,37 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
         expect(providerCalls).toBe(throttle || tool ? 2 : 1);
         expect(controlFailures).toHaveLength(replacement ? 1 : 0);
         expect(claims).toBe(0);
+        if (route.startsWith("chat-replay")) {
+          await waitFor(completionRecorded);
+          const report: unknown = JSON.parse(completionBody);
+          if (!report || typeof report !== "object" || Array.isArray(report)) throw new Error("Missing native completion report");
+          const original = items.find((item: { runId: string }) => item.runId === accepted.runId);
+          if (route === "chat-replay-restart") {
+            if (!gatewayConfig) throw new Error("Missing disposable gateway configuration");
+            await gateway.stop();
+            gateway = await startServer(gatewayConfig);
+          }
+          const replayBase = `http://127.0.0.1:${gateway.port}`;
+          // Do not prime the restarted gateway's receipt cache before replay.
+          for (const body of [report, { ...report, status: "error", usage: { inputTokens: 1, outputTokens: 1 } }, report]) {
+            const replay = await fetch(`${replayBase}/internal/agent-runs/complete`, {
+              method: "POST", headers: { "content-type": "application/json",
+                "x-matterhorn-agent-runtime-secret": "disposable-compaction-control-key-at-least-32-bytes" },
+              body: JSON.stringify(body), signal: AbortSignal.timeout(10000),
+            });
+            expect(replay.status, await replay.text()).toBe(200);
+          }
+          const replayed = await fetch(`${replayBase}/workspace/ws_contract/agent-run-receipts?sessionId=${session.id}`, { headers: auth });
+          expect(replayed.status).toBe(200);
+          expect((await replayed.json()).items).toEqual([expect.objectContaining({ runId: accepted.runId,
+            status: "success", completedAt: original.completedAt, responseDurationMs: original.responseDurationMs,
+            usage: original.usage, capabilities: original.capabilities })]);
+          const usage = await fetch(`${replayBase}/workspace/ws_contract/model-usage/status`, { headers: auth });
+          expect(usage.status).toBe(200);
+          expect((await usage.json()).status).toMatchObject({ pendingRequests: 0,
+            monthly: { usedTokens: 473, reservedTokens: 0 } });
+          expect(providerCalls).toBe(1);
+        }
         return;
       }
       const path = route === "compact" ? `/workspace/ws_contract/sessions/${session.id}/compact`

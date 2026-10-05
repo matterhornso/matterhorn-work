@@ -159,6 +159,14 @@ memory ids, capability decisions, action hashes, and public chain receipt refere
 They never contain raw prompts, file names, file identifiers, unrestricted tool output,
 secrets, signatures, private keys, wallet exports, or bearer capabilities.
 
+The first terminal receipt outcome and completion time remain fixed. Authenticated
+late completion reports can increase observed cumulative usage, but cannot reduce
+it, change cancellation/error into success, or extend the run's duration. A replay
+after backend restart still verifies the sealed receipt index and persisted hash
+chain before updating the receipt. These counters are runtime observations and
+estimated cost, not provider invoices or a mechanism for downward corrections.
+The separate usage ledger controls reservations and charged allowance.
+
 Receipts are created in every guarded mode, including `off`, then written to
 date-segmented, hash-chained workspace storage and expired by the daily retention
 job after 365 days. Workspace purge deletes engine sessions, notes, outputs, memories,

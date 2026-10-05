@@ -79,13 +79,15 @@ checksums, and update installers plus compatibility/readiness checks together.
 Repeat native ordinary-chat, tools, cancellation, restart and compaction tests
 against those exact artifacts. The Darwin-only fixture build is not that release.
 
-The local native fixture currently covers 19 cases: nine compaction cases and
-ten ordinary-chat, file-tool, retry, replacement and Stop cases. Cancellation
+The local native fixture currently covers 21 cases: nine compaction cases and
+twelve ordinary-chat, file-tool, retry, replacement, Stop and completion-replay cases. Cancellation
 now covers both early authorization boundaries, a received provider request,
 a second provider call after a completed tool step, and an observed text delta
-before final usage. See the [current QA evidence](../../qa-reports/launch/2026-10-05/RESULTS.md#cancellation-after-provider-dispatch).
-Native restart and late-completion replay still need acceptance; the local
-checks are not a substitute for deployment artifacts or provider invoice evidence.
+before final usage. Completion replay covers the existing gateway and a backend
+restart preserving disposable data, while the native engine remains running.
+See the [current QA evidence](../../qa-reports/launch/2026-10-05/RESULTS.md#late-completion-reports-and-backend-restart).
+Mid-request backend restart and native engine restart still need acceptance;
+these checks do not establish production artifacts or provider invoice accuracy.
 
 The reservation correction preserves a hold after any provider-system release,
 including a lost acknowledgement or later HTTP 400. It cancels only after this

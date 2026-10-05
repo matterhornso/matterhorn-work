@@ -50,6 +50,29 @@ function publicPreflight(workspaceId: string, sessionId: string) {
 }
 
 describe("guarded agent run receipts", () => {
+  const terminalStatuses: Array<Parameters<MatterhornAgentRunReceiptStore["complete"]>[0]["status"]> = ["success", "partial", "cancelled", "error"];
+  for (const status of terminalStatuses) {
+    test(`late usage preserves ${status} outcome and completion time across reload`, async () => {
+      const store = new MatterhornAgentRunReceiptStore();
+      const workspaceId = `ws_receipt_late_${status}`;
+      const runId = `run_receipt_late_${status}`;
+      const startedAt = new Date();
+      const completedAt = new Date(startedAt.getTime() + 100);
+      const replayAt = new Date(startedAt.getTime() + 24 * 60 * 60 * 1000);
+      await store.start({ runId, workspaceId, sessionId: "ses_late", now: startedAt, consentUsed: false,
+        preflight: publicPreflight(workspaceId, "ses_late") });
+      const initial = { inputTokens: 100, outputTokens: 23, reasoningTokens: 5, cacheReadTokens: 8, cacheWriteTokens: 3, estimatedCostUsd: 0.02 };
+      const increased = Object.fromEntries(Object.entries(initial).map(([key, value]) => [key, value * 2]));
+      await store.complete({ runId, status, now: completedAt, usage: initial });
+      await store.complete({ runId, status: "success", now: replayAt, usage: increased });
+      await store.complete({ runId, status: "error", now: replayAt, usage: initial });
+      const expected = { status, completedAt: completedAt.toISOString(), responseDurationMs: 100, usage: increased };
+      expect(await store.get(workspaceId, runId)).toMatchObject(expected);
+      const reloaded = new MatterhornAgentRunReceiptStore();
+      expect(await reloaded.get(workspaceId, runId)).toMatchObject(expected);
+    });
+  }
+
   test("authenticates the pending receipt index used by guarded dispatch", async () => {
     const state = new MatterhornGuardedRuntimeStateStore(join(root, "receipt-index-authority.db"));
     const authority = testDurableStateAuthority();
