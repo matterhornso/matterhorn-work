@@ -26,6 +26,10 @@ for (const { route, replacement, throttle } of [
   { route: "chat-replay", replacement: false }, { route: "chat-replay-restart", replacement: false },
   { route: "chat-restart", replacement: "messages" }, { route: "chat-restart", replacement: "system" },
   { route: "chat-restart-provider", replacement: false },
+  { route: "chat-engine-restart", replacement: false },
+  { route: "chat-engine-crash-provider", replacement: false },
+  { route: "chat-engine-lost-completion", replacement: false },
+  { route: "chat-engine-lost-ack", replacement: false },
 ]) {
 test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves request identity: ${route}, replacement=${replacement}, throttle=${Boolean(throttle)}`, async () => {
   const binary = process.env.MATTERHORN_TEST_OPENCODE_BIN;
@@ -89,6 +93,12 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
         if (!gateway) return new Response(null, { status: 503 });
         const path = new URL(request.url).pathname;
         const forwardedBody = await request.text();
+        if (route === "chat-engine-lost-completion" && path === "/internal/agent-runs/complete") {
+          completionBody = forwardedBody;
+          reachedOld();
+          await oldGate;
+          return Response.json({ code: "fixture_completion_delivery_lost" }, { status: 503 });
+        }
         // Stop must revoke gateway authority independently of a delayed
         // runtime completion notification.
         if (route === "chat-stop" && path === "/internal/agent-runs/complete") await newGate;
@@ -117,6 +127,11 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
         if (path === "/internal/agent-runs/complete" && response.ok) {
           completionBody = forwardedBody;
           completedRun();
+          if (route === "chat-engine-lost-ack") {
+            reachedOld();
+            await oldGate;
+            return Response.json({ code: "fixture_completion_acknowledgement_lost" }, { status: 503 });
+          }
         }
         if (!response.ok) controlFailures.push(`${path}: ${await response.clone().text()}`);
         return response;
@@ -144,7 +159,7 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
         reachedOld();
         await newGate;
       }
-      if ((stopProvider || route === "chat-restart-provider") && providerCalls === (tool ? 2 : 1)) {
+      if ((stopProvider || route === "chat-restart-provider" || route === "chat-engine-crash-provider") && providerCalls === (tool ? 2 : 1)) {
         reachedOld();
         await oldGate;
       }
@@ -152,7 +167,7 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
         return Response.json({ error: { message: "Synthetic rate limit", type: "rate_limit_error" } },
           { status: 429, headers: { "retry-after": "0" } });
       }
-      if (providerCalls > (throttle || tool ? 2 : 1)) return new Response("Unexpected additional inference", { status: 429 });
+      if (providerCalls > (throttle || tool || route.startsWith("chat-engine-") ? 2 : 1)) return new Response("Unexpected additional inference", { status: 429 });
       const common = { id: "fixture_compaction", object: "chat.completion.chunk", created: 1, model: "fixture" };
       if (tool && providerCalls === 1) {
         const chunks = [
@@ -188,7 +203,10 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
       return new Response(chunks.map(chunk => `data: ${JSON.stringify(chunk)}\n\n`).join("") + "data: [DONE]\n\n",
         { headers: { "content-type": "text/event-stream" } });
     } });
-    engine = spawn(binary, ["serve", "--hostname", "127.0.0.1", "--port", "0"], {
+    let output = "";
+    const startEngine = async (port = 0) => {
+    if (!control || !provider) throw new Error("Missing disposable runtime dependencies");
+    engine = spawn(binary, ["serve", "--hostname", "127.0.0.1", "--port", String(port)], {
       cwd: workspace, stdio: "pipe", env: {
         PATH: process.env.PATH,
         XDG_CONFIG_HOME: join(root, "config"), XDG_DATA_HOME: join(root, "data"), XDG_CACHE_HOME: join(root, "cache"),
@@ -209,8 +227,8 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
         }),
       },
     });
-    let output = "";
-    const url = await new Promise<string>((resolve, reject) => {
+    output = "";
+    return new Promise<string>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error(`Isolated runtime startup timeout: ${output}`)), 15000);
       const observe = (chunk: Buffer) => {
         output = `${output}${chunk.toString()}`.slice(-8192);
@@ -222,6 +240,17 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
       engine?.once("error", () => { clearTimeout(timer); reject(new Error("Isolated runtime could not start")); });
       engine?.once("exit", code => { clearTimeout(timer); reject(new Error(`Isolated runtime exited with ${code}: ${output}`)); });
     });
+    };
+    const url = await startEngine();
+    const restartEngine = async (abrupt: boolean) => {
+      if (!engine) throw new Error("Missing disposable native engine");
+      if (abrupt) {
+        const exited = new Promise<void>(resolve => engine?.once("exit", () => resolve()));
+        engine.kill("SIGKILL");
+        await waitFor(exited);
+      } else await createManagedProcessClose(engine).close();
+      expect(await startEngine(Number(new URL(url).port))).toBe(url);
+    };
     const headers = { authorization: `Basic ${Buffer.from("fixture:disposable-compaction-contract").toString("base64")}`, "content-type": "application/json" };
     const call = async (path: string, body?: unknown) => {
       const response = await fetch(`${url}${path}?directory=${encodeURIComponent(workspace)}`, {
@@ -310,6 +339,75 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
         const sent = await sendChat();
         let accepted = await sent.json();
         expect(sent.status, JSON.stringify({ accepted, controlFailures, runtimeLog: output })).toBe(202);
+        if (route === "chat-engine-lost-completion" || route === "chat-engine-lost-ack") {
+          await waitFor(oldReached);
+          await restartEngine(true);
+          releaseOld();
+          const history = await call(`/session/${session.id}/message`);
+          expect(history.at(-1)?.info, JSON.stringify(history)).toMatchObject({ role: "assistant", finish: "stop",
+            time: { completed: expect.any(Number) }, tokens: { input: 300, output: 173 } });
+          const usage = await fetch(`${base}/workspace/ws_contract/model-usage/status`, { headers: auth });
+          expect(usage.status).toBe(200);
+          expect((await usage.json()).status).toMatchObject({ pendingRequests: 0,
+            monthly: { usedTokens: 473, reservedTokens: 0 } });
+          const deadline = Date.now() + 3000;
+          let items: Array<{ runId: string; status: string }> = [];
+          do {
+            const receipts = await fetch(`${base}/workspace/ws_contract/agent-run-receipts?sessionId=${session.id}`, { headers: auth });
+            expect(receipts.status).toBe(200);
+            items = (await receipts.json()).items;
+            if (items.some(item => item.runId === accepted.runId && item.status !== "pending")) break;
+            await new Promise(resolve => setTimeout(resolve, 100));
+          } while (Date.now() < deadline);
+          expect(providerCalls).toBe(1);
+          expect(items, JSON.stringify({ history, completionBody, controlFailures })).toEqual([
+            expect.objectContaining({ runId: accepted.runId, status: "success" }),
+          ]);
+          return;
+        }
+        if (route === "chat-engine-crash-provider") {
+          await waitFor(oldReached);
+          const interruptedRunId = accepted.runId;
+          await restartEngine(true);
+          releaseOld();
+          const interruptedHistory = await call(`/session/${session.id}/message`);
+          expect(JSON.stringify(interruptedHistory)).toContain("synthetic project color is blue");
+          expect(providerCalls).toBe(1);
+          // An explicit user Stop is the recovery action, not replaying the
+          // interrupted provider request or asserting that it cost zero.
+          const stopped = await fetch(`${base}/w/ws_contract/opencode/session/${session.id}/abort`, {
+            method: "POST", headers: auth, body: "{}", signal: AbortSignal.timeout(10000),
+          });
+          expect(stopped.status, await stopped.text()).toBe(200);
+          const retry = await sendChat();
+          accepted = await retry.json();
+          expect(retry.status, JSON.stringify({ accepted, controlFailures })).toBe(202);
+          expect(accepted.runId).not.toBe(interruptedRunId);
+          const deadline = Date.now() + 12000;
+          let history = await call(`/session/${session.id}/message`);
+          while (history.at(-1)?.info.finish !== "stop" && Date.now() < deadline) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+            history = await call(`/session/${session.id}/message`);
+          }
+          expect(history.at(-1)?.info, JSON.stringify({ history, controlFailures })).toMatchObject({
+            role: "assistant", finish: "stop", tokens: { input: 300, output: 173 },
+          });
+          await waitFor(completionRecorded);
+          for (let i = 0; i < 2; i++) {
+            const usage = await fetch(`${base}/workspace/ws_contract/model-usage/status`, { headers: auth });
+            expect(usage.status).toBe(200);
+            expect((await usage.json()).status).toMatchObject({ pendingRequests: 1,
+              monthly: { usedTokens: 473, reservedTokens: 1000 } });
+          }
+          const receipts = await fetch(`${base}/workspace/ws_contract/agent-run-receipts?sessionId=${session.id}`, { headers: auth });
+          expect(receipts.status).toBe(200);
+          expect((await receipts.json()).items).toEqual(expect.arrayContaining([
+            expect.objectContaining({ runId: interruptedRunId, status: "cancelled" }),
+            expect.objectContaining({ runId: accepted.runId, status: "success" }),
+          ]));
+          expect(providerCalls).toBe(2);
+          return;
+        }
         if (route.startsWith("chat-restart")) {
           await waitFor(oldReached);
           if (!gatewayConfig) throw new Error("Missing disposable gateway configuration");
@@ -455,6 +553,35 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
         expect(providerCalls).toBe(throttle || tool ? 2 : 1);
         expect(controlFailures).toHaveLength(replacement ? 1 : 0);
         expect(claims).toBe(0);
+        if (route === "chat-engine-restart") {
+          await waitFor(completionRecorded);
+          await restartEngine(false);
+          expect(await call(`/session/${session.id}/message`)).toEqual(history);
+          expect(providerCalls).toBe(1);
+          const originalRunId = accepted.runId;
+          const retry = await sendChat();
+          accepted = await retry.json();
+          expect(retry.status, JSON.stringify({ accepted, controlFailures })).toBe(202);
+          expect(accepted.runId).not.toBe(originalRunId);
+          const deadline = Date.now() + 12000;
+          let resumed = await call(`/session/${session.id}/message`);
+          while ((resumed.length <= history.length || resumed.at(-1)?.info.finish !== "stop") && Date.now() < deadline) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+            resumed = await call(`/session/${session.id}/message`);
+          }
+          expect(resumed.length).toBe(history.length + 2);
+          expect(resumed.at(-1)?.info, JSON.stringify({ resumed, controlFailures })).toMatchObject({
+            role: "assistant", finish: "stop", tokens: { input: 300, output: 173 },
+          });
+          expect(resumed.slice(0, history.length)).toEqual(history);
+          for (let i = 0; i < 2; i++) {
+            const usage = await fetch(`${base}/workspace/ws_contract/model-usage/status`, { headers: auth });
+            expect(usage.status).toBe(200);
+            expect((await usage.json()).status).toMatchObject({ pendingRequests: 0,
+              monthly: { usedTokens: 946, reservedTokens: 0 } });
+          }
+          expect(providerCalls).toBe(2);
+        }
         if (route.startsWith("chat-replay")) {
           await waitFor(completionRecorded);
           const report: unknown = JSON.parse(completionBody);

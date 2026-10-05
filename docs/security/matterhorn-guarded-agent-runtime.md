@@ -167,6 +167,16 @@ chain before updating the receipt. These counters are runtime observations and
 estimated cost, not provider invoices or a mechanism for downward corrections.
 The separate usage ledger controls reservations and charged allowance.
 
+Known release blocker: if the native engine dies after persisting a terminal
+assistant message but before delivering its completion report, the security
+receipt can stay pending. Plugin usage/binding maps survive a rejected response
+only within the same process; there is no verified durable delivery mechanism.
+Native-history billing reconciliation does not finalize that receipt. A report
+already committed by Matterhorn survives a lost acknowledgement. Do not treat
+a settled charge as a substitute for exact run-bound completion evidence or
+re-execute the model to repair the receipt. See the
+[native crash reproduction](../../qa-reports/launch/2026-10-05/RESULTS.md#native-engine-restart-and-lost-completion-delivery).
+
 The authenticated receipt writer commits a sealed append intent before file IO.
 It binds the prior index, original file prefix and exact intended receipt bytes.
 After a partial append or failed index transaction, recovery checks those bindings,
