@@ -2375,7 +2375,10 @@ async function fetchFixedEndpoint(input: Parameters<typeof fetch>[0], init: Para
 }
 
 function fetchOpencodeRuntime(input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): Promise<Response> {
-  return fetchFixedEndpoint(input, init, { code: "opencode_redirect_blocked",
+  const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+  // Do not replay runtime mutations on a stale pooled connection: a lost
+  // acknowledgement can follow accepted work, including compaction or commands.
+  return fetchFixedEndpoint(input, { ...init, ...(!["GET", "HEAD"].includes(method) ? { keepalive: false } : {}) }, { code: "opencode_redirect_blocked",
     message: "The agent runtime redirected this request. Ask the workspace owner to check its configured URL." });
 }
 
@@ -3051,6 +3054,17 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
     providerSystem: GuardedProviderSystemContext;
   } | null = null;
   let completeGuardedRunAfterResponse = false;
+  const reconcileUsage = () => {
+    if (input.modelUsageStore && usageSubject && usageReservationId && workspace) {
+      scheduleModelUsageReconciliation({
+        config: input.config,
+        workspace,
+        store: input.modelUsageStore,
+        subject: usageSubject,
+        sessionId: decodeURIComponent(normalizeOpencodeProxyPath(proxyPath).split("/")[2] ?? ""),
+      });
+    }
+  };
   if (isSessionPromptProxyRequest(method, proxyPath)) {
     let payload: Record<string, unknown>;
     try {
@@ -3229,6 +3243,7 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
           });
           usageReservationId = usage.reservation.reservationId;
           usageSubject = usage.subject;
+          input.modelUsageStore.bindUserMessage(usageReservationId, guardedPromptMessageId);
         } catch (error) {
           if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
           throw error;
@@ -3319,6 +3334,7 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
           });
           usageReservationId = usage.reservation.reservationId;
           usageSubject = usage.subject;
+          input.modelUsageStore.bindUserMessage(usageReservationId, userMessageId);
         }
         input.sessionPreparations.assertActive(input.request);
         await abortWorkspaceSessionBeforeReplacement(input.config, workspace, sessionId);
@@ -3358,23 +3374,15 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
       headers,
       body,
     }).then((upstream) => {
-      if (!upstream.ok) {
+      if (upstream.status >= 400 && upstream.status < 500) {
         input.modelUsageStore?.cancel(usageReservationId);
         if (guardedRunId) void input.guardedRuntime.failRun(guardedRunId);
         return;
       }
-      if (input.modelUsageStore && usageSubject && workspace) {
-        scheduleModelUsageReconciliation({
-          config: input.config,
-          workspace,
-          store: input.modelUsageStore,
-          subject: usageSubject,
-          sessionId: decodeURIComponent(normalizeOpencodeProxyPath(proxyPath).split("/")[2] ?? ""),
-        });
-      }
+      reconcileUsage();
     }).catch(() => {
-      input.modelUsageStore?.cancel(usageReservationId);
-      if (guardedRunId) void input.guardedRuntime.failRun(guardedRunId);
+      // A missing acknowledgement does not prove the runtime rejected work.
+      reconcileUsage();
     });
     return jsonResponse({ ok: true, accepted: true });
   }
@@ -3544,8 +3552,10 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
   const abortUpstreamConnect = () => upstreamController.abort();
   input.request.signal.addEventListener("abort", abortUpstreamConnect, { once: true });
   let response: Response;
+  let dispatchStarted = false;
   try {
     if (promptAudit || guardedSummaryStart) input.sessionPreparations.assertActive(input.request);
+    dispatchStarted = true;
     response = await fetchOpencodeRuntime(targetUrl, {
       method,
       headers,
@@ -3553,8 +3563,11 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
       signal: upstreamController.signal,
     });
     if (!response.ok) {
-      input.modelUsageStore?.cancel(usageReservationId);
-      if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
+      if (response.status >= 400 && response.status < 500) {
+        dispatchStarted = false;
+        input.modelUsageStore?.cancel(usageReservationId);
+        if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
+      } else reconcileUsage();
       if (promptAudit) {
         const errorPayload = await response.clone().json().catch(() => null);
         const errorRecord = recordLike(errorPayload);
@@ -3624,8 +3637,10 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
       }
     }
   } catch (error) {
-    input.modelUsageStore?.cancel(usageReservationId);
-    if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
+    if (!dispatchStarted) {
+      input.modelUsageStore?.cancel(usageReservationId);
+      if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
+    } else reconcileUsage();
     throw error;
   } finally {
     input.request.signal.removeEventListener("abort", abortUpstreamConnect);
@@ -3645,28 +3660,12 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
         ...(promptAudit.agent ? { agent: promptAudit.agent.slice(0, 120) } : {}),
       },
     });
-    if (input.modelUsageStore && usageSubject && usageReservationId) {
-      scheduleModelUsageReconciliation({
-        config: input.config,
-        workspace,
-        store: input.modelUsageStore,
-        subject: usageSubject,
-        sessionId: promptAudit.sessionId,
-      });
-    }
+    reconcileUsage();
   }
 
   if (response.ok && completeGuardedRunAfterResponse && guardedRunId) {
     await input.guardedRuntime.completeTrustedGatewayRun(guardedRunId, "success");
-    if (input.modelUsageStore && usageSubject && workspace && guardedSummaryStart) {
-      scheduleModelUsageReconciliation({
-        config: input.config,
-        workspace,
-        store: input.modelUsageStore,
-        subject: usageSubject,
-        sessionId: guardedSummaryStart.sessionId,
-      });
-    }
+    reconcileUsage();
   }
 
   // The runtime may respond long after authentication. Do not expose its
@@ -15867,6 +15866,7 @@ function createRoutes(
       }) => Promise<OpencodeClientResult<unknown, unknown>>;
     };
     let guardedAcceptance: GuardedPromptAcceptance | null = null;
+    let dispatchStarted = false;
     try {
       // Consent is bound to the exact stored transcript. Re-read immediately
       // before dispatch so a concurrent message, tool result, edit, or revert
@@ -15894,6 +15894,7 @@ function createRoutes(
         providerSystem,
       );
       sessionPreparations.assertActive(ctx.request);
+      dispatchStarted = true;
       unwrapOpencodeResult(
         await sessionApi.summarize({
           sessionID: sessionId,
@@ -15904,9 +15905,13 @@ function createRoutes(
         `/session/${encodeURIComponent(sessionId)}/summarize`,
       );
     } catch (error) {
-      modelUsageStore.cancel(usage.reservation.reservationId);
-      if (guardedAcceptance) {
-        await guardedRuntime.failRun(guardedAcceptance.runId);
+      const rejectedStatus = error instanceof ApiError && isRecord(error.details) ? error.details.status : undefined;
+      if (!dispatchStarted || (typeof rejectedStatus === "number" && rejectedStatus >= 400 && rejectedStatus < 500)) {
+        modelUsageStore.cancel(usage.reservation.reservationId);
+        if (guardedAcceptance) await guardedRuntime.failRun(guardedAcceptance.runId);
+      } else {
+        // The runtime may have accepted compaction before losing its reply.
+        scheduleModelUsageReconciliation({ config, workspace, store: modelUsageStore, subject: usage.subject, sessionId });
       }
       if (error instanceof GuardedRuntimeError) {
         throw guardedRuntimeApiError(error);

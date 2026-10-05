@@ -4781,6 +4781,108 @@ describe("workspace session read APIs", () => {
     expect(mock.requests.filter((request) => request.pathname === "/session/ses_1/prompt_async")).toHaveLength(1);
   });
 
+  for (const runtimeMode of ["off", "enforce"]) {
+    for (const action of ["prompt_async", "command", "summarize", "compact"]) {
+      for (const acknowledgement of ["lost", "accepted", "uncertain", "rejected"]) {
+        test(`alternate dispatch accounting ${runtimeMode} ${action} ${acknowledgement} retains usage until history reconciles`, async () => {
+          process.env.MATTERHORN_GUARDED_RUNTIME_MODE = runtimeMode;
+          process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "isolated-dispatch-accounting-runtime-fixture";
+          const workspaceRoot = await createWorkspaceRoot();
+          const targetPath = `/session/ses_1/${action === "compact" ? "summarize" : action}`;
+          let acceptedAt = 0;
+          let parentId = "";
+          let historyPhase = 0;
+          const disconnected = deferred();
+          const answer = (id: string, parent: string, tokens: number, finish = "stop", offset = 0) => ({
+            info: { id, parentID: parent, sessionID: "ses_1", role: "assistant",
+              providerID: "ollama", modelID: "local-private", finish,
+              time: { created: acceptedAt + offset, completed: acceptedAt + offset + 1 }, tokens: { total: tokens } }, parts: [],
+          });
+          const hasMessageId = action === "command" || action === "prompt_async";
+          const mock = startMockOpencode({ sessionStatus: "idle",
+            responseForRequest: pathname => pathname === targetPath && acknowledgement === "rejected"
+              ? Response.json({ code: "rejected" }, { status: 400 }) : undefined,
+            sessionMessages: () => acceptedAt && historyPhase > 0 ? [
+              ...(hasMessageId ? [answer("msg_other_answer", "msg_other_parent", 123),
+                answer("msg_alternate_tool_step", parentId, 123, "tool-calls")] : []),
+              ...(historyPhase === 2 ? [answer("msg_alternate_accounting", parentId, hasMessageId ? 350 : 473, "stop", 2)] : []),
+            ] : [],
+          });
+          const proxy = createHttpServer((request, response) => {
+            const chunks: Buffer[] = [];
+            request.on("data", (chunk: Buffer) => chunks.push(chunk));
+            request.on("end", () => {
+              void (async () => {
+                const bytes = Buffer.concat(chunks);
+                const directory = request.headers["x-opencode-directory"];
+                const target = await fetch(`http://127.0.0.1:${mock.server.port}${request.url}`, {
+                  method: request.method, headers: { "content-type": "application/json",
+                    ...(typeof directory === "string" ? { "x-opencode-directory": directory } : {}) },
+                  ...(bytes.length ? { body: bytes } : {}),
+                });
+                const responseBytes = await target.arrayBuffer();
+                if (request.method === "POST" && request.url?.split("?")[0] === targetPath) {
+                  const payload = JSON.parse(bytes.toString("utf8"));
+                  parentId = action === "compact" || action === "summarize" ? "msg_runtime_compaction" : payload.messageID;
+                  if (typeof parentId !== "string" || !parentId) throw new Error("Missing fixture message ID");
+                  if (acknowledgement !== "rejected") acceptedAt = Date.now();
+                  if (acknowledgement === "lost") {
+                    request.socket.once("close", () => disconnected.resolve());
+                    request.socket.destroy();
+                    response.destroy();
+                    return;
+                  }
+                }
+                const status = request.method === "POST" && request.url?.split("?")[0] === targetPath && acknowledgement === "uncertain"
+                  ? 503 : target.status;
+                response.writeHead(status, { "content-type": "application/json" });
+                response.end(Buffer.from(responseBytes));
+              })().catch(() => response.destroy());
+            });
+          });
+          stops.push(() => new Promise<void>((resolve) => { proxy.close(() => resolve()); proxy.closeAllConnections(); }));
+          await new Promise<void>((resolve) => proxy.listen(0, "127.0.0.1", resolve));
+          const address = proxy.address();
+          if (!address || typeof address === "string") throw new Error("Missing disposable proxy port");
+          const openwork = await startOpenworkServer({ workspaceRoot, readOnly: false, hardModelUsageLimit: 1000,
+            opencodeBaseUrl: `http://127.0.0.1:${address.port}` });
+          const base = `http://127.0.0.1:${openwork.server.port}`;
+          const path = action === "compact" ? "/workspace/ws_1/sessions/ses_1/compact" : `/w/ws_1/opencode/session/ses_1/${action}`;
+          const body = action === "command" ? { command: "explain", arguments: "Synthetic accounting check", model: "ollama/local-private" }
+            : action === "summarize" ? { providerID: "ollama", modelID: "local-private" }
+            : { model: { providerID: "ollama", modelID: "local-private" }, parts: [{ type: "text", text: "Synthetic accounting check" }] };
+          const response = await fetch(`${base}${path}`, { method: "POST", headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+            body: JSON.stringify(body) });
+          expect(await waitUntil(() => mock.requests.some(request => request.method === "POST" && request.pathname === targetPath))).toBe(true);
+          if (acknowledgement === "lost") await disconnected.promise;
+          if (action === "command") expect(response.status).toBe(200);
+          else if (acknowledgement === "accepted") expect(response.status).toBe(action === "compact" ? 202 : 200);
+          else expect(response.status).toBeGreaterThanOrEqual(400);
+          const status = async () => {
+            const statusResponse = await fetch(`${base}/workspace/ws_1/model-usage/status`, { headers: auth(openwork.token) });
+            expect(statusResponse.status).toBe(200);
+            return (await statusResponse.json()).status;
+          };
+          const rejected = acknowledgement === "rejected";
+          expect(await status()).toMatchObject({ pendingRequests: rejected ? 0 : 1, monthly: { usedTokens: 0, chargedTokens: rejected ? 0 : 1000 } });
+          if (runtimeMode === "enforce" && !rejected) {
+            const receipts = await fetch(`${base}/workspace/ws_1/agent-run-receipts?sessionId=ses_1`, { headers: auth(openwork.token) });
+            expect(receipts.status).toBe(200);
+            const items = (await receipts.json()).items;
+            expect(items).toHaveLength(1);
+            expect(items[0].status).toBe(acknowledgement === "accepted" && !hasMessageId ? "success" : "pending");
+          }
+          historyPhase = 1;
+          expect(await status()).toMatchObject({ pendingRequests: rejected ? 0 : 1, monthly: { usedTokens: 0, chargedTokens: rejected ? 0 : 1000 } });
+          historyPhase = 2;
+          expect(await status()).toMatchObject({ pendingRequests: 0, monthly: { usedTokens: rejected ? 0 : 473, chargedTokens: rejected ? 0 : 473 } });
+          expect(await status()).toMatchObject({ pendingRequests: 0, monthly: { usedTokens: rejected ? 0 : 473, chargedTokens: rejected ? 0 : 473 } });
+          expect(mock.requests.filter(request => request.method === "POST" && request.pathname === targetPath)).toHaveLength(1);
+        }, 15000);
+      }
+    }
+  }
+
   test.each([["default", true], ["reasoning", true], ["default", false]] as const)("retains accounting after a lost acknowledgement (%s, history immediately visible: %s)", async (dispatchPath, initiallyVisible) => {
     const workspaceRoot = await createWorkspaceRoot();
     let acceptedAt = 0;

@@ -669,3 +669,33 @@ Evidence uses `/tmp/matterhorn-workspace-alias-stop-`: `red2-2026-10-05.log` rep
 The final backend and safety logs are `/tmp/matterhorn-workspace-alias-stop-backend-final-2026-10-05.log` and `/tmp/matterhorn-workspace-alias-stop-safety-final-2026-10-05.log`. Source review also found that raw prompt/summary transport failures share the command route's unconditional usage cancellation, while reconciliation selects only pending holds. Include all three raw routes in the next lost-acknowledgement reproduction; source inspection alone does not prove billed usage was lost.
 
 The hosted-account restriction to its assigned workspace is unchanged; an operator alias is not a new hosted access path. No frontend source, visual layout, preview, existing chat, provider account, production setting, wallet or live deployment changed. This remains a per-server preparation registry, not a distributed operation revision. Precise Stop targeting and competing mutations across clients/instances remain open. Next reproduce raw-route accounting after a lost runtime acknowledgement, then continue the cross-client mutation-ordering review. Hosted five-desk responses, signup/recovery delivery, data isolation, encryption, backup restoration and browser/device acceptance remain independent launch gates.
+
+## Accounting after a lost runtime acknowledgement
+
+Against local commit `3f7a4c14013567fb95d9a24297e0a8d12feccade`, a disposable HTTP proxy forwarded inference to a synthetic runtime, then closed the connection before returning its acknowledgement. Raw prompts, commands, summaries and the main compaction route all cancelled their usage holds despite the runtime accepting work. The initial matrix reproduced **eight failures and eight passing controls**, covering guarded mode `off` and `enforce`. This is local accounting evidence, not a real provider invoice or hosted reproduction.
+
+An expanded matrix also returned HTTP 503 after acceptance and inserted an unrelated answer into the same session. It reproduced **twenty failures and twelve passing controls**: sixteen lost/503 acknowledgements freed the hold, and four normally acknowledged raw prompt/command cases charged the unrelated answer. Those routes created guarded message IDs but had not bound their accounting reservations to those IDs.
+
+The correction binds raw prompt/command reservations to the server-generated parent ID. Transport failures and ambiguous server errors keep the reservation and schedule history reconciliation; explicit runtime 4xx rejections and failures before dispatch still release unused holds. Compaction uses the same distinction. An unknown outcome no longer marks an accepted guarded run as failed. Existing command acknowledgement timing is unchanged, and uncertain prompt/compaction responses are not reported as successful.
+
+The first accounting correction exposed a separate transport failure: each lost-acknowledgement case reached the runtime **four times** on the local Bun 1.3.11 test runtime. Runtime mutations now set `keepalive: false`, while reads retain connection pooling. [Bun documents this option as disabling connection reuse](https://bun.com/docs/runtime/networking/fetch). The local tests then observed exactly one mutation per request, including the existing ordinary-message tests. This verifies the reproduced pooled-connection replay path; it is not an exactly-once guarantee across every proxy, client retry, provider or runtime version. Mutation connection reuse is deliberately traded for avoiding this observed replay; production latency has not been benchmarked.
+
+### Acknowledgement accounting verification
+
+The final focused group passes **35 tests, zero failures, 429 assertions**. The new 32-case matrix checks successful acknowledgement, lost acknowledgement, post-acceptance 503 and explicit 400 across four routes and two guarded modes. It verifies a retained 1,000-token hold while history is missing; unrelated-answer exclusion for raw prompts/commands; a partial 123-token tool step that does not prematurely settle; a final total of **473 tokens with zero pending holds**; repeated reconciliation without double charging; one runtime dispatch; and no false error receipt for uncertain accepted work. Three existing primary-message cases retain exact-parent reconciliation and idempotent retry behavior.
+
+Server typecheck and build pass. The broader backend run passes **951 tests, zero failures, 7,014 assertions across six files**. The full safety gate passes **all 11 stages**, with terminal exit zero.
+
+```sh
+bun test apps/server/src/session-read-model.e2e.test.ts --test-name-pattern 'alternate dispatch accounting|retains accounting after a lost' --timeout 15000
+bun test apps/server/src/session-preparation.test.ts apps/server/src/session-read-model.e2e.test.ts apps/server/src/approvals.test.ts apps/server/src/model-usage-store.test.ts apps/server/src/token-authority.e2e.test.ts apps/server/src/auth.e2e.test.ts --timeout 15000
+pnpm --filter matterhorn-work-server typecheck
+pnpm --filter matterhorn-work-server build
+pnpm test:matterhorn-platform-safety
+```
+
+Evidence uses `/tmp/matterhorn-alternate-dispatch-accounting-`: `red-2026-10-05.log` records the initial eight failures; `red2-2026-10-05.log` records the expanded twenty failures; `focused-2026-10-05.log` captures the eight replay failures after the accounting correction; `transport-2026-10-05.log` records the initial single-dispatch pass; `focused-final-2026-10-05.log` adds partial tool-step and guarded-receipt assertions; and `build-2026-10-05.log` records typecheck/build.
+
+Final broader-suite and safety evidence is in `/tmp/matterhorn-alternate-dispatch-accounting-backend-2026-10-05.log` and `/tmp/matterhorn-alternate-dispatch-accounting-safety-2026-10-05.log`.
+
+The compaction API in the pinned OpenCode SDK 1.18.31 does not accept a caller-supplied message ID. These summary cases exercise one accepted compaction per session; they do not prove exact correlation between concurrent summaries or exclude another matching answer under the existing unbound-history fallback. Review that matching next, together with repeated raw-client submissions, persistent unknown-outcome recovery and cross-client mutation/Stop ordering. No schema migration, real provider call, hosted acceptance, frontend redesign, preview/chat reset, production setting, push, merge or deployment occurred. All broader launch gates remain open where earlier evidence marks them unverified.
