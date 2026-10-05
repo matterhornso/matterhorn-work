@@ -465,6 +465,18 @@ export const MINIMAL_SETTINGS_GROUPS: { label: string; tabs: SettingsTab[] }[] =
   { label: "Privacy & appearance", tabs: ["privacy", "appearance"] },
 ];
 
+export function getMinimalSettingsGroups(developerMode = false) {
+  const primaryTabs = new Set(MINIMAL_SETTINGS_GROUPS.flatMap((group) => group.tabs));
+  const availableTabs: SettingsTab[] = [
+    "general",
+    ...getWorkspaceSettingsTabs(developerMode),
+    ...getGlobalSettingsTabs(developerMode),
+    ...getCloudSettingsTabs(developerMode),
+  ];
+  const moreTabs = [...new Set(availableTabs)].filter((tab) => !primaryTabs.has(tab));
+  return [...MINIMAL_SETTINGS_GROUPS, { label: "More settings", tabs: moreTabs }];
+}
+
 export function SettingsSidebar(props: SettingsSidebarProps) {
   const workspaceTabs = getWorkspaceSettingsTabs(props.developerMode);
   const globalTabs = getGlobalSettingsTabs(props.developerMode);
@@ -526,7 +538,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        {MINIMAL_UI ? MINIMAL_SETTINGS_GROUPS.map((group) => <SidebarGroup key={group.label}>
+        {MINIMAL_UI ? getMinimalSettingsGroups(props.developerMode).map((group) => <SidebarGroup key={group.label}>
           <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
           <SidebarGroupContent><SidebarMenu>{group.tabs.map((tab) => {
             const Icon = getSettingsTabIcon(tab);

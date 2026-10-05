@@ -173,7 +173,7 @@ function usageResetLabel(value: string): string {
 
 export function AiSettingsView(props: AiSettingsViewProps) {
   const runtimeWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
-  const [modelDetailsOpen, setModelDetailsOpen] = useState(false);
+  const [modelDetailsOpen, setModelDetailsOpen] = useState(MINIMAL_UI);
   const [providerDetailsOpen, setProviderDetailsOpen] = useState(false);
   const [localModelStatus, setLocalModelStatus] = useState<string | null>(null);
   const [workspaceVariantDraft, setWorkspaceVariantDraft] = useState<
@@ -417,7 +417,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
             ? "Workspace default reset."
             : null);
 
-  if (MINIMAL_UI) return <MinimalModels client={props.matterhornServerClient} workspaceId={runtimeWorkspaceId} catalog={catalog} selection={workspaceSelection} policies={providerPrivacyPolicies} loading={providerStateLoading} failed={catalogQueryFailed} managed={props.providerCredentialsManaged} onConnect={props.onOpenProviderAuth} onRefresh={() => { void (runtimeWorkspaceId ? workspaceBackendModelsQuery.refetch() : backendModelsQuery.refetch()); }} onSelected={async (first, model) => {
+  const minimalModels = <MinimalModels client={props.matterhornServerClient} workspaceId={runtimeWorkspaceId} catalog={catalog} selection={workspaceSelection} policies={providerPrivacyPolicies} loading={providerStateLoading} failed={catalogQueryFailed} managed={props.providerCredentialsManaged} onConnect={props.onOpenProviderAuth} onRefresh={() => { void (runtimeWorkspaceId ? workspaceBackendModelsQuery.refetch() : backendModelsQuery.refetch()); }} onSelected={async (first, model) => {
     await props.onUseWorkspaceDefault?.();
     await props.onModelSelected?.(first, model);
   }}>
@@ -436,9 +436,9 @@ export function AiSettingsView(props: AiSettingsViewProps) {
     {workspaceModelUsageQuery.data?.status ? <details className="text-sm"><summary className="cursor-pointer">Usage & allowance</summary><div className="space-y-2 py-3">{[{ label: "Today", period: workspaceModelUsageQuery.data.status.daily }, { label: "This month", period: workspaceModelUsageQuery.data.status.monthly }].map(({ label, period }) => <p key={label}>{label}: {compactTokenCount(period.chargedTokens)} used{period.limit === null ? "" : ` of ${compactTokenCount(period.limit)} weighted tokens`}. Resets {usageResetLabel(period.resetsAt)}.</p>)}{!workspaceModelUsageQuery.data.status.enabled ? <p>Usage protection is not active in this deployment.</p> : null}</div></details> : null}
   </MinimalModels>;
 
-  return (
+  const detailedSettings = (
     <LayoutStack className="gap-y-8">
-      {props.privateSetupRequested ? <PrivateModelSetup
+      {!MINIMAL_UI && props.privateSetupRequested ? <PrivateModelSetup
         catalog={catalog}
         policy={providerPrivacyPolicies.find((policy) => policy.providerId === "venice")}
         loading={workspaceBackendModelsQuery.isFetching || backendModelsQuery.isFetching}
@@ -450,12 +450,12 @@ export function AiSettingsView(props: AiSettingsViewProps) {
       /> : null}
       <LayoutSection>
         <LayoutSectionHeader>
-          <LayoutSectionTitle>Choose a model</LayoutSectionTitle>
+          <LayoutSectionTitle>{MINIMAL_UI ? "Model defaults" : "Choose a model"}</LayoutSectionTitle>
           <LayoutSectionDescription>
             Pick the AI that answers your chats. You can change it any time.
           </LayoutSectionDescription>
         </LayoutSectionHeader>
-        {props.pendingDeskTask ? (
+        {!MINIMAL_UI && props.pendingDeskTask ? (
           <div
             className="mt-4 flex flex-col gap-4 rounded-lg border border-dls-accent/30 bg-dls-surface-raised/70 p-4 sm:flex-row sm:items-center sm:justify-between"
             data-testid="pending-desk-task-handoff"
@@ -981,7 +981,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                     </div>
                   </div>
                 </div>
-                {!props.cloudProviderIds?.has(provider.id) ? (
+                {!props.providerCredentialsManaged && !props.cloudProviderIds?.has(provider.id) ? (
                   <Button
                     variant="destructive"
                     onClick={() => void props.onDisconnectProvider(provider.id)}
@@ -1062,5 +1062,17 @@ export function AiSettingsView(props: AiSettingsViewProps) {
 
       {!props.providerCredentialsManaged ? props.cloudProvidersView : null}
     </LayoutStack>
+  );
+
+  if (!MINIMAL_UI) return detailedSettings;
+
+  return (
+    <div className="mx-auto w-full max-w-3xl space-y-6">
+      {minimalModels}
+      <details className="border-t border-dls-border py-3">
+        <summary className="cursor-pointer text-sm">Advanced model and provider settings</summary>
+        <div className="pt-6">{detailedSettings}</div>
+      </details>
+    </div>
   );
 }

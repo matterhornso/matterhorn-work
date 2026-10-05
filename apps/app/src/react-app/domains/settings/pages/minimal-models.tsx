@@ -14,6 +14,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { notifyWorkspaceModelSelectionChanged } from "../model-selection-events";
 
+export function modelSelectionForSave(
+  model: { providerId: string; id: string },
+  selection: Pick<MatterhornBackendModelSelectionRecord, "providerId" | "modelId" | "variant"> | null,
+) {
+  return {
+    providerId: model.providerId,
+    modelId: model.id,
+    variant: selection?.providerId === model.providerId && selection.modelId === model.id
+      ? selection.variant
+      : null,
+  };
+}
+
 export function MinimalModels(props: {
   client?: MatterhornServerClient | null;
   workspaceId: string;
@@ -59,7 +72,7 @@ export function MinimalModels(props: {
       const firstSelection = !props.selection;
       const response = await props.client.saveWorkspaceModelSelection(
         props.workspaceId,
-        { providerId: model.providerId, modelId: model.id, variant: null },
+        modelSelectionForSave(model, props.selection),
       );
       if (
         response.selection?.modelId !== model.id ||

@@ -18,6 +18,7 @@ import {
   FolderOpen,
   Globe,
   Home,
+  History,
   Info,
   Mic2,
   NotebookPen,
@@ -2945,7 +2946,7 @@ export function SessionPage(props: SessionPageProps) {
             </div>
 
             <div className="flex items-center gap-1.5 text-gray-10 mac:titlebar-no-drag">
-              {MINIMAL_UI ? <div className="max-w-[36vw] truncate">
+              {MINIMAL_UI && shellConfig.modelPicker ? <div className="max-w-[36vw] truncate">
                 {props.surface ? <ModelSelect open={props.surface.modelPickerOpen} onOpenChange={props.surface.onModelPickerOpenChange} value={props.surface.selectedModel} onChange={props.surface.onModelChange} /> : <Button variant="ghost" size="sm" onClick={props.onOpenSettings}>Models</Button>}
               </div> : null}
               {workspaceNotesAvailable && !MINIMAL_UI ? (
@@ -2989,7 +2990,7 @@ export function SessionPage(props: SessionPageProps) {
                 >
                   <nav aria-label="Workspace menu" className="grid gap-0.5">
                     <p className="px-3 pb-1 pt-2 text-xs font-medium text-dls-muted">Workspace</p>
-                    {MATTERHORN_LAUNCH_FEATURES.coworkers && !MINIMAL_UI ? (
+                    {MATTERHORN_LAUNCH_FEATURES.coworkers ? (
                       <>
                         <MobileWorkspaceMenuAction
                           active={coworkersRailActive}
@@ -3013,6 +3014,27 @@ export function SessionPage(props: SessionPageProps) {
                         />
                       </>
                     ) : null}
+                    {isElectronRuntime() ? (
+                      <MobileWorkspaceMenuAction
+                        active={browserRailActive}
+                        icon={<Globe className="size-4" />}
+                        label="Browser"
+                        onSelect={() => runMobileWorkspaceAction(openBrowserRailPane)}
+                      />
+                    ) : null}
+                    {voiceExtensionEnabled ? (
+                      <MobileWorkspaceMenuAction
+                        active={voiceRailActive}
+                        icon={<Mic2 className="size-4" />}
+                        label="Voice Mode"
+                        onSelect={() => runMobileWorkspaceAction(openVoiceRailPane)}
+                      />
+                    ) : null}
+                    <MobileWorkspaceMenuAction
+                      icon={<History className="size-4" />}
+                      label="Run history"
+                      onSelect={() => runMobileWorkspaceAction(openRunHistory)}
+                    />
                     <MobileWorkspaceMenuAction
                       active={extensionsRailActive}
                       icon={<Settings2 className="size-4" />}
@@ -3031,12 +3053,23 @@ export function SessionPage(props: SessionPageProps) {
                       onSelect={() => runMobileWorkspaceAction(openMemoryRailPane)}
                     />
                     {workspaceNotesAvailable ? (
+                      <>
                       <MobileWorkspaceMenuAction
                         active={notesRailActive}
                         icon={<NotebookPen className="size-4" />}
                         label="Notes"
                         onSelect={() => runMobileWorkspaceAction(openNotesRailPane)}
                       />
+                      <MobileWorkspaceMenuAction
+                        icon={<NotebookPen className="size-4" />}
+                        label={t("notes.quick_jot_button_title")}
+                        onSelect={() => runMobileWorkspaceAction(() => openWorkspaceQuickJot(
+                          props.selectedSessionId
+                            ? { type: "session", id: props.selectedSessionId, label: selectedSessionTitle }
+                            : undefined,
+                        ))}
+                      />
+                      </>
                     ) : null}
                     {showArtifactRailItem ? (
                       <MobileWorkspaceMenuAction
@@ -3705,7 +3738,7 @@ export function SessionPage(props: SessionPageProps) {
             </div>
           </div>
 
-          {shellConfig.statusBar && !MINIMAL_UI ? (
+          {shellConfig.statusBar ? (
             <StatusBar
               clientConnected={props.clientConnected}
               matterhornServerStatus={props.matterhornServerStatus}
@@ -3745,9 +3778,19 @@ export function SessionPage(props: SessionPageProps) {
                   maxSize={protocolSidePanelOpen || visibleSidePanel === "coworkers" || visibleSidePanel === "files" || visibleSidePanel === "memory" || visibleSidePanel === "notes" || visibleSidePanel === "extensions" ? "500px" : "70%"}
                   className="matterhorn-side-panel hidden h-full min-h-0 overflow-hidden bg-dls-background lg:flex lg:flex-col"
                 >
-                  <Suspense fallback={<LazyPanelFallback />}>
-                    {guardedSidePanelContent}
-                  </Suspense>
+                  {MINIMAL_UI ? (
+                    <header className="flex min-h-12 shrink-0 items-center justify-between border-b border-dls-border px-3">
+                      <span className="min-w-0 truncate text-sm font-semibold">{sidePanelTitle}</span>
+                      <Button variant="ghost" className="min-h-11" onClick={closeRightPane} aria-label="Close side panel">
+                        <PanelRightClose className="size-4" /> Close
+                      </Button>
+                    </header>
+                  ) : null}
+                  <div className="min-h-0 flex-1 overflow-hidden">
+                    <Suspense fallback={<LazyPanelFallback />}>
+                      {guardedSidePanelContent}
+                    </Suspense>
+                  </div>
                 </ResizablePanel>
               </>
             ) : null}
