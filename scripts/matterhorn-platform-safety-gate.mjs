@@ -208,6 +208,8 @@ const STAGES = [
       "test",
       "apps/server/src/managed-opencode.test.ts",
       "apps/server/src/managed-opencode-lifecycle.test.ts",
+      "apps/server/src/embedded-lifecycle.e2e.test.ts",
+      "apps/server/src/server-resource-scope.test.ts",
       "apps/server/src/env-routes.e2e.test.ts",
       "apps/server/src/tokens.test.ts",
       "apps/server/src/token-authority.e2e.test.ts",

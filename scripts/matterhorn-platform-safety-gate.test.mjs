@@ -89,6 +89,8 @@ for (const required of [
   "deep-link-runtime-contract.test.ts",
   "managed-opencode.test.ts",
   "managed-opencode-lifecycle.test.ts",
+  "embedded-lifecycle.e2e.test.ts",
+  "server-resource-scope.test.ts",
   "env-routes.e2e.test.ts",
   "tokens.test.ts",
   "token-authority.e2e.test.ts",

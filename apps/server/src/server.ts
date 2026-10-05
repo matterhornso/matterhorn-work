@@ -1,4 +1,5 @@
 import { getPortfolio } from "./tools/portfolio-tracker.js";
+import { ServerResourceScope } from "./server-resource-scope.js";
 import { compactionPromptPart } from "./opencode-compaction-request.js";
 import { CHAT_ATTACHMENT_MAX_BYTES } from "@matterhorn-work/types/chat-attachments";
 import { resolveConfinedWorkspacePath } from "./workspace-path-boundary.js";
@@ -506,7 +507,7 @@ import { deleteSkill, listSkills, upsertSkill } from "./skills.js";
 import { installHubSkill, listHubSkills } from "./skill-hub.js";
 import { deleteCommand, listCommands, repairCommands, upsertCommand } from "./commands.js";
 import { ApiError, formatError } from "./errors.js";
-import { drainMatterhornEmailOutbox } from "./email-outbox.js";
+import { drainMatterhornEmailOutbox, type MatterhornEmailDeliver } from "./email-outbox.js";
 import { evaluateMatterhornPublicLaunchReadiness } from "./public-launch-readiness.js";
 import {
   resolveMatterhornTurnstileConfig,
@@ -1434,6 +1435,7 @@ type MatterhornSuiEvidenceAnchorPackageState = {
 };
 
 export type MatterhornServerDependencies = {
+  emailDeliver?: MatterhornEmailDeliver;
   /** Trusted transport injection for isolated acceptance tests, never request data. */
   jevTransport?: JevTransport;
   // Trusted local-shell injection only; never populated from request bodies or
@@ -1460,11 +1462,22 @@ export async function startServer(
   config: ServerConfig,
   dependencies: MatterhornServerDependencies = {},
 ): Promise<ServeResult> {
+  const resources = new ServerResourceScope();
+  try { return await initializeServer(config, dependencies, resources); }
+  catch (error) { return resources.fail(error); }
+}
+
+async function initializeServer(
+  config: ServerConfig,
+  dependencies: MatterhornServerDependencies,
+  resources: ServerResourceScope,
+): Promise<ServeResult> {
   const approvals = new ApprovalService(config.approval);
   const sessionPreparations = new SessionPreparationRegistry(assertRequestAccessCurrent);
   const reloadEvents = new ReloadEventStore();
   const tokens = new TokenService(config);
   const authStore = new MatterhornAuthStore();
+  resources.onClose(() => authStore.close());
   const env = new EnvService();
   const logger = createServerLogger(config);
   const maintainAuthSecurityState = () => {
@@ -1483,6 +1496,7 @@ export async function startServer(
     }
   }, 24 * 60 * 60 * 1_000);
   authSecurityMaintenanceTimer.unref?.();
+  resources.onStop(() => clearInterval(authSecurityMaintenanceTimer));
   const createWatcherHandle = () => config.reloadWatchers === false
     ? {
       close: () => undefined,
@@ -1490,17 +1504,22 @@ export async function startServer(
     }
     : startReloadWatchers({ config, reloadEvents, logger });
   let watcherHandle = createWatcherHandle();
+  resources.onStop(() => watcherHandle.close());
   const refreshWorkspaceReloadBaseline = (workspaceId: string, reasons?: ReloadReason[]) =>
     watcherHandle.refreshWorkspace(workspaceId, reasons);
   reloadBaselineRefreshers.set(config, refreshWorkspaceReloadBaseline);
+  resources.onStop(() => reloadBaselineRefreshers.delete(config));
   const restartReloadWatchers = () => {
     watcherHandle.close();
     watcherHandle = createWatcherHandle();
   };
   const operationalMetrics = new OperationalMetrics();
   const modelUsageStore = new MatterhornModelUsageStore();
+  resources.onClose(() => modelUsageStore.close());
   const guardedRuntime = new MatterhornGuardedAgentRuntime();
+  resources.onClose(() => guardedRuntime.close());
   const recoveryErasureLedger = recoveryErasureLedgerFromEnv(process.env);
+  resources.onClose(() => recoveryErasureLedger?.close());
   if (recoveryErasureLedger) guardedRuntime.reconcileRecoveryErasures(recoveryErasureLedger);
   const evidenceKeyManager = dependencies.evidenceKeyManager === undefined
     ? awsKmsEvidenceKeyManagerFromEnv(process.env)
@@ -1520,6 +1539,7 @@ export async function startServer(
     ? evidenceKmsRotationDaysFromEnv(process.env)
     : null;
   const cryptoAppRuntime = createMatterhornCryptoAppRuntime(process.env, { guardedRuntime });
+  resources.onClose(() => cryptoAppRuntime.close());
   const coworkerRuntime = createMatterhornCoworkerRuntime(process.env, {
     onInvalidate: (input) => {
       guardedRuntime.invalidateCoworker(input);
@@ -1535,6 +1555,7 @@ export async function startServer(
           && connection.grantedNetworks.includes(input.network)),
     } : {}),
   });
+  resources.onClose(() => coworkerRuntime.close());
   coworkerRuntime.maintainAccessMetadata();
   cryptoAppRuntime.maintainConnectionSetupMetadata();
   cryptoAppRuntime.maintainDeveloperInviteMetadata();
@@ -1553,6 +1574,7 @@ export async function startServer(
     }, 60 * 60 * 1_000)
     : null;
   connectionSetupMaintenanceTimer?.unref?.();
+  resources.onStop(() => { if (connectionSetupMaintenanceTimer) clearInterval(connectionSetupMaintenanceTimer); });
   const accessMetadataMaintenanceTimer = coworkerRuntime.access || cryptoAppRuntime.developerPortal
     ? setInterval(() => {
       try {
@@ -1574,6 +1596,7 @@ export async function startServer(
     }, 24 * 60 * 60 * 1_000)
     : null;
   accessMetadataMaintenanceTimer?.unref?.();
+  resources.onStop(() => { if (accessMetadataMaintenanceTimer) clearInterval(accessMetadataMaintenanceTimer); });
   const cryptoCoworkerConfig = cryptoCoworkerFeatureConfig(process.env);
   const agentFileStore = cryptoCoworkerConfig.agentFilesMode === "encrypted"
     && coworkerRuntime.mode !== "off"
@@ -1704,10 +1727,12 @@ export async function startServer(
     return { checked: 0, sealed: 0, failed: 1 };
   });
   let coworkerEvidenceRetryTask = retryCoworkerEvidence();
+  resources.onDrain(() => coworkerEvidenceRetryTask);
   const coworkerEvidenceRetryTimer = cryptoEvidenceStore ? setInterval(() => {
     coworkerEvidenceRetryTask = coworkerEvidenceRetryTask.then(retryCoworkerEvidence, retryCoworkerEvidence);
   }, 60_000) : null;
   coworkerEvidenceRetryTimer?.unref?.();
+  resources.onStop(() => { if (coworkerEvidenceRetryTimer) clearInterval(coworkerEvidenceRetryTimer); });
   const coworkerWatchRunner = coworkerRuntime.coworkers
     && cryptoAppRuntime.mode === "enforce"
     && cryptoAppRuntime.ready
@@ -1728,20 +1753,30 @@ export async function startServer(
     return { claimed: 0, completed: 0, alerted: 0, failed: 1 };
   }) ?? Promise.resolve({ claimed: 0, completed: 0, alerted: 0, failed: 0 });
   let coworkerWatchTask = runCoworkerWatches();
+  resources.onDrain(() => coworkerWatchTask);
   const coworkerWatchTimer = coworkerWatchRunner ? setInterval(() => {
     coworkerWatchTask = runCoworkerWatches();
   }, 60_000) : null;
   coworkerWatchTimer?.unref?.();
-  const drainEmailOutbox = createEmailOutboxDrainer(authStore, logger);
+  resources.onStop(() => { if (coworkerWatchTimer) clearInterval(coworkerWatchTimer); });
+  const drainEmailOutbox = createEmailOutboxDrainer(authStore, logger, dependencies.emailDeliver);
   let emailOutboxTask = drainEmailOutbox();
+  resources.onDrain(async () => {
+    await emailOutboxTask;
+    // Routes also start deliveries directly. Join the drainer's active batch
+    // before closing auth storage, not only the last timer-triggered task.
+    await drainEmailOutbox();
+  });
   const emailOutboxTimer = setInterval(() => {
     emailOutboxTask = drainEmailOutbox();
   }, 30_000);
   emailOutboxTimer.unref?.();
+  resources.onStop(() => clearInterval(emailOutboxTimer));
   let receiptExpiryTask = purgeAllExpiredAgentRunReceipts(guardedRuntime.receipts).catch((error) => {
     logger.log("error", "Guarded receipt expiry failed", unhandledErrorAttributes(error));
     return { workspaces: 0, files: 0 };
   });
+  resources.onDrain(() => receiptExpiryTask);
   const receiptExpiryTimer = setInterval(() => {
     receiptExpiryTask = purgeAllExpiredAgentRunReceipts(guardedRuntime.receipts).catch((error) => {
       logger.log("error", "Guarded receipt expiry failed", unhandledErrorAttributes(error));
@@ -1749,9 +1784,11 @@ export async function startServer(
     });
   }, 24 * 60 * 60 * 1_000);
   receiptExpiryTimer.unref?.();
+  resources.onStop(() => clearInterval(receiptExpiryTimer));
   // Completion recovery is independent of billing holds and browser activity.
   // Retry only native history reads; never dispatch inference or tools here.
   let completionRecoveryStopped = false;
+  resources.onStop(() => { completionRecoveryStopped = true; });
   let completionRecoveryOffset = 0;
   const recoverPendingCompletions = async () => {
     const sessions = guardedRuntime.pendingCompletionSessions();
@@ -1775,10 +1812,12 @@ export async function startServer(
     logger.log("error", "Native completion recovery could not verify its state", { code: "agent_run_completion_state_invalid" });
   });
   let completionRecoveryTask: Promise<void> | null = runCompletionRecovery().finally(() => { completionRecoveryTask = null; });
+  resources.onDrain(() => completionRecoveryTask);
   const completionRecoveryTimer = setInterval(() => {
     if (!completionRecoveryTask) completionRecoveryTask = runCompletionRecovery().finally(() => { completionRecoveryTask = null; });
   }, 30_000);
   completionRecoveryTimer.unref?.();
+  resources.onStop(() => clearInterval(completionRecoveryTimer));
   const expireCryptoEvidence = () => cryptoEvidenceStore?.destroyExpired().then((result) => {
     if (result.failures.length > 0) {
       logger.log("error", "Crypto evidence key expiry was incomplete", {
@@ -1833,6 +1872,7 @@ export async function startServer(
     rotation: await rotateCryptoEvidence(),
   });
   let cryptoEvidenceMaintenanceTask = maintainCryptoEvidence();
+  resources.onDrain(() => cryptoEvidenceMaintenanceTask);
   const cryptoEvidenceExpiryTimer = cryptoEvidenceStore ? setInterval(() => {
     cryptoEvidenceMaintenanceTask = cryptoEvidenceMaintenanceTask.then(
       maintainCryptoEvidence,
@@ -1840,7 +1880,9 @@ export async function startServer(
     );
   }, 24 * 60 * 60 * 1_000) : null;
   cryptoEvidenceExpiryTimer?.unref?.();
+  resources.onStop(() => { if (cryptoEvidenceExpiryTimer) clearInterval(cryptoEvidenceExpiryTimer); });
   let cryptoEvidenceVerificationTask = verifyCryptoEvidence();
+  resources.onDrain(() => cryptoEvidenceVerificationTask);
   const cryptoEvidenceVerificationTimer = cryptoEvidenceRuntime.mode === "testnet" ? setInterval(() => {
     cryptoEvidenceVerificationTask = cryptoEvidenceVerificationTask.then(
       verifyCryptoEvidence,
@@ -1848,6 +1890,7 @@ export async function startServer(
     );
   }, 6 * 60 * 60 * 1_000) : null;
   cryptoEvidenceVerificationTimer?.unref?.();
+  resources.onStop(() => { if (cryptoEvidenceVerificationTimer) clearInterval(cryptoEvidenceVerificationTimer); });
   const expireAgentFiles = () => agentFileStore?.destroyExpired().then((result) => {
     if (result.failures.length > 0) {
       logger.log("error", "Agent file expiry was incomplete", {
@@ -1862,10 +1905,12 @@ export async function startServer(
     return { checked: 0, destroyed: 0, failures: [] };
   }) ?? Promise.resolve({ checked: 0, destroyed: 0, failures: [] });
   let agentFileMaintenanceTask = expireAgentFiles();
+  resources.onDrain(() => agentFileMaintenanceTask);
   const agentFileExpiryTimer = agentFileStore ? setInterval(() => {
     agentFileMaintenanceTask = agentFileMaintenanceTask.then(expireAgentFiles, expireAgentFiles);
   }, 24 * 60 * 60 * 1_000) : null;
   agentFileExpiryTimer?.unref?.();
+  resources.onStop(() => { if (agentFileExpiryTimer) clearInterval(agentFileExpiryTimer); });
   let accountDeletionRetryTask = retryMatterhornAccountDeletionJobs({
     config,
     authStore,
@@ -1879,6 +1924,7 @@ export async function startServer(
   }).catch((error) => {
     logger.log("error", "Account deletion retry failed", unhandledErrorAttributes(error));
   });
+  resources.onDrain(() => accountDeletionRetryTask);
   const accountDeletionRetryTimer = setInterval(() => {
     accountDeletionRetryTask = retryMatterhornAccountDeletionJobs({
       config,
@@ -1895,8 +1941,10 @@ export async function startServer(
     });
   }, 60_000);
   accountDeletionRetryTimer.unref?.();
+  resources.onStop(() => clearInterval(accountDeletionRetryTimer));
   const ownsRequestRateLimitStore = !config.requestRateLimitStore;
   const requestRateLimitStore = config.requestRateLimitStore ?? createDefaultRequestRateLimitStore();
+  if (ownsRequestRateLimitStore) resources.onClose(() => requestRateLimitStore.close?.());
   const routes = createRoutes(
     config,
     approvals,
@@ -2167,44 +2215,11 @@ export async function startServer(
     ...serverOptions,
     idleTimeout: 120,
   });
+  resources.onStop(() => server.stop());
 
   return {
     ...server,
-    stop: async (closeActiveConnections?: boolean) => {
-      completionRecoveryStopped = true;
-      clearInterval(completionRecoveryTimer);
-      clearInterval(receiptExpiryTimer);
-      if (cryptoEvidenceExpiryTimer) clearInterval(cryptoEvidenceExpiryTimer);
-      if (cryptoEvidenceVerificationTimer) clearInterval(cryptoEvidenceVerificationTimer);
-      if (agentFileExpiryTimer) clearInterval(agentFileExpiryTimer);
-      clearInterval(accountDeletionRetryTimer);
-      clearInterval(emailOutboxTimer);
-      if (coworkerWatchTimer) clearInterval(coworkerWatchTimer);
-      if (coworkerEvidenceRetryTimer) clearInterval(coworkerEvidenceRetryTimer);
-      if (connectionSetupMaintenanceTimer) clearInterval(connectionSetupMaintenanceTimer);
-      if (accessMetadataMaintenanceTimer) clearInterval(accessMetadataMaintenanceTimer);
-      clearInterval(authSecurityMaintenanceTimer);
-      watcherHandle.close();
-      reloadBaselineRefreshers.delete(config);
-      modelUsageStore.close();
-      await completionRecoveryTask;
-      await receiptExpiryTask;
-      await cryptoEvidenceMaintenanceTask;
-      await cryptoEvidenceVerificationTask;
-      await agentFileMaintenanceTask;
-      await accountDeletionRetryTask;
-      await emailOutboxTask;
-      await coworkerWatchTask;
-      await coworkerEvidenceRetryTask;
-      await drainEmailOutbox();
-      authStore.close();
-      recoveryErasureLedger?.close();
-      guardedRuntime.close();
-      cryptoAppRuntime.close();
-      coworkerRuntime.close();
-      if (ownsRequestRateLimitStore) await requestRateLimitStore.close?.();
-      await (server.stop as unknown as (closeActiveConnections?: boolean) => void | Promise<void>)(closeActiveConnections);
-    },
+    stop: () => resources.close(),
   };
 }
 
@@ -5585,13 +5600,14 @@ function matterhornPublicAuthConfig(authStore?: MatterhornAuthStore) {
   } as const;
 }
 
-function createEmailOutboxDrainer(authStore: MatterhornAuthStore, logger: ServerLogger) {
+function createEmailOutboxDrainer(authStore: MatterhornAuthStore, logger: ServerLogger, deliver?: MatterhornEmailDeliver) {
   let active: Promise<void> | null = null;
   return (): Promise<void> => {
     if (active) return active;
     active = drainMatterhornEmailOutbox({
       authStore,
       config: matterhornEmailConfig(),
+      deliver,
       onDeferred: (item) => logger.log("warn", "Transactional email delivery deferred", {
         "email.template": item.template,
         "email.attempt": item.attempts,

@@ -18,7 +18,7 @@ import { ensureWorkspaceFiles } from "./workspace-init.js";
 import { buildManagedOpencodeRuntimeConfig } from "./managed-opencode-runtime-config.js";
 import { resolveManagedCudosModelCatalog } from "./cudos-provider.js";
 import { resolveManagedVenicePrivateModels } from "./venice-provider.js";
-import type { ServeResult } from "./serve-node.js";
+import { ServerResourceScope } from "./server-resource-scope.js";
 import type { ServerConfig } from "./types.js";
 
 export type EmbeddedServerOptions = CliArgs & {
@@ -48,6 +48,12 @@ export type EmbeddedServerHandle = {
 };
 
 export async function startEmbeddedServer(options: EmbeddedServerOptions): Promise<EmbeddedServerHandle> {
+  const resources = new ServerResourceScope();
+  try { return await initializeEmbeddedServer(options, resources); }
+  catch (error) { return resources.fail(error); }
+}
+
+async function initializeEmbeddedServer(options: EmbeddedServerOptions, resources: ServerResourceScope): Promise<EmbeddedServerHandle> {
   const config = await resolveServerConfig(options);
   const serverUrl = `http://${config.host === "0.0.0.0" ? "127.0.0.1" : config.host}:${config.port}`;
   const modelCatalogUrl =
@@ -94,6 +100,7 @@ export async function startEmbeddedServer(options: EmbeddedServerOptions): Promi
         },
         onEvent: options.onManagedOpencodeEvent,
       });
+      resources.onStop(() => managedOpencode?.close());
 
       config.opencodeBaseUrl = managedOpencode.url;
       config.managedOpencodeMcp = true;
@@ -109,15 +116,13 @@ export async function startEmbeddedServer(options: EmbeddedServerOptions): Promi
   }
 
   const server = await startServer(config, { stmMcpLauncher: options.stmMcpLauncher });
+  resources.onStop(() => server.stop());
 
   return {
     port: server.port,
     url: `http://${config.host === "0.0.0.0" ? "127.0.0.1" : config.host}:${server.port}`,
     config,
     managedOpencodeStatus: () => managedOpencode?.status() ?? null,
-    async stop() {
-      await managedOpencode?.close();
-      server.stop();
-    },
+    stop: () => resources.close(),
   };
 }

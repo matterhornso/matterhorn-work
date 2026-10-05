@@ -1141,4 +1141,44 @@ pnpm test:matterhorn-platform-safety
 git diff --check
 ```
 
-These are local macOS process and loopback fixtures, not real-provider or hosted acceptance. They do not prove descendant-process cleanup, an OS refusal to terminate a child, other platforms, or successful workspace initialization. Next reproduce cleanup at the host-entry boundary: `embedded.ts` and `cli.ts` start the managed engine before `startServer`, with no catch visible around HTTP startup. Embedded stop also awaits engine termination before stopping HTTP. Determine whether bind/setup or child-close failures leave resources alive, then add regression coverage before changing those paths. Maintained runtime distribution, hosted five-desk/Jev, auth/inbox, data isolation/deletion, encryption/restore and rendered UI/browser acceptance remain open. Existing previews, chats and installed runtimes were untouched; nothing was pushed, merged or deployed.
+These are local macOS process and loopback fixtures, not real-provider or hosted acceptance. They do not prove descendant-process cleanup, an OS refusal to terminate a child, other platforms, or successful workspace initialization. The next review target was host-entry cleanup after setup/bind failure; its results follow. Maintained runtime distribution, hosted five-desk/Jev, auth/inbox, data isolation/deletion, encryption/restore and rendered UI/browser acceptance remain open. Existing previews, chats and installed runtimes were untouched; nothing was pushed, merged or deployed at this checkpoint.
+
+## Host startup and shutdown resource cleanup
+
+Following `ad0b34e5c48ebb675303bb6d160c858f634e8dbe`, three real-process regressions reproduced leaked resources after embedded/CLI HTTP bind failure and embedded stop resolving before the listener and auth storage closed. The initial red log is `/private/tmp/matterhorn-host-lifecycle-red.log`. The correction registers resources as they are acquired, stops producers and HTTP, joins pending tasks, then releases stores in reverse acquisition order. Cleanup attempts every registered resource even after an error and preserves the original startup failure. Embedded and CLI hosts also join managed-engine shutdown. No authorization, consent, billing or provider retry rule is relaxed.
+
+Independent review found that joining only the timer's email task omitted delivery triggered directly by a route. Shutdown now also joins the drainer's active batch. A regression holds a synthetic signup-email delivery open and verifies that auth storage stays open until delivery completes. A subsequent read-only review confirmed the correction with no further confirmed blocker. The test transport is trusted dependency injection, not request data or a production email configuration change.
+
+### Final local verification
+
+- Host lifecycle and resource-scope tests: **8 pass, zero fail, 24 assertions** in `/private/tmp/matterhorn-host-reviewed-tests.log`. Cases cover embedded and CLI bind failures, a setup exception after storage creation, joined embedded stop and route-triggered email delivery.
+- An earlier CLI fixture run timed out once; an isolated retry and three repeats of the original three cases passed (**9 executions, 27 assertions**). The harness now consumes child stderr concurrently. This does not prove the sole cause of the initial timeout. Logs: `/private/tmp/matterhorn-host-lifecycle-cli-debug.log` and `/private/tmp/matterhorn-host-lifecycle-repeat.log`.
+- The earlier combined supervisor/host/scope matrix passed **20 cases** before adding the final email and setup cases. The final full platform gate includes the expanded suites and passes **all 11 stages**, with observed terminal exit zero: `/private/tmp/matterhorn-host-reviewed-safety.log`.
+- Server typecheck/build pass: `/private/tmp/matterhorn-host-reviewed-typecheck.log` and `/private/tmp/matterhorn-host-reviewed-build.log`. App typecheck and web build pass: `/private/tmp/matterhorn-pr-app-typecheck.log` and `/private/tmp/matterhorn-pr-web-build.log`. The web build retains its existing large-chunk warning.
+- Frontend regressions pass **1,499 tests, zero failures, 8,629 assertions across 194 files**: `/private/tmp/matterhorn-pr-frontend-tests.log`.
+- The strict release scanner reports **1,256 source files, zero findings, zero oversized files skipped**. Its configured scope excludes documentation/tests/fixtures/QA. An additional pattern scan of added lines across the 84 outgoing commits found no common credential/private-key patterns. These are bounded checks, not an exhaustive secret audit. No gitleaks run is claimed.
+
+```sh
+bun test apps/server/src/embedded-lifecycle.e2e.test.ts apps/server/src/server-resource-scope.test.ts
+pnpm --dir apps/server typecheck
+pnpm --dir apps/server build
+pnpm --dir apps/app typecheck
+pnpm --dir apps/app build:web
+bun test apps/app/tests
+node scripts/matterhorn-platform-safety-gate.test.mjs
+pnpm test:matterhorn-platform-safety
+node scripts/release-secret-scan.mjs --strict
+git diff --check
+```
+
+The lifecycle checks use disposable local storage, synthetic email and fake local engine processes. They do not establish real inbox delivery, maintained native-runtime compatibility, other operating systems or hosted acceptance. The separately recorded 30-case `.3` native pass is prior artifact-specific evidence, not rerun by this ordinary safety invocation. Stock pinned OpenCode 1.18.31 remains incompatible with the required identity contract.
+
+### Logged in review preview and publication
+
+For the owner's requested UI review, a new isolated local backend and Vite preview use disposable data, without inheriting real provider credentials or modifying existing previews/chats. A sample account was created through normal signup and verified through the supported development mail sink, then signed in through the browser form. The browser visibly shows all five desk choices and the accurate “Connect a model to start agent work” state.
+
+Preview: `http://127.0.0.1:47931/workspace/ws_web_be0d8dc2912f8220/session`. This is a local machine/browser session, not a shareable hosted login. Its source UI includes the accumulated changes; the backend was started before the final email-drain-only correction. No inference provider is configured, so this proves login and launcher presentation, **not successful model or desk execution**. The preview remains running for review.
+
+![Logged-in local review preview](logged-in-review-preview.jpg)
+
+The owner authorized pushing this branch and opening a PR. Publish it as a draft against `dev`, with compatible maintained runtime packaging and hosted acceptance explicitly open. Do not merge, deploy, enable production features or waive native CI as part of publication. The documentation skill was used to retain these distinctions in this report and the release handoff.
