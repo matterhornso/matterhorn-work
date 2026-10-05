@@ -109,6 +109,28 @@ function auth(token: string) {
   return { Authorization: `Bearer ${token}` };
 }
 
+async function releaseFixtureCompactionProvider(base: string, workspaceRoot: string, messageId: string) {
+  // Synthetic billable outcomes must cross the real one-use authorization
+  // boundary. An upstream HTTP status alone is not evidence of provider work.
+  const headers = { "Content-Type": "application/json",
+    "X-Matterhorn-Agent-Runtime-Secret": process.env.MATTERHORN_AGENT_RUNTIME_SECRET! };
+  const validation = await fetch(`${base}/internal/agent-runs/provider-messages`, {
+    method: "POST", headers, body: JSON.stringify({ workspaceDirectory: workspaceRoot,
+      sessionId: "ses_1", messageId, messages: [{
+        info: { id: "msg_fixture_history", role: "user", sessionID: "ses_1" },
+        parts: [{ type: "text", text: "Synthetic public accounting history" }],
+      }] }),
+  });
+  expect(validation.status).toBe(200);
+  const validated = await validation.json();
+  const release = await fetch(`${base}/internal/agent-runs/provider-system`, {
+    method: "POST", headers, body: JSON.stringify({ workspaceDirectory: workspaceRoot,
+      sessionId: "ses_1", expectedRunId: validated.runId, providerId: "ollama",
+      modelId: "local-private", purpose: "compaction" }),
+  });
+  expect(release.status).toBe(200);
+}
+
 function trustedJurisdictionHeaders(input: {
   country: string;
   region?: string | null;
@@ -208,7 +230,7 @@ function startMockOpencode(input?: {
   beforeMessages?: () => Promise<void>;
   onAbort?: () => void;
   beforeRead?: (pathname: string) => Promise<void>;
-  responseForRequest?: (pathname: string, method: string, body: unknown) => Response | undefined;
+  responseForRequest?: (pathname: string, method: string, body: unknown) => Response | undefined | Promise<Response | undefined>;
   holdEvent?: Promise<void>;
   sessionMessages?: unknown[] | (() => unknown[]);
   sessionAgent?: string;
@@ -249,7 +271,7 @@ function startMockOpencode(input?: {
         },
       });
       if (request.method === "GET") await input?.beforeRead?.(url.pathname);
-      const customResponse = input?.responseForRequest?.(url.pathname, request.method, body);
+      const customResponse = await input?.responseForRequest?.(url.pathname, request.method, body);
       if (customResponse) return customResponse;
 
       if (url.pathname === "/provider") {
@@ -4374,6 +4396,7 @@ describe("workspace session read APIs", () => {
         "X-Matterhorn-Agent-Runtime-Secret": process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
       },
       body: JSON.stringify({
+        messageId: upstreamBody?.messageID,
         workspaceDirectory: workspaceRoot,
         sessionId: "ses_1",
         messages: providerMessages,
@@ -4823,9 +4846,10 @@ describe("workspace session read APIs", () => {
           process.env.MATTERHORN_GUARDED_RUNTIME_MODE = runtimeMode;
           process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "isolated-compaction-response-fixture";
           const workspaceRoot = await createWorkspaceRoot();
-          const mock = startMockOpencode({ sessionStatus: "idle", responseForRequest: (pathname, method, body) => {
+          const mock = startMockOpencode({ sessionStatus: "idle", responseForRequest: async (pathname, method, body) => {
             if (pathname !== "/session/ses_1/message" || method !== "POST") return undefined;
-            if (!body || typeof body !== "object" || !("messageID" in body)) throw new Error("Missing fixture message");
+            if (!body || typeof body !== "object" || !("messageID" in body) || typeof body.messageID !== "string") throw new Error("Missing fixture message");
+            await releaseFixtureCompactionProvider(base, workspaceRoot, body.messageID);
             if (fault === "boolean") return Response.json(true);
             if (fault === "empty") return new Response(null, { status: 204 });
             if (fault === "malformed") return new Response("{", { headers: { "content-type": "application/json" } });
@@ -4935,7 +4959,8 @@ describe("workspace session read APIs", () => {
 
   for (const runtimeMode of ["off", "enforce"]) {
     for (const action of ["prompt_async", "command", "summarize", "compact"]) {
-      for (const acknowledgement of ["lost", "accepted", "uncertain", "rejected"]) {
+      for (const acknowledgement of ["lost", "accepted", "uncertain", "rejected",
+        ...(action === "compact" || action === "summarize" ? ["released-rejected"] : [])]) {
         test(`alternate dispatch accounting ${runtimeMode} ${action} ${acknowledgement} retains usage until history reconciles`, async () => {
           process.env.MATTERHORN_GUARDED_RUNTIME_MODE = runtimeMode;
           process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "isolated-dispatch-accounting-runtime-fixture";
@@ -4977,6 +5002,9 @@ describe("workspace session read APIs", () => {
                   const payload = JSON.parse(bytes.toString("utf8"));
                   parentId = payload.messageID;
                   if (typeof parentId !== "string" || !parentId) throw new Error("Missing fixture message ID");
+                  if ((action === "compact" || action === "summarize") && acknowledgement !== "rejected") {
+                    await releaseFixtureCompactionProvider(base, workspaceRoot, parentId);
+                  }
                   if (acknowledgement !== "rejected") acceptedAt = Date.now();
                   if (acknowledgement === "lost") {
                     request.socket.once("close", () => disconnected.resolve());
@@ -4986,7 +5014,8 @@ describe("workspace session read APIs", () => {
                   }
                 }
                 const status = request.method === "POST" && request.url?.split("?")[0] === targetPath && acknowledgement === "uncertain"
-                  ? 503 : target.status;
+                  ? 503 : request.method === "POST" && request.url?.split("?")[0] === targetPath && acknowledgement === "released-rejected"
+                    ? 400 : target.status;
                 response.writeHead(status, { "content-type": "application/json" });
                 response.end(Buffer.from(responseBytes));
               })().catch(() => response.destroy());

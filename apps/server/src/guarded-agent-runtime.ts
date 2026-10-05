@@ -930,6 +930,16 @@ export class MatterhornGuardedAgentRuntime {
   private readonly sessionPrivacyFloorAuthorityKey: Buffer | null;
   private readonly finalizedRunAuthorityKey: Buffer | null;
   private readonly durableStateAuthority: MatterhornDurableStateAuthority | null;
+  // Process-local evidence only: restart/expiry must never turn an unknown
+  // provider outcome into a refund. No prompt content is retained here.
+  private readonly providerDispatchByRunId = new Map<string, {
+    workspaceId: string;
+    sessionId: string;
+    messageId?: string;
+    released: boolean;
+    revoked: boolean;
+    expiresAtMs: number;
+  }>();
   private readonly providerSystemByRunId = new Map<string, {
     workspaceId: string;
     sessionId: string;
@@ -1399,6 +1409,13 @@ export class MatterhornGuardedAgentRuntime {
       expiresAtMs,
     });
     if (normalizedProviderSystem) {
+      for (const [id, dispatch] of this.providerDispatchByRunId) {
+        if (dispatch.expiresAtMs <= Date.now()) this.providerDispatchByRunId.delete(id);
+      }
+      this.providerDispatchByRunId.set(runId, {
+        workspaceId: input.workspaceId, sessionId: input.sessionId,
+        released: false, revoked: false, expiresAtMs,
+      });
       this.providerSystemByRunId.set(runId, {
         workspaceId: input.workspaceId,
         sessionId: input.sessionId,
@@ -1470,6 +1487,35 @@ export class MatterhornGuardedAgentRuntime {
     if (!stored) {
       throw new GuardedRuntimeError(409, "agent_run_message_already_bound", "The user message is already bound to another Matterhorn run.");
     }
+    const dispatch = this.providerDispatchByRunId.get(input.runId);
+    if (dispatch) {
+      if (dispatch.messageId && dispatch.messageId !== input.messageId) {
+        this.providerDispatchByRunId.delete(input.runId);
+      } else dispatch.messageId = input.messageId;
+    }
+  }
+
+  hasRevokedUnusedProviderDispatch(input: {
+    runId: string; workspaceId: string; sessionId: string; messageId: string;
+  }): boolean {
+    const dispatch = this.providerDispatchByRunId.get(input.runId);
+    return !!dispatch && dispatch.revoked && !dispatch.released
+      && dispatch.expiresAtMs > Date.now()
+      && dispatch.workspaceId === input.workspaceId
+      && dispatch.sessionId === input.sessionId && dispatch.messageId === input.messageId;
+  }
+
+  revokeUnusedProviderDispatch(input: {
+    runId: string; workspaceId: string; sessionId: string; messageId: string;
+  }): boolean {
+    const dispatch = this.providerDispatchByRunId.get(input.runId);
+    if (!dispatch || dispatch.released || dispatch.expiresAtMs <= Date.now()
+      || dispatch.workspaceId !== input.workspaceId || dispatch.sessionId !== input.sessionId
+      || dispatch.messageId !== input.messageId) return false;
+    // Synchronous with system release: close authority before acknowledging
+    // zero provider attempts, including when abort finishes before replacement.
+    this.revokeRun(input.runId);
+    return this.hasRevokedUnusedProviderDispatch(input);
   }
 
   claimRuntimeCompactionMessage(input: {
@@ -1554,6 +1600,8 @@ export class MatterhornGuardedAgentRuntime {
     // again, so stale or mutated messages cannot reuse this release.
     delete context.validatedMessagesHash;
     delete context.validatedMessagesAtMs;
+    const dispatch = this.providerDispatchByRunId.get(runId);
+    if (dispatch) dispatch.released = true;
     return { runId, system: [context.system], systemHash: context.systemHash };
   }
 
@@ -1561,15 +1609,26 @@ export class MatterhornGuardedAgentRuntime {
     runtimeSecret: string;
     workspaceId: string;
     sessionId: string;
+    messageId: string;
     messages: unknown;
     expectedRunId?: string;
   }): { accepted: true; runId: string; messagesHash: string } {
     this.assertRuntimeSecret(input.runtimeSecret);
-    const runId = this.activeRun(input.sessionId);
+    const nowMs = Date.now();
+    const binding = typeof input.messageId === "string" && input.messageId.trim()
+      ? assertGuardedMessageBindingState(
+        this.authorizedState("user_message_binding", "guarded_message_binding_state_invalid")
+          .getRecord<unknown>(input.messageId, nowMs),
+        "user_message_binding", input.messageId, nowMs,
+      ) : null;
+    const runId = binding?.runId;
     const context = runId ? this.providerSystemByRunId.get(runId) : undefined;
     const scope = runId ? this.runScope(runId) : null;
     if (
       !runId
+      || binding?.workspaceId !== input.workspaceId
+      || binding.sessionId !== input.sessionId
+      || this.activeRun(input.sessionId) !== runId
       || (input.expectedRunId !== undefined && input.expectedRunId !== runId)
       || !context
       || !scope
@@ -2372,6 +2431,8 @@ export class MatterhornGuardedAgentRuntime {
   private revokeRun(runId: string): void {
     this.capabilities.closeRun(runId);
     this.providerSystemByRunId.delete(runId);
+    const dispatch = this.providerDispatchByRunId.get(runId);
+    if (dispatch) dispatch.revoked = true;
     const scope = this.runScope(runId);
     if (scope) {
       const active = this.activeRunState(scope.sessionId);
@@ -2388,6 +2449,8 @@ export class MatterhornGuardedAgentRuntime {
   }
 
   close(): void {
+    this.providerDispatchByRunId.clear();
+    this.providerSystemByRunId.clear();
     this.sessionPrivacyFloorAuthorityKey?.fill(0);
     this.finalizedRunAuthorityKey?.fill(0);
     this.capabilities.close();

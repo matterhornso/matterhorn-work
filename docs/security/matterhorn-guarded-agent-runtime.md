@@ -60,11 +60,13 @@ The internal capability and completion routes require
 `X-Matterhorn-Agent-Runtime-Secret`. They are not client APIs.
 
 The same runtime-only credential protects the provider-message validation and
-provider-system binding routes. Final-message validation checks the active
-workspace, session and run; retries also supply the expected run ID. Initial
-compaction validation still has an unresolved replacement race because the native
-hook omits its parent identity. See the [current native-runtime evidence](../../qa-reports/launch/2026-10-05/RESULTS.md#delayed-runtime-authorization);
-this boundary is not fully certified. The following system request must supply
+provider-system binding routes. Final-message validation resolves the exact
+sealed user-message binding and checks the active workspace, session and run;
+retries also supply the expected run ID. The local plugin requires current-parent
+identity from early runtime hooks, supplied by an experimental source patch but
+absent from stock OpenCode 1.18.31. Missing identity fails closed. See the
+[current native-runtime evidence](../../qa-reports/launch/2026-10-05/RESULTS.md#exact-runtime-identity-and-unused-reservations);
+the deployable runtime contract is not yet certified. The following system request must supply
 the exact run ID returned by message validation. A stale ID is rejected before
 consuming the replacement run's authorization. Its response is additionally
 bound to provider, model, request purpose, and the single-use message-validation
@@ -73,6 +75,13 @@ only until the run ends. A restart discards these private bytes and makes the
 in-flight request fail closed. Hosted readiness requires the authoritative
 gateway, the managed OpenCode plugin, and a valid runtime credential even while
 per-tool capability rollout is `off`.
+
+Compaction can release an unused reservation only when the same gateway process
+observed the exact run/workspace/session/message and revokes it synchronously
+before any provider-system release. A content-free, expiring record tracks that
+monotonic release state. A previous release, missing record, expiry or restart is
+not evidence for cancellation; history reconciliation retains responsibility for
+those outcomes. HTTP 400 or an empty response alone does not prove zero usage.
 
 Stored chats are private workspace context during compaction even when the
 original turn began as public research. Secret-shaped content in any stored

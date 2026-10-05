@@ -158,7 +158,7 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native compaction preser
       return response.json();
     };
     const constants = JSON.parse(await readFile(new URL("../../../constants.json", import.meta.url), "utf8"));
-    expect((await call("/global/health")).version).toBe(constants.opencodeVersion.replace(/^v/, ""));
+    expect((await call("/global/health")).version).toBe(process.env.MATTERHORN_TEST_OPENCODE_VERSION ?? constants.opencodeVersion.replace(/^v/, ""));
     if (route !== "contract") {
       const isolatedEnv = {
         OPENWORK_DATA_DIR: join(root, "gateway"), MATTERHORN_WORK_DATA_DIR: join(root, "work-data"),

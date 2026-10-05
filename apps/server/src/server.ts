@@ -3058,6 +3058,11 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
     providerSystem: GuardedProviderSystemContext;
   } | null = null;
   let completeGuardedRunAfterResponse = false;
+  const unusedCompactionDispatch = () => !!(guardedSummaryStart && guardedRunId && workspace
+    && input.guardedRuntime.revokeUnusedProviderDispatch({
+      runId: guardedRunId, workspaceId: workspace.id,
+      sessionId: guardedSummaryStart.sessionId, messageId: guardedSummaryStart.messageId,
+    }));
   const reconcileUsage = () => {
     if (input.modelUsageStore && usageSubject && usageReservationId && workspace) {
       scheduleModelUsageReconciliation({
@@ -3583,7 +3588,8 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
       signal: upstreamController.signal,
     });
     if (!response.ok) {
-      if (response.status >= 400 && response.status < 500) {
+      if (unusedCompactionDispatch()
+        || (!guardedSummaryStart && response.status >= 400 && response.status < 500)) {
         dispatchStarted = false;
         input.modelUsageStore?.cancel(usageReservationId);
         if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
@@ -3657,7 +3663,7 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
       }
     }
   } catch (error) {
-    if (!dispatchStarted) {
+    if (!dispatchStarted || unusedCompactionDispatch()) {
       input.modelUsageStore?.cancel(usageReservationId);
       if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
     } else reconcileUsage();
@@ -3687,12 +3693,20 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
     const result: unknown = await response.json().catch(() => null);
     reconcileUsage();
     if (!guardedSummaryStart) throw new Error("Missing compaction binding");
-    assertCompactionResponse(result, {
-      sessionId: guardedSummaryStart.sessionId,
-      messageId: guardedSummaryStart.messageId,
-      providerId: guardedSummaryStart.input.providerId,
-      modelId: guardedSummaryStart.input.modelId,
-    });
+    try {
+      assertCompactionResponse(result, {
+        sessionId: guardedSummaryStart.sessionId,
+        messageId: guardedSummaryStart.messageId,
+        providerId: guardedSummaryStart.input.providerId,
+        modelId: guardedSummaryStart.input.modelId,
+      });
+    } catch (error) {
+      if (unusedCompactionDispatch()) {
+        input.modelUsageStore?.cancel(usageReservationId);
+        await input.guardedRuntime.failRun(guardedRunId);
+      }
+      throw error;
+    }
     await input.guardedRuntime.completeTrustedGatewayRun(guardedRunId, "success");
     // Keep the trusted summarize API's boolean response, not the internal
     // native prompt response used to establish exact accounting ownership.
@@ -11384,14 +11398,16 @@ function createRoutes(
     );
     const workspace = resolveGuardedRuntimeWorkspace(body.workspaceDirectory);
     const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
-    if (!sessionId || !Array.isArray(body.messages)) {
-      throw new ApiError(400, "invalid_payload", "sessionId and messages are required");
+    const messageId = typeof body.messageId === "string" ? body.messageId.trim() : "";
+    if (!sessionId || !messageId || !Array.isArray(body.messages)) {
+      throw new ApiError(400, "invalid_payload", "sessionId, messageId and messages are required");
     }
     try {
       const validated = guardedRuntime.validateRuntimeProviderMessages({
         runtimeSecret,
         workspaceId: workspace.id,
         sessionId,
+        messageId,
         messages: body.messages,
         ...(typeof body.expectedRunId === "string" ? { expectedRunId: body.expectedRunId } : {}),
       });
@@ -15973,8 +15989,10 @@ function createRoutes(
       assertCompactionResponse(result, { sessionId, messageId: userMessageId,
         providerId: modelResolution.model.providerID, modelId: modelResolution.model.modelID });
     } catch (error) {
-      const rejectedStatus = error instanceof ApiError && isRecord(error.details) ? error.details.status : undefined;
-      if (!dispatchStarted || (typeof rejectedStatus === "number" && rejectedStatus >= 400 && rejectedStatus < 500)) {
+      const unusedDispatch = guardedAcceptance && guardedRuntime.revokeUnusedProviderDispatch({
+        runId: guardedAcceptance.runId, workspaceId: workspace.id, sessionId, messageId: userMessageId,
+      });
+      if (!dispatchStarted || unusedDispatch) {
         modelUsageStore.cancel(usage.reservation.reservationId);
         if (guardedAcceptance) await guardedRuntime.failRun(guardedAcceptance.runId);
       } else {
