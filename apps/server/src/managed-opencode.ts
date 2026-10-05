@@ -158,6 +158,22 @@ export async function createManagedOpencodeServer(options: {
   let lastRestartAt: string | null = null;
   let closePromise: Promise<void> | null = null;
 
+  let restartTask: Promise<void> | null = null;
+  let cancelStartup: (() => void) | null = null;
+  let healthController: AbortController | null = null;
+  const shutdownError = new Error("Managed OpenCode startup cancelled by shutdown");
+  const processClosers = new WeakMap<ChildProcess, ReturnType<typeof createManagedProcessClose>>();
+  const closeChild = (process: ChildProcess): Promise<void> => {
+    // A failed spawn has no OS process and will not emit an exit event.
+    if (process.pid === undefined) return Promise.resolve();
+    let closer = processClosers.get(process);
+    if (!closer) {
+      closer = createManagedProcessClose(process);
+      processClosers.set(process, closer);
+    }
+    return closer.close();
+  };
+
   const spawnChild = async (): Promise<ChildProcess> => {
     const childEnv: NodeJS.ProcessEnv = {
       ...process.env,
@@ -176,10 +192,11 @@ export async function createManagedOpencodeServer(options: {
       stdio: ["ignore", "pipe", "pipe"],
     });
 
+    let cancel: (() => void) | null = null;
     try {
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(
-          () => reject(new Error(`Timeout waiting for OpenCode server after ${options.timeoutMs ?? 15_000}ms`)),
+          () => fail(new Error(`Timeout waiting for OpenCode server after ${options.timeoutMs ?? 15_000}ms`)),
           options.timeoutMs ?? 15_000,
         );
         let output = "";
@@ -199,6 +216,8 @@ export async function createManagedOpencodeServer(options: {
           clearTimeout(timeout);
           reject(error);
         };
+        cancel = () => fail(shutdownError);
+        cancelStartup = cancel;
         nextChild.stdout?.on("data", (chunk) => {
           appendOutput(chunk);
           for (const line of output.split("\n")) {
@@ -220,8 +239,10 @@ export async function createManagedOpencodeServer(options: {
         });
       });
     } catch (error) {
-      await createManagedProcessClose(nextChild, { termTimeoutMs: 250, killTimeoutMs: 250 }).close();
+      await closeChild(nextChild);
       throw error;
+    } finally {
+      if (cancelStartup === cancel) cancelStartup = null;
     }
 
     return nextChild;
@@ -236,51 +257,60 @@ export async function createManagedOpencodeServer(options: {
     if (stopped || restarting || restartTimer) return;
     const delayMs = restartBackoffMs();
     options.onEvent?.({ type: "restart_scheduled", reason, delayMs });
-    restartTimer = setTimeout(async () => {
+    restartTimer = setTimeout(() => {
       restartTimer = null;
       if (stopped) return;
       restarting = true;
-      const previous = child;
-      child = null;
-      if (previous && !previous.killed) previous.kill("SIGKILL");
-      try {
-        const nextChild = await spawnChild();
-        if (stopped) {
-          nextChild.kill("SIGTERM");
-          return;
-        }
-        child = nextChild;
-        restartCount += 1;
-        consecutiveHealthFailures = 0;
-        lastRestartReason = reason;
-        lastRestartAt = new Date().toISOString();
-        options.onEvent?.({ type: "restarted", reason, restartCount, pid: nextChild.pid ?? null });
-        nextChild.once("exit", () => {
-          if (!stopped && child === nextChild) {
-            child = null;
-            scheduleRestart("process_exit");
+      restartTask = (async () => {
+        const previous = child;
+        try {
+          // Do not overlap engines on the same port or workspace storage.
+          if (previous) await closeChild(previous);
+          if (child === previous) child = null;
+          if (stopped) return;
+          const nextChild = await spawnChild();
+          if (stopped) {
+            await closeChild(nextChild);
+            return;
           }
-        });
-      } catch (error) {
-        options.onEvent?.({
-          type: "restart_failed",
-          reason,
-          message: safeManagedOpencodeFailure(error),
-        });
-        restartFailureCount += 1;
-        restarting = false;
-        scheduleRestart("restart_failed");
-        return;
-      } finally {
-        restarting = false;
-      }
+          child = nextChild;
+          restartCount += 1;
+          consecutiveHealthFailures = 0;
+          lastRestartReason = reason;
+          lastRestartAt = new Date().toISOString();
+          options.onEvent?.({ type: "restarted", reason, restartCount, pid: nextChild.pid ?? null });
+          nextChild.once("exit", () => {
+            if (!stopped && child === nextChild) {
+              child = null;
+              scheduleRestart("process_exit");
+            }
+          });
+        } catch (error) {
+          if (stopped) {
+            if (error !== shutdownError) throw error;
+            return;
+          }
+          options.onEvent?.({
+            type: "restart_failed",
+            reason,
+            message: safeManagedOpencodeFailure(error),
+          });
+          restartFailureCount += 1;
+          restarting = false;
+          scheduleRestart("restart_failed");
+          return;
+        } finally {
+          restarting = false;
+        }
+      })();
     }, delayMs);
     restartTimer.unref?.();
   };
 
-  child = await spawnChild();
-  child.once("exit", () => {
-    if (!stopped && child) {
+  const initialChild = await spawnChild();
+  child = initialChild;
+  initialChild.once("exit", () => {
+    if (!stopped && child === initialChild) {
       child = null;
       scheduleRestart("process_exit");
     }
@@ -288,17 +318,22 @@ export async function createManagedOpencodeServer(options: {
 
   healthTimer = setInterval(async () => {
     if (stopped || restarting || probeInFlight || !child) return;
+    const probedChild = child;
     probeInFlight = true;
     const controller = new AbortController();
+    healthController = controller;
     const timeout = setTimeout(() => controller.abort(), healthCheckTimeoutMs);
     try {
       const response = await fetch(`${url}/global/health`, {
         signal: controller.signal,
         headers: { Authorization: authorization },
       });
+      await response.body?.cancel();
+      if (stopped || child !== probedChild || restarting) return;
       if (!response.ok) throw new Error(`health_${response.status}`);
       consecutiveHealthFailures = 0;
     } catch {
+      if (stopped || child !== probedChild || restarting) return;
       consecutiveHealthFailures += 1;
       options.onEvent?.({
         type: "health_failure",
@@ -310,6 +345,7 @@ export async function createManagedOpencodeServer(options: {
       }
     } finally {
       clearTimeout(timeout);
+      if (healthController === controller) healthController = null;
       probeInFlight = false;
     }
   }, healthCheckIntervalMs);
@@ -338,9 +374,12 @@ export async function createManagedOpencodeServer(options: {
         stopped = true;
         if (healthTimer) clearInterval(healthTimer);
         if (restartTimer) clearTimeout(restartTimer);
+        cancelStartup?.();
+        healthController?.abort();
+        await restartTask;
         const current = child;
+        if (current) await closeChild(current);
         child = null;
-        if (current) await createManagedProcessClose(current).close();
       })();
       return closePromise;
     },

@@ -4,6 +4,8 @@ This report continues the [4 October QA record](../2026-10-04/RESULTS.md) for th
 
 **Latest release finding:** the reproduced fresh-orphan lock delay is corrected in the separate Darwin experimental runtime `.3`: the final binary passes all 30 native cases and six repeats of the previously intermittent chat-crash case. Recovery requires a matching kernel boot/process namespace and proof that the recorded owner PID is absent; it does not replay inference. See [local lock recovery verification and limits](#local-orphan-lock-recovery-candidate). The stock release pin remains incompatible, and this fixture is not a production distribution. Unknown/legacy/incompletely initialized locks retain the lease delay; other platform execution, production artifacts, coordinated pins and broader hosted/UI/security acceptance remain open. Do not treat this local correction as hosted launch readiness.
 
+**Latest supervisor correction:** shutdown now joins replacement startup and waits for child termination; failed executable startup retains its original error. The new real-process fixtures pass alongside existing supervisor controls, including three repeated runs. See [supervisor lifecycle verification](#managed-engine-shutdown-and-startup). This does not certify embedded host startup, a real model response or hosted readiness.
+
 ## Team access and legacy token revocation
 
 The initial 39-case loopback HTTP matrix had **13 failures and 26 passing controls**. Four failures showed a revoked owner continuing a team-token inventory read, creation after a billing lookup, creation after a pre-queue delay, or revocation of another token. Nine failures showed delayed session reads, raw runtime reads and raw event streams returning data after legacy owner, collaborator or viewer tokens were revoked. Revoking an unrelated token and leaving access unchanged preserved normal operations.
@@ -1111,3 +1113,32 @@ Run the core group from upstream `packages/core` with `bun test test/util/effect
 Fast recovery is proved here on Darwin arm64, not Linux, Windows or macOS Intel. Windows and unavailable host-identity probes keep lease-based recovery. Legacy records, a crash before owner metadata is fully written, and a crashed breaker can still wait for lease expiry; this patch does not claim immediate recovery at every initialization instruction. Linux namespace matching is implemented but needs real container/namespace acceptance. Kernel identity and lock metadata are trusted local-runtime inputs, not an authorization boundary against a hostile filesystem administrator or cloned kernel state.
 
 The earlier full safety-gate result is not a substitute for these artifact-specific checks; no broad platform green result is newly claimed. Next exercise initialization/lease fallback and actual Linux packaging, then produce maintained artifacts with the intended model catalog and coordinated installer/SDK/readiness pins. The stock 1.18.31 release pin is still rejected by the identity contract. Hosted five-desk/live-chain, Jev, inbox/recovery, isolation/deletion, encryption/restore, rendered UI and browser acceptance remain required. Nothing was pushed, merged or deployed. The documentation skill kept those limits explicit in the repository handoff.
+
+## Managed engine shutdown and startup
+
+Following local commit `e20ea64bf4c0e5dec432e0459c39aa1b9a3e55a2`, three new regressions failed against the existing supervisor. Two showed `close()` resolving while a replacement process was still alive, both before and during a delayed listener announcement. The third showed a missing executable reporting a SIGKILL cleanup failure instead of `ENOENT`. The disposable engines deliberately ignore SIGTERM; their recorded PIDs are checked for actual termination, not just `child.killed`.
+
+The correction tracks the restart task, cancels pending startup during shutdown, and awaits a shared per-child TERM/KILL lifecycle. Replacement waits for the previous engine's exit before spawning. Failed spawns without a PID retain their original error. Shutdown aborts an in-flight health request; stale results from a stopped or replaced child cannot emit health failures or schedule a restart. Process status remains a liveness diagnostic, not proof of workspace initialization or desk readiness. No prompt, provider call or tool is replayed.
+
+The expanded fixture covers shutdown during an unanswered health request and while the previous engine ignores TERM, plus startup timeout, an unexpected listener URL and early process exit. It checks no later restart or event is emitted after close. The new suite is included in the existing runtime-perimeter safety stage and its wiring contract.
+
+### Supervisor verification
+
+- Baseline: three failing regressions in `/private/tmp/matterhorn-supervisor-lifecycle-red.log`.
+- Focused tests: **13 pass, zero fail, 54 assertions** in `/private/tmp/matterhorn-supervisor-lifecycle-expanded.log`.
+- Three repeats: **39 pass, zero fail, 162 assertions** in `/private/tmp/matterhorn-supervisor-lifecycle-repeat.log`.
+- Server typecheck and build pass in `/private/tmp/matterhorn-supervisor-final-typecheck.log` and `/private/tmp/matterhorn-supervisor-final-build.log`. The initial expanded-test typecheck caught two nullable PID references in cleanup closures; those now capture a narrowed constant without casts.
+- Safety-gate wiring and `git diff --check` pass. The first test rerun without loopback permission failed with sandbox `EPERM`; the authorized disposable-listener reruns above establish the result.
+- The complete platform safety gate passes **all 11 stages**, terminal exit zero, in `/private/tmp/matterhorn-supervisor-platform-safety.log`. Its runtime stage includes the final lifecycle fixture. This ordinary gate does not rerun the experimental native binary or establish hosted acceptance; native artifact evidence remains scoped to the separately recorded `.3` checks.
+
+```sh
+bun test apps/server/src/managed-opencode-lifecycle.test.ts apps/server/src/managed-opencode.test.ts
+bun test --rerun-each 3 apps/server/src/managed-opencode-lifecycle.test.ts apps/server/src/managed-opencode.test.ts
+pnpm --dir apps/server typecheck
+pnpm --dir apps/server build
+node scripts/matterhorn-platform-safety-gate.test.mjs
+pnpm test:matterhorn-platform-safety
+git diff --check
+```
+
+These are local macOS process and loopback fixtures, not real-provider or hosted acceptance. They do not prove descendant-process cleanup, an OS refusal to terminate a child, other platforms, or successful workspace initialization. Next reproduce cleanup at the host-entry boundary: `embedded.ts` and `cli.ts` start the managed engine before `startServer`, with no catch visible around HTTP startup. Embedded stop also awaits engine termination before stopping HTTP. Determine whether bind/setup or child-close failures leave resources alive, then add regression coverage before changing those paths. Maintained runtime distribution, hosted five-desk/Jev, auth/inbox, data isolation/deletion, encryption/restore and rendered UI/browser acceptance remain open. Existing previews, chats and installed runtimes were untouched; nothing was pushed, merged or deployed.
