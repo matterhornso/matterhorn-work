@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash, createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { publicGuides } from "../apps/app/content/public-guides.mjs";
 
 import {
   buildUpstreamUrl,
@@ -192,8 +193,20 @@ assert.deepEqual(
   deploymentConfigs[1].config.rewrites,
   "root and app-scoped Vercel deployments must expose the same proxy boundary",
 );
+const guideSource = `/learn/:guide(${publicGuides.filter((guide) => guide.slug).map((guide) => guide.slug).join("|")})`;
+const staticGuideRewrites = [
+  { source: "/learn", destination: "/learn/index.html" },
+  { source: "/learn/", destination: "/learn/index.html" },
+  { source: guideSource, destination: "/learn/:guide.html" },
+  { source: `${guideSource}/`, destination: "/learn/:guide.html" },
+];
 
 for (const { configPath, config } of deploymentConfigs) {
+  assert.deepEqual(
+    config.rewrites.slice(0, staticGuideRewrites.length),
+    staticGuideRewrites,
+    `${configPath} must serve only the approved static guides ahead of proxy routes`,
+  );
   const serialized = JSON.stringify(config.rewrites);
   for (const route of [
     "/api/:path*",
@@ -221,7 +234,7 @@ for (const { configPath, config } of deploymentConfigs) {
       `${configPath} must let HTML navigation for ${route} fall through to the SPA`,
     );
   }
-  for (const rewrite of config.rewrites.slice(0, -1)) {
+  for (const rewrite of config.rewrites.slice(staticGuideRewrites.length, -1)) {
     const destination = new URL(rewrite.destination, "https://app.example.com");
     const forwardedPath = destination.searchParams
       .get("__matterhorn_path")
