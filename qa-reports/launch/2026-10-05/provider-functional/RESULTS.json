@@ -1,0 +1,49 @@
+{
+  "scope": "Local isolated launch wiring; real-provider functional acceptance is BLOCKED",
+  "baseHead": "77c1ad2b78f0c7c0af193c6c9dfc1b2938658b6e",
+  "date": "2026-10-05",
+  "realInferenceRequests": 0,
+  "realDeskResponses": { "Private AI": "NOT RUN", "Bittensor": "NOT RUN", "Hyperliquid": "NOT RUN", "Polymarket": "NOT RUN", "Sui": "NOT RUN" },
+  "blockers": [
+    "No authorized existing CUDOS provider credential source was found in the documented disposable configurations, current shell, known historical project env paths, standard OpenWork env store, or standard OpenCode auth/config stores. Only file presence, provider IDs and key names/presence were reported; no key values were printed.",
+    "Supply an exact existing owner-only env-file path securely. Do not paste secrets into chat, command arguments, Git, or a report. The launcher reads only CUDOS_API_KEY and allowlisted CUDOS policy metadata; it never executes env-file contents.",
+    "Credential presence is not credential validity. Actual provider model-catalog access and inference must still pass.",
+    "Verified-only provider policy is retained. Account-specific training/retention policy evidence must be supplied by the operator if absent; no verification date, zero-retention claim, or account opt-in state was invented.",
+    "Final launcher retains manual host approval. Any required approval must follow the actual supported approval flow, not a host-token bypass. Normal-user five-desk acceptance is not established by startup.",
+    "The local email preview is a console-delivery fixture using public signup/verification routes, not a real inbox. No accounts were seeded, marked verified, or created during wiring checks."
+  ],
+  "runtime": {
+    "binary": "/private/tmp/matterhorn-maintained-runtime.4V7GrP/updater-protected/opencode",
+    "sha256": "1508e0d95931482a6bb76cee553422f6d60e07848b432c9512cc43908f169c90",
+    "platform": "Darwin arm64 only for this launcher artifact",
+    "isolation": "New owner-only temporary root, HOME/XDG/config/data/cache/tmp, auth and usage databases, random internal credentials, separate loopback ports. Original previews and chats are not reused or reset.",
+    "guardedRuntime": "enforce",
+    "accountMessageGateway": "required",
+    "providerPrivacy": "verified-only",
+    "hostApproval": "manual",
+    "usageEnforcement": "hard; 100000 per-account and global daily/monthly token ceiling; 10000 reservation",
+    "jeVAndStm": "disabled",
+    "providerKeyPersistence": "Launcher does not write the provider key to generated files. Private runtime logs remain owner-only; this does not certify all third-party logging behavior."
+  },
+  "commandsFromRepositoryRoot": {
+    "localSafetyTests": "node --test qa-reports/launch/2026-10-05/provider-functional/launch.test.mjs",
+    "providerFreeCheck": "node qa-reports/launch/2026-10-05/provider-functional/launch.mjs --wiring-only --check-only",
+    "validateExplicitSource": "node qa-reports/launch/2026-10-05/provider-functional/launch.mjs --env-file /absolute/private/provider.env --check-only",
+    "startExplicitSource": "node qa-reports/launch/2026-10-05/provider-functional/launch.mjs --env-file /absolute/private/provider.env",
+    "stop": "Send SIGTERM to only the launcher PID created by that invocation. It owns and joins its new Bun process group, with bounded TERM/KILL fallback. Preserve existing preview PIDs."
+  },
+  "validation": {
+    "tests": "3 passed, 0 failed, independently repeated by reviewer. Covers missing explicit source despite inherited key, private file/key presence, world-readable file rejection, symlink rejection, oversize rejection, provider-free/source conflict, and no fixture key in stdout/stderr.",
+    "portabilityLimit": "These optional local QA tests require the exact maintained Darwin artifact above. They are not wired into repository CI and are not a portable all-platform acceptance suite.",
+    "sourceReview": "Independent read-only review found no remaining scoped launcher source blocker after bounded descriptor reads, isolated HOME, exact-owned-process cleanup, Vite envDir:false and removal of migration-fragment VITE defines.",
+    "wiring": "Fresh provider-free maintained runtime and frontend started; /api/auth/config returned 200 with email verification required; unauthenticated /workspaces returned 401. No prompt or account mutation was sent.",
+    "cleanup": "The revised launcher's provider-free process group 53556 was verified absent after launcher termination; its frontend5173/backend49809 listeners were closed. Existing preview47931 remained PID8268. A final manual-approval-only startup verification is recorded separately below.",
+    "finalManualApprovalStartup": "PASS: launcher PID53801, Bun/process-group53844, frontend127.0.0.1:5173, backend127.0.0.1:50238, root /var/folders/96/vmhqgys5337f1g3f26phrhn80000gn/T/matterhorn-pr1032-functional-zJaklo. Metadata reports manual approval, guarded enforce, account gateway required and provider policy blocked/unverified. Public auth config HTTP200 requires email verification. SIGTERM to only launcher53801 closed the process group; kill(-53844,0) returned ESRCH and both new ports had no listener. Preview47931 remained PID8268. Launcher reports exit143 after intentional group SIGTERM; cleanup completion was independently verified. No provider-free preview remains advertised as functional."
+  },
+  "sourceOnlyModelGuidanceFinding": {
+    "catalog": "Managed CUDOS catalog performs a bounded authenticated GET to the configured official /models endpoint when a key exists. Failure falls back to the repository catalog; a displayed fallback model is not proof of provider availability. No invented model was added.",
+    "picker": "Empty picker says No models available. Connect a provider to get started. Managed-credential Settings instead says Unavailable in this deployment and hides the Add CUDOS API key control. This can leave a managed user without a concrete next action; this is source-only evidence, not a new rendered acceptance claim.",
+    "changes": "No broad UI change made by this task."
+  },
+  "releaseLimits": "No push, merge, deployment, paid infrastructure provisioning, wallet signing, transaction submission, hosted auth acceptance, real provider response, or live-chain desk acceptance is established."
+}
