@@ -10,7 +10,7 @@
   },
   "bunVersion": "1.3.14",
   "patches": [
-    { "file": "opencode-1.18.31-request-identity.patch", "sha256": "fe5ea43bb2fc4aba455fa85a8026426951e6caf27e993a464b50f50ef7c408eb" },
+    { "file": "opencode-1.18.31-request-identity.patch", "sha256": "51ff60abad754396ac14175f13b278010c4dd7abcce977c651ad58b15d889dea" },
     { "file": "opencode-1.18.31-lock-recovery.patch", "sha256": "676994e9a0cecc7dc0d46f9ccccfeab95ecdc78bf7fe048004595432f3b1f248" },
     { "file": "opencode-1.18.31-distribution-version.patch", "sha256": "5bfc61a7b5576778c3e72ab255b03d92b169d92ea8e759b16f880e0ac0bc452e" },
     { "file": "opencode-1.18.31-managed-upgrade.patch", "sha256": "6cf3692d12613607715a7909cc921d3307fcebdcdce0311cf990ce8a8f8425a5" }

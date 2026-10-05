@@ -25,6 +25,20 @@ test("build environment excludes credentials, release flags and Bun/Node injecti
   for (const key of ["GH_TOKEN", "AWS_SECRET_ACCESS_KEY", "NODE_OPTIONS", "BUN_OPTIONS", "OPENCODE_RELEASE", "OPENCODE_VERSION"]) assert.equal(env[key], undefined);
 });
 
+test("hook-denial fixture retains real plugin loading without unrelated registry installation", () => {
+  const patch = readFileSync(new URL("../patches/runtime/opencode-1.18.31-request-identity.patch", import.meta.url), "utf8");
+  assert.ok(patch.includes("if (input?.localPlugin)"));
+  assert.ok(patch.includes("return LayerNode.compile(root, [...replacements, [Npm.node, NpmTest.noop]])"));
+  assert.ok(patch.includes('const withLocalPlugin = testEffect(makeHttp({ localPlugin: true }))'));
+  assert.ok(patch.includes('withLocalPlugin.instance("finalizes assistant when provider-message preparation fails"'));
+  assert.ok(patch.includes('plugin: [pathToFileURL(file).href]'));
+  assert.ok(patch.includes('throw new Error("Fixture message authorization denied")'));
+  for (const assertion of ["assistant.time.completed", "assistant.error", "assistant.tokens.input", "assistant.tokens.output",
+    '(yield* status.get(chat.id)).type', "yield* llm.calls"]) assert.ok(patch.includes(assertion));
+  const builder = readFileSync(new URL("./build-pinned-opencode.mjs", import.meta.url), "utf8");
+  assert.ok(builder.includes('["test", "test/session/prompt.test.ts", "--timeout", "30000"]'));
+});
+
 for (const change of ["patch", "catalog-checksum", "empty-catalog", "invalid-manifest"]) {
   test(`rejects ${change} before fetching or building source`, () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-distribution-test-"));

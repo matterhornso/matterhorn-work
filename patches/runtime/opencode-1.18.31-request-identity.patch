@@ -69,10 +69,17 @@ index 0f85d44..766b679 100644
            if (outcome === "break") break
            continue
 diff --git a/packages/opencode/test/session/prompt.test.ts b/packages/opencode/test/session/prompt.test.ts
-index da6e0f8..6e94285 100644
+index da6e0f8..2a27a72 100644
 --- a/packages/opencode/test/session/prompt.test.ts
 +++ b/packages/opencode/test/session/prompt.test.ts
-@@ -8,7 +8,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
+@@ -2,13 +2,14 @@ import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+ import { SessionV1 } from "@opencode-ai/core/v1/session"
+ import { Database } from "@opencode-ai/core/database/database"
+ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
++import { Npm } from "@opencode-ai/core/npm"
+ import { SessionProjector } from "@opencode-ai/core/session/projector"
+ import { eq } from "drizzle-orm"
+ import { EventV2Bridge } from "@/event-v2-bridge"
  import { expect } from "bun:test"
  import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
  import path from "path"
@@ -81,11 +88,48 @@ index da6e0f8..6e94285 100644
  import { NamedError } from "@opencode-ai/core/util/error"
  import { Agent as AgentSvc } from "../../src/agent/agent"
  import { BackgroundJob } from "@/background/job"
-@@ -1148,6 +1148,36 @@ it.instance(
-
+@@ -51,6 +52,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+ import { Ripgrep } from "@opencode-ai/core/ripgrep"
+ import { Format } from "../../src/format"
+ import { TestInstance } from "../fixture/fixture"
++import { NpmTest } from "../fake/npm"
+ import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
+ import { reply, TestLLMServer } from "../lib/llm-server"
+ import { RuntimeFlags } from "@/effect/runtime-flags"
+@@ -221,7 +223,7 @@ function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; proces
+   return LayerNode.compile(promptRoot, replacements)
+ }
+ 
+-function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
++function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking"; localPlugin?: boolean }) {
+   const root = LayerNode.group([promptRoot, testLLMServerNode])
+   const replacements = [
+     [SessionSummary.node, summary],
+@@ -232,6 +234,9 @@ function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processo
+   if (input?.processor === "blocking") {
+     return LayerNode.compile(root, [...replacements, [SessionProcessor.node, blockingProcessor]])
+   }
++  if (input?.localPlugin) {
++    return LayerNode.compile(root, [...replacements, [Npm.node, NpmTest.noop]])
++  }
+   return LayerNode.compile(root, replacements)
+ }
+ 
+@@ -240,6 +245,9 @@ function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[
+ }
+ 
+ const it = testEffect(makeHttp())
++// The local denial plugin imports no packages; registry installation is not
++// part of this prompt-finalization contract. Keep the real plugin loader/hooks.
++const withLocalPlugin = testEffect(makeHttp({ localPlugin: true }))
+ const noLLMServer = testEffect(makeHttpNoLLMServer())
+ const raceNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "blocking" }))
+ const withMcpInstructions = testEffect(
+@@ -1148,6 +1156,36 @@ it.instance(
+ 
  // Cancel semantics
-
-+it.instance("finalizes assistant when provider-message preparation fails", () =>
+ 
++withLocalPlugin.instance("finalizes assistant when provider-message preparation fails", () =>
 +  Effect.gen(function* () {
 +    const test = yield* TestInstance
 +    const file = path.join(test.directory, "reject-messages.ts")

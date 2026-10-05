@@ -93,8 +93,8 @@ export function buildPinnedRuntime({ output, bun = "bun", sourceRepository, cach
     if (digest(readFileSync(join(source, "bun.lock"))) !== sourceLock) throw new Error("Frozen upstream dependency lockfile changed");
     const packageDirectory = join(source, "packages/opencode");
     run(bun, ["run", "typecheck"], packageDirectory);
-    // A fresh isolated HOME has no plugin-install cache. Preserve every
-    // assertion while allowing its first dependency install up to 30 seconds.
+    // Keep the source suite bounded; the local hook-denial fixture uses the
+    // upstream test-only installer override, not a registry timing dependency.
     run(bun, ["test", "test/session/prompt.test.ts", "--timeout", "30000"], packageDirectory);
     run(bun, ["test", "test/installation-version.test.ts", "test/util/lock-owner.test.ts", "test/util/flock.test.ts", "test/util/effect-flock.test.ts"], join(source, "packages/core"));
     run(bun, ["test", "test/installation/installation.test.ts"], packageDirectory);

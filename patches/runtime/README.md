@@ -36,6 +36,17 @@ never enabled. The binary is accompanied by a provenance JSON file with its
 actual SHA-256, source/patch/catalog identities, and both licenses. Native and
 hosted acceptance are explicitly not claimed by the source-build receipt.
 
+The hook-denial unit fixture uses upstream's `NpmTest.noop` installer layer only
+for that case. It still loads the real local plugin and executes its throwing
+hook, retaining all terminal-state assertions and the 30-second budget. A cold
+local diagnostic spent 5.70 seconds in dependency installation before the hook;
+with the scoped fixture override it passed in 0.51 seconds with an unavailable
+registry. The two macOS CI timeouts were not phase-instrumented, so this removes
+an observed unnecessary dependency rather than proving their exact root cause.
+The maintained identity patch SHA-256 is now
+`51ff60abad754396ac14175f13b278010c4dd7abcce977c651ad58b15d889dea`.
+Production plugin installation and the strict native gate remain unchanged.
+
 The third, packaging-only patch keeps plugin auto-installation on the source
 package baseline `1.18.31` for the `matterhorn` channel, while the executable
 continues to report `1.18.31-matterhorn.1`. Without it, upstream would request a
@@ -86,7 +97,7 @@ adds the separate lock-recovery patch and is identified in the next section.
 - Upstream repository: `https://github.com/anomalyco/opencode`.
 - Base tag: `v1.18.31`; exact commit: `014614d35b397775e5d397a490fc72368c894ec2`.
 - Patch: `opencode-1.18.31-request-identity.patch`.
-- Patch SHA-256: `fe5ea43bb2fc4aba455fa85a8026426951e6caf27e993a464b50f50ef7c408eb`.
+- Historical patch SHA-256: `fe5ea43bb2fc4aba455fa85a8026426951e6caf27e993a464b50f50ef7c408eb` (before the maintained fixture-only installer isolation above).
 - Experimental version: `1.18.31-matterhorn-identity.2`.
 - Build toolchain: Bun `1.3.14`, isolated `@oven/bun-darwin-aarch64@1.3.14` package.
 - Locally built Darwin arm64 binary SHA-256:
