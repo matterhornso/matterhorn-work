@@ -39,7 +39,7 @@ const STAGES = [
   {
     id: "money.path.security",
     label: "Money-path backend security",
-    summary: "Transaction simulation sanitization, Notes and Memory write guards, scopes, and backend security regressions.",
+    summary: "Transaction simulation, guarded execution and receipts, usage accounting, Notes/Memory write guards, scopes, and backend security regressions.",
     themes: [
       "T1 transaction simulation and policy enforcement",
       "T3 adversarial backend tests",
@@ -57,6 +57,10 @@ const STAGES = [
       "apps/server/src/polymarket-jurisdiction-policy.test.ts",
       "apps/server/src/agent-privacy.test.ts",
       "apps/server/src/agent-capability.test.ts",
+      "apps/server/src/agent-run-receipts.test.ts",
+      "apps/server/src/guarded-agent-runtime.test.ts",
+      "apps/server/src/opencode-plugins/matterhorn-guard.test.ts",
+      "apps/server/src/model-usage-store.test.ts",
       "apps/server/src/wallet-safety-policy-routes.e2e.test.ts",
       "apps/server/src/backend-security.e2e.test.ts",
       "apps/server/src/notes-routes.e2e.test.ts",

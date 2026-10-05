@@ -167,6 +167,14 @@ chain before updating the receipt. These counters are runtime observations and
 estimated cost, not provider invoices or a mechanism for downward corrections.
 The separate usage ledger controls reservations and charged allowance.
 
+Known release blocker: the file append and sealed receipt-index write are not
+atomic. If the append succeeds but the index write fails, exact completion
+retries are rejected, including after backend restart. Execution authority is
+revoked, but the receipt cannot recover automatically. The repair must preserve
+authenticated write intent and the first terminal outcome; trusting an unmatched
+file tail or weakening index verification is not an acceptable recovery method.
+See the [failure reproductions](../../qa-reports/launch/2026-10-05/RESULTS.md#in-flight-restart-and-receipt-persistence).
+
 Receipts are created in every guarded mode, including `off`, then written to
 date-segmented, hash-chained workspace storage and expired by the daily retention
 job after 365 days. Workspace purge deletes engine sessions, notes, outputs, memories,

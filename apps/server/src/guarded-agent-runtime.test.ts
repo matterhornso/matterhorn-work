@@ -1309,6 +1309,37 @@ describe("guarded agent runtime transport", () => {
   });
 
   for (const restart of [false, true]) {
+    test(`completion retries recover a receipt-index write failure (restart=${restart})`, async () => {
+      const path = join(dataDir, `receipt-index-failure-${restart}.db`);
+      const state = new MatterhornGuardedRuntimeStateStore(path);
+      let runtime = new MatterhornGuardedAgentRuntime(state);
+      const scope = { workspaceId: `ws_index_failure_${restart}`, sessionId: `ses_index_failure_${restart}` };
+      try {
+        const accepted = await runtime.acceptPrompt({ ...scope,
+          parts: [{ type: "text", text: "Read public Sui balance" }], providerId: "cudos",
+          modelId: "asi1-mini", agentId: "matterhorn-sui", executionMode: "work" });
+        const put = state.put.bind(state);
+        let failIndex = true;
+        state.put = (input) => {
+          if (failIndex && input.kind === "receipt_index") throw new Error("Synthetic receipt-index write failure");
+          return put(input);
+        };
+        const report: Parameters<typeof runtime.completeRun>[0] = {
+          runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!, runId: accepted.runId,
+          status: "success", usage: { inputTokens: 300, outputTokens: 173 } };
+        await expect(runtime.completeRun(report)).rejects.toThrow("Synthetic receipt-index write failure");
+        expect(runtime.capabilities.activeRun(scope.sessionId)).toBeNull();
+        failIndex = false;
+        if (restart) { runtime.close(); runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path)); }
+        await runtime.completeRun(report);
+        expect(await runtime.receipts.get(scope.workspaceId, accepted.runId)).toMatchObject({
+          status: "success", usage: report.usage,
+        });
+      } finally { runtime.close(); }
+    });
+  }
+
+  for (const restart of [false, true]) {
     for (const cancelled of [false, true]) {
       test(`late completion preserves terminal outcome and cumulative usage (restart=${restart}, cancelled=${cancelled})`, async () => {
         const path = join(dataDir, `late-completion-${restart}-${cancelled}.db`);

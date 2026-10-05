@@ -213,6 +213,15 @@ assert.deepEqual(report.stages.map((stage) => stage.id), [
   "product.readiness",
 ]);
 assert.ok(report.stages.every((stage) => Array.isArray(stage.command) && stage.command.length > 0));
+const moneyPath = report.stages.find((stage) => stage.id === "money.path.security");
+for (const suite of [
+  "apps/server/src/agent-run-receipts.test.ts",
+  "apps/server/src/guarded-agent-runtime.test.ts",
+  "apps/server/src/opencode-plugins/matterhorn-guard.test.ts",
+  "apps/server/src/model-usage-store.test.ts",
+]) {
+  assert.ok(moneyPath.command.includes(suite), `money-path gate must execute ${suite}`);
+}
 assert.ok(
   report.stages.every((stage) => Array.isArray(stage.themes) && stage.themes.length >= 2),
   "every platform safety stage should declare assessment-theme coverage",
