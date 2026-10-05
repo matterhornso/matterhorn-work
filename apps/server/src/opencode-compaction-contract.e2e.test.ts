@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdtemp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { createManagedProcessClose } from "./managed-opencode.js";
 import { compactionPromptPart } from "./opencode-compaction-request.js";
@@ -42,6 +42,7 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
   const workspace = join(root, "workspace");
   const messageID = "msg_00000000000000000000000000000002";
   let engine: ReturnType<typeof spawn> | undefined;
+  let previousEnginePid: number | undefined;
   let provider: ReturnType<typeof Bun.serve> | undefined;
   let control: ReturnType<typeof Bun.serve> | undefined;
   let gateway: Awaited<ReturnType<typeof startServer>> | undefined;
@@ -210,7 +211,7 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
     let output = "";
     const startEngine = async (port = 0) => {
     if (!control || !provider) throw new Error("Missing disposable runtime dependencies");
-    engine = spawn(binary, ["serve", "--hostname", "127.0.0.1", "--port", String(port)], {
+    engine = spawn(binary, [...(process.env.MATTERHORN_TEST_RUNTIME_DIAGNOSTICS === "1" ? ["--print-logs", "--log-level", "DEBUG"] : []), "serve", "--hostname", "127.0.0.1", "--port", String(port)], {
       cwd: workspace, stdio: "pipe", env: {
         PATH: process.env.PATH,
         HOME: root, USERPROFILE: root,
@@ -249,6 +250,7 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
     const url = await startEngine();
     const restartEngine = async (abrupt: boolean) => {
       if (!engine) throw new Error("Missing disposable native engine");
+      previousEnginePid = engine.pid;
       if (abrupt) {
         const exited = new Promise<void>(resolve => engine?.once("exit", () => resolve()));
         engine.kill("SIGKILL");
@@ -265,6 +267,26 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
         const freshRead = body === undefined ? await fetch(`${url}${path}?directory=${encodeURIComponent(workspace)}`, {
           headers, keepalive: false, signal: AbortSignal.timeout(3000),
         }).then(async response => { await response.arrayBuffer(); return response.status; }).catch(() => "failed") : "not-retried";
+        if (process.env.MATTERHORN_TEST_RUNTIME_DIAGNOSTICS === "1") {
+          const probes = await Promise.all(["/global/health", "/config", path.replace(/\/message$/, "")].map(async probe => {
+            const status = await fetch(`${url}${probe}?directory=${encodeURIComponent(workspace)}`, {
+              headers, keepalive: false, signal: AbortSignal.timeout(3000),
+            }).then(async response => { await response.arrayBuffer(); return response.status; }).catch(() => "failed");
+            return { probe, status };
+          }));
+          const lockRoot = join(root, "state", "opencode", "locks");
+          const locks = await Promise.all((await readdir(lockRoot).catch(() => [])).map(async name => {
+            const meta: unknown = await readFile(join(lockRoot, name, "meta.json"), "utf8").then(JSON.parse).catch(() => null);
+            const heartbeat = await stat(join(lockRoot, name, "heartbeat")).catch(() => undefined);
+            return {
+              name,
+              previousOwner: typeof meta === "object" && meta !== null && "pid" in meta && meta.pid === previousEnginePid,
+              localHost: typeof meta === "object" && meta !== null && "hostname" in meta && meta.hostname === hostname(),
+              heartbeatAgeMs: heartbeat ? Date.now() - heartbeat.mtimeMs : undefined,
+            };
+          }));
+          console.error(JSON.stringify({ probes, locks, engineExit: engine?.exitCode, runtimeLog: output }));
+        }
         throw new Error(`Native fixture HTTP failed: ${body === undefined ? "GET" : "POST"} ${path}; providerCalls=${providerCalls}; freshRead=${freshRead}`, { cause });
       });
       expect(response.ok).toBe(true);

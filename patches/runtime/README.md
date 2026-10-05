@@ -117,6 +117,16 @@ checksums, and update installers plus compatibility/readiness checks together.
 Repeat native ordinary-chat, tools, cancellation, restart and compaction tests
 against those exact artifacts. The Darwin-only fixture build is not that release.
 
+The separate `opencode-1.18.31-fresh-lock-regression.patch` adds one currently
+failing upstream EffectFlock crash test without backdating lock timestamps. It
+is not included in the binary above and contains no recovery implementation.
+Apply it to the same source base, then run `bun test test/util/effect-flock.test.ts`
+from `packages/core`; the current result is 11 passes and one failure. Native
+diagnostics found two fresh dependency-install locks owned by the killed engine
+while global health remained responsive and workspace reads stalled. See
+[fresh lock recovery evidence and safety requirements](../../qa-reports/launch/2026-10-05/RESULTS.md#fresh-lock-recovery-after-engine-termination).
+Do not delete locks or shorten lease safety checks merely to pass the test.
+
 The native fixture contains **30 cases** and passed earlier complete runs. A
 subsequent isolated repeat records 29 passes and one intermittent timeout reading
 history after abrupt engine termination during a provider request. Targeted
