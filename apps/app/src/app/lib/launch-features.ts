@@ -68,7 +68,7 @@ export function isSettingsTabVisibleAtLaunch(
   if (INTERNAL_SETTINGS_TABS.has(tab)) return false;
   if (tab === "generated-media") return policy.generatedMedia;
   if (tab === "billing") return policy.billing;
-  if (["cloud-account", "cloud-marketplaces", "cloud-workers", "cloud-providers"].includes(tab)) {
+  if (["cloud-marketplaces", "cloud-workers", "cloud-providers"].includes(tab)) {
     return policy.cloud;
   }
   return true;
@@ -77,9 +77,7 @@ export function isSettingsTabVisibleAtLaunch(
 export function isSettingsTabRouteEnabledAtLaunch(
   tab: SettingsTab,
   policy: MatterhornLaunchFeaturePolicy = MATTERHORN_LAUNCH_FEATURES,
-  options: { allowLocalProfile?: boolean } = {},
 ): boolean {
-  if (tab === "cloud-account" && options.allowLocalProfile) return true;
   return isSettingsTabVisibleAtLaunch(tab, policy);
 }
 

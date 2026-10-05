@@ -49,7 +49,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { t } from "../../../../i18n";
 import type { SettingsTab } from "../../../../app/types";
-import { filterLaunchSettingsTabs } from "../../../../app/lib/launch-features";
+import { filterLaunchSettingsTabs, MATTERHORN_LAUNCH_FEATURES } from "../../../../app/lib/launch-features";
 import { isPublicBetaWebDeployment } from "../../../../app/lib/matterhorn-deployment";
 import type {
   MatterhornCapabilityStatus,
@@ -190,7 +190,9 @@ export function getSettingsTabDescription(tab: SettingsTab) {
     case "privacy":
       return "Provider processing, storage, feedback, and retention";
     case "cloud-account":
-      return t("settings.tab_description_cloud_account");
+      return MATTERHORN_LAUNCH_FEATURES.cloud
+        ? t("settings.tab_description_cloud_account")
+        : "Manage your profile, sign-in, and account security.";
     case "cloud-marketplaces":
       return t("settings.tab_description_cloud_marketplaces");
     case "cloud-workers":
@@ -370,6 +372,7 @@ export function getWorkspaceSettingsTabs(developerMode = false): SettingsTab[] {
 export function getGlobalSettingsTabs(developerMode: boolean): SettingsTab[] {
   const tabs: SettingsTab[] = [
     "overview",
+    "cloud-account",
     "ai",
     ...(isPublicBetaWebDeployment() ? [] : ["shell" as const]),
     "appearance",
@@ -383,8 +386,8 @@ export function getGlobalSettingsTabs(developerMode: boolean): SettingsTab[] {
 export function getCloudSettingsTabs(developerMode = false): SettingsTab[] {
   return filterLaunchSettingsTabs(
     developerMode && !isPublicBetaWebDeployment()
-      ? ["cloud-account", "cloud-workers"]
-      : ["cloud-account"],
+      ? ["cloud-workers"]
+      : [],
   );
 }
 
