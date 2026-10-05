@@ -42,6 +42,43 @@ const AUTH_CONFIG_FAIL_CLOSED: DenPublicAuthConfig = {
   turnstileSiteKey: null,
 };
 
+// Short, bounded backoff. The request itself already carries a 12s timeout, so
+// this only covers an edge that drops a connection outright.
+const AUTH_CONFIG_RETRY_BACKOFF_MS = [400, 1_200];
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const done = () => {
+      globalThis.clearTimeout(timer);
+      resolve();
+    };
+    const timer = globalThis.setTimeout(done, ms);
+    signal?.addEventListener("abort", done, { once: true });
+  });
+}
+
+/**
+ * A transient edge failure must not present as a configured-closed account
+ * service: that wrongly hides password recovery from established users. Retry
+ * transport and 5xx failures only, then fall back fail-closed as before.
+ */
+export async function loadPublicAuthConfig(
+  load: () => Promise<DenPublicAuthConfig>,
+  signal?: AbortSignal,
+): Promise<DenPublicAuthConfig> {
+  for (const backoffMs of [...AUTH_CONFIG_RETRY_BACKOFF_MS, null]) {
+    try {
+      return await load();
+    } catch (error) {
+      // A 4xx is the service answering, not failing; a retry cannot change it.
+      if (backoffMs === null || (error instanceof DenApiError && error.status < 500)) break;
+      await sleep(backoffMs, signal);
+      if (signal?.aborted) break;
+    }
+  }
+  return AUTH_CONFIG_FAIL_CLOSED;
+}
+
 export function publicSignupAvailabilityMessage(
   config: DenPublicAuthConfig | null,
 ): string | null {
@@ -111,13 +148,14 @@ export function PublicWebSigninPage({
         onSignedIn();
         return;
       }
-      try {
-        setPublicAuthConfig(await client.getPublicAuthConfig());
-      } catch {
-        // Keep established accounts usable during a rolling deployment, but
-        // never infer that signup or recovery is safe from a missing config.
-        setPublicAuthConfig(AUTH_CONFIG_FAIL_CLOSED);
-      }
+      // Keep established accounts usable during a rolling deployment, but
+      // never infer that signup or recovery is safe from a missing config.
+      const authConfig = await loadPublicAuthConfig(
+        () => client.getPublicAuthConfig(),
+        signal,
+      );
+      if (signal?.aborted) return;
+      setPublicAuthConfig(authConfig);
     } catch {
       if (signal?.aborted) return;
       setAccountServiceAvailable(false);
