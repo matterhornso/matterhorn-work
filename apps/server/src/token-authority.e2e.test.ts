@@ -185,7 +185,7 @@ describe("legacy bearer runtime lifetime", () => {
           if (change !== "unchanged") await app.revoke(change === "revoked" ? token.id : other.id);
           finish();
           const result = await pending;
-          expect(dispatched).toBe(change === "revoked" ? 0 : 1);
+          expect(dispatched, result.body).toBe(change === "revoked" ? 0 : 1);
           expect(result.status).toBe(change === "revoked" ? 401 : 200);
           if (change === "revoked") expect(JSON.parse(result.body).code).toBe("unauthorized");
         } finally {

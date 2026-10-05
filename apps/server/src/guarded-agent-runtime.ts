@@ -2193,6 +2193,18 @@ export class MatterhornGuardedAgentRuntime {
     await this.finishRun(runId, status);
   }
 
+  async cancelSessionRun(input: { workspaceId: string; sessionId: string }): Promise<void> {
+    // An idle legacy runtime can still be stopped before guarded credentials
+    // are configured. Presence is only a no-op check, never authorization to
+    // trust an unverified persisted run.
+    if (!this.stateStore.getRecord("active_agent_run", input.sessionId)) return;
+    const runId = this.activeRun(input.sessionId);
+    if (!runId) return;
+    const scope = this.runScope(runId);
+    if (scope?.workspaceId !== input.workspaceId || scope.sessionId !== input.sessionId) return;
+    await this.finishRun(runId, "cancelled");
+  }
+
   /**
    * Completes a run dispatched by a trusted Matterhorn server route rather
    * than by the OpenCode runtime plugin. This is intentionally not exposed as
@@ -2631,11 +2643,15 @@ export class MatterhornGuardedAgentRuntime {
   ): Promise<void> {
     const scope = this.runScope(runId);
     const coworker = this.capabilities.coworkerForRun(runId);
-    if (scope) await this.receipts.get(scope.workspaceId, runId);
     // A completion replay arrives after revocation cleared the broker's
     // decisions. Preserve the persisted audit evidence in that case.
     const capabilityDecisions = scope ? this.capabilities.decisionsForRun(runId) : undefined;
+    // User cancellation closes authority before the first asynchronous read.
+    // A delayed runtime completion notification must not keep tools or model
+    // authorization usable after Stop has been acknowledged.
+    if (status === "cancelled") this.revokeRun(runId);
     try {
+      if (scope) await this.receipts.get(scope.workspaceId, runId);
       await this.receipts.complete({ runId, status, usage, capabilityDecisions });
       if (scope && coworker) {
         const receipt = await this.receipts.get(scope.workspaceId, runId);

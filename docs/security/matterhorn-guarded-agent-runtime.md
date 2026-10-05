@@ -83,6 +83,13 @@ monotonic release state. A previous release, missing record, expiry or restart i
 not evidence for cancellation; history reconciliation retains responsibility for
 those outcomes. HTTP 400 or an empty response alone does not prove zero usage.
 
+Authenticated Stop revokes the exact workspace/session's active guarded run
+before native abort and before asynchronous receipt finalization. It does not
+depend on the runtime completion notification to disable provider context,
+message bindings or capability grants. Wrong-workspace/session Stop cannot
+cancel that run. Revocation prevents new authorization; it is not proof that
+an already-dispatched provider or tool operation stopped or incurred no usage.
+
 Stored chats are private workspace context during compaction even when the
 original turn began as public research. Secret-shaped content in any stored
 message or tool result blocks compaction before allowance reservation or model

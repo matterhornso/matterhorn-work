@@ -2432,6 +2432,76 @@ describe("guarded agent runtime transport", () => {
     });
   }
 
+  test("Stop permits an idle unconfigured runtime but never trusts unsigned active state", async () => {
+    const previous = process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
+    delete process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
+    const store = new MatterhornGuardedRuntimeStateStore(join(dataDir, "stop-unconfigured.db"));
+    const runtime = new MatterhornGuardedAgentRuntime(store);
+    if (previous !== undefined) process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = previous;
+    try {
+      const scope = { workspaceId: "ws_stop_unconfigured", sessionId: "ses_stop_unconfigured" };
+      await expect(runtime.cancelSessionRun(scope)).resolves.toBeUndefined();
+      store.put({ kind: "active_agent_run", key: scope.sessionId, ...scope,
+        value: { runId: "run_unsigned", ...scope }, expiresAtMs: Date.now() + 60000 });
+      await expect(runtime.cancelSessionRun(scope)).rejects.toThrow("cannot safely restore");
+      expect(store.getRecord("active_agent_run", scope.sessionId)).not.toBeNull();
+    } finally { runtime.close(); }
+  });
+
+  for (const receiptFailure of [false, true]) {
+    test(`Stop revokes exact session authority before receipt IO (failure=${receiptFailure})`, async () => {
+      const runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(join(dataDir, `stop-before-io-${receiptFailure}.db`)));
+      const system = "Answer a synthetic public question.";
+      const input: GuardedPromptInput = {
+        workspaceId: `ws_stop_${receiptFailure}`, sessionId: `ses_stop_${receiptFailure}`,
+        providerId: "ollama", modelId: "fixture", executionMode: "work",
+        parts: [
+          { type: "system_context", text: system, source: "system", label: "public", contentHash: sha256(system) },
+          { type: "provider_system_manifest", source: "system", label: "public", contentHash: sha256(system),
+            version: "matterhorn.provider-system.message.v1" },
+        ],
+      };
+      let release = () => {};
+      const gate = new Promise<void>(resolve => { release = resolve; });
+      const originalGet = runtime.receipts.get.bind(runtime.receipts);
+      let stopping: Promise<unknown> | undefined;
+      try {
+        const accepted = await runtime.startAuthorizedPrompt(input, runtime.authorizePrompt(input), { purpose: "message", sections: [system] });
+        const scope = { workspaceId: input.workspaceId, sessionId: input.sessionId };
+        const binding = { ...scope, runId: accepted.runId, messageId: "msg_stop_before_io" };
+        runtime.bindUserMessage(binding);
+        await runtime.cancelSessionRun({ ...scope, workspaceId: "ws_other" });
+        await runtime.cancelSessionRun({ ...scope, sessionId: "ses_other" });
+        const provider: Parameters<typeof runtime.resolveRuntimeProviderSystem>[0] & typeof binding = {
+          ...binding, runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!, expectedRunId: accepted.runId,
+          providerId: "ollama", modelId: "fixture", purpose: "message",
+        };
+        const messages = [{ info: { role: "user", sessionID: input.sessionId, id: binding.messageId },
+          parts: [{ type: "text", text: "Synthetic public question" }] }];
+        expect(runtime.validateRuntimeProviderMessages({ ...provider, messages }).accepted).toBe(true);
+        runtime.receipts.get = async (...args) => {
+          await gate;
+          if (receiptFailure) throw new Error("Synthetic receipt IO failure");
+          return originalGet(...args);
+        };
+        stopping = runtime.cancelSessionRun(scope).catch(error => error);
+        expect(() => runtime.validateRuntimeProviderMessages({ ...provider, messages })).toThrow();
+        expect(() => runtime.resolveRuntimeProviderSystem(provider)).toThrow();
+        expect(runtime.hasRevokedUnusedProviderDispatch(binding)).toBe(true);
+        release();
+        const result = await stopping;
+        if (receiptFailure) expect(result).toBeInstanceOf(Error);
+        else expect(result).toBeUndefined();
+        expect(() => runtime.resolveRuntimeProviderSystem(provider)).toThrow();
+      } finally {
+        release();
+        await stopping;
+        runtime.receipts.get = originalGet;
+        runtime.close();
+      }
+    });
+  }
+
   test("releases provider system context only for the exact active run scope", async () => {
     const path = join(dataDir, "provider-system-exact-scope.db");
     const runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));

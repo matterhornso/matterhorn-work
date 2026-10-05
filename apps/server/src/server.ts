@@ -3026,6 +3026,13 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
     };
     input.sessionPreparations.stop(scope);
     input.approvals.cancelSession(scope);
+    try {
+      await input.guardedRuntime.cancelSessionRun(scope);
+    } catch (error) {
+      if (error instanceof GuardedRuntimeError) throw guardedRuntimeApiError(error);
+      throw error;
+    }
+    assertRequestAccessCurrent(input.request);
   }
   let body: BodyInit | undefined = rawBody;
   let promptAudit: { executionMode: MatterhornExecutionMode; agent?: string; sessionId: string } | null = null;

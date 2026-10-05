@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, readFile, realpath, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createManagedProcessClose } from "./managed-opencode.js";
@@ -16,8 +16,12 @@ for (const { route, replacement, throttle } of [
   { route: "compact", replacement: "messages" }, { route: "summarize", replacement: "messages" },
   { route: "compact", replacement: "system" }, { route: "summarize", replacement: "system" },
   { route: "compact", replacement: false, throttle: true }, { route: "summarize", replacement: false, throttle: true },
+  { route: "chat", replacement: false }, { route: "chat", replacement: false, throttle: true },
+  { route: "chat-tool", replacement: false },
+  { route: "chat", replacement: "messages" }, { route: "chat", replacement: "system" },
+  { route: "chat-stop", replacement: "messages" }, { route: "chat-stop", replacement: "system" },
 ]) {
-test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native compaction preserves a gateway-chosen parent: ${route}, replacement=${replacement}, throttle=${Boolean(throttle)}`, async () => {
+test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves request identity: ${route}, replacement=${replacement}, throttle=${Boolean(throttle)}`, async () => {
   const binary = process.env.MATTERHORN_TEST_OPENCODE_BIN;
   if (!binary) throw new Error("An explicit isolated test runtime is required");
   const root = await mkdtemp(join(tmpdir(), "matterhorn-compaction-contract-"));
@@ -28,6 +32,8 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native compaction preser
   let control: ReturnType<typeof Bun.serve> | undefined;
   let gateway: Awaited<ReturnType<typeof startServer>> | undefined;
   const providerId = route === "contract" ? "fixture" : "ollama";
+  const chat = route.startsWith("chat");
+  const tool = route === "chat-tool";
   const priorEnv = new Map<string, string | undefined>();
   let providerCalls = 0;
   let claims = 0;
@@ -37,19 +43,30 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native compaction preser
   let releaseNew = () => {};
   let reachedOld = () => {};
   let reachedNew = () => {};
+  let checkedOld = () => {};
   const oldGate = new Promise<void>(resolve => { releaseOld = resolve; });
   const newGate = new Promise<void>(resolve => { releaseNew = resolve; });
   const oldReached = new Promise<void>(resolve => { reachedOld = resolve; });
   const newReached = new Promise<void>(resolve => { reachedNew = resolve; });
+  const oldChecked = new Promise<void>(resolve => { checkedOld = resolve; });
   let delayed = false;
   let delayedStatus = 0;
   let delayedBody: unknown;
   let delayedInput: unknown;
   const claimedRuns: string[] = [];
   const pendingRequests: Promise<Response>[] = [];
+  const waitFor = async (promise: Promise<void>) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([promise, new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Native boundary timeout: ${JSON.stringify(controlFailures)}`)), 10000);
+      })]);
+    } finally { clearTimeout(timer); }
+  };
   try {
     await mkdir(workspace);
     const canonicalWorkspace = await realpath(workspace);
+    if (tool) await writeFile(join(workspace, "synthetic.txt"), "Synthetic file value: cobalt-47\n", { mode: 0o600 });
     const hook = new URL("./opencode-plugins/matterhorn-guard.ts", import.meta.url).href;
     control = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
       if (request.headers.get("x-matterhorn-agent-runtime-secret") !== "disposable-compaction-control-key-at-least-32-bytes") return new Response(null, { status: 401 });
@@ -57,12 +74,16 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native compaction preser
         if (!gateway) return new Response(null, { status: 503 });
         const path = new URL(request.url).pathname;
         const forwardedBody = await request.text();
+        // Stop must revoke gateway authority independently of a delayed
+        // runtime completion notification.
+        if (route === "chat-stop" && path === "/internal/agent-runs/complete") await newGate;
         if (path === "/internal/agent-runs/claim-compaction") {
           claims += 1;
           const claim: unknown = JSON.parse(forwardedBody);
           if (claim && typeof claim === "object" && "runId" in claim && typeof claim.runId === "string") claimedRuns.push(claim.runId);
         }
         if ((replacement === "messages" && path === "/internal/agent-runs/claim-compaction" && claims === 2)
+          || (chat && replacement === "messages" && path === "/internal/agent-runs/provider-messages" && delayed)
           || (replacement === "system" && path === "/internal/agent-runs/provider-system" && delayed)) {
           reachedNew();
           await newGate;
@@ -77,7 +98,7 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native compaction preser
         const response = await fetch(`http://127.0.0.1:${gateway.port}${path}`, { method: "POST",
           headers: { "content-type": "application/json", "x-matterhorn-agent-runtime-secret": "disposable-compaction-control-key-at-least-32-bytes" },
           body: forwardedBody });
-        if (holdOld) { delayedStatus = response.status; delayedBody = await response.clone().json(); }
+        if (holdOld) { delayedStatus = response.status; delayedBody = await response.clone().json(); checkedOld(); }
         if (!response.ok) controlFailures.push(`${path}: ${await response.clone().text()}`);
         return response;
       }
@@ -104,10 +125,20 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native compaction preser
         return Response.json({ error: { message: "Synthetic rate limit", type: "rate_limit_error" } },
           { status: 429, headers: { "retry-after": "0" } });
       }
-      if (providerCalls > (throttle ? 2 : 1)) return new Response("Unexpected additional inference", { status: 429 });
+      if (providerCalls > (throttle || tool ? 2 : 1)) return new Response("Unexpected additional inference", { status: 429 });
       const common = { id: "fixture_compaction", object: "chat.completion.chunk", created: 1, model: "fixture" };
+      if (tool && providerCalls === 1) {
+        const chunks = [
+          { ...common, choices: [{ index: 0, delta: { role: "assistant", tool_calls: [{ index: 0,
+            id: "call_synthetic_read", type: "function", function: { name: "read", arguments: JSON.stringify({ filePath: join(canonicalWorkspace, "synthetic.txt") }) } }] }, finish_reason: null }] },
+          { ...common, choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] },
+          { ...common, choices: [], usage: { prompt_tokens: 100, completion_tokens: 23, total_tokens: 123 } },
+        ];
+        return new Response(chunks.map(chunk => `data: ${JSON.stringify(chunk)}\n\n`).join("") + "data: [DONE]\n\n",
+          { headers: { "content-type": "text/event-stream" } });
+      }
       const chunks = [
-        { ...common, choices: [{ index: 0, delta: { role: "assistant", content: "Fixture summary of the synthetic conversation." }, finish_reason: null }] },
+        { ...common, choices: [{ index: 0, delta: { role: "assistant", content: chat ? "Fixture answer to the synthetic request." : "Fixture summary of the synthetic conversation." }, finish_reason: null }] },
         { ...common, choices: [{ index: 0, delta: {}, finish_reason: "stop" }] },
         { ...common, choices: [], usage: { prompt_tokens: 300, completion_tokens: 173, total_tokens: 473 } },
       ];
@@ -126,7 +157,7 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native compaction preser
         ...(route !== "contract" ? { MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED: "1" } : {}),
         OPENCODE_CONFIG_CONTENT: JSON.stringify({
           plugin: [hook], model: `${providerId}/fixture`, small_model: `${providerId}/fixture`, enabled_providers: [providerId],
-          share: "disabled", compaction: { auto: false, prune: false }, permission: { "*": "deny" },
+          share: "disabled", compaction: { auto: false, prune: false }, permission: { "*": "deny", ...(tool ? { read: "allow" } : {}) },
           agent: { title: { disable: true }, fixture: { mode: "primary", prompt: "Answer synthetic test requests only." },
             compaction: { prompt: resolveMatterhornManagedAgentPrompt("compaction"), permission: { "*": "deny" } } },
           provider: { [providerId]: { npm: "@ai-sdk/openai-compatible", name: "Isolated fixture",
@@ -192,6 +223,100 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native compaction preser
       if (!gateway) throw new Error("Missing isolated gateway");
       const base = `http://127.0.0.1:${gateway.port}`;
       const auth = { authorization: "Bearer disposable-compaction-user", "content-type": "application/json" };
+      if (chat) {
+        const sendChat = () => fetch(`${base}/workspace/ws_contract/sessions/${session.id}/messages`, {
+          method: "POST", headers: auth, signal: AbortSignal.timeout(20000),
+          body: JSON.stringify({ agentId: "fixture", model: { providerID: providerId, modelID: "fixture" },
+            message: tool ? "Read synthetic.txt from this workspace, then answer." : "Answer the synthetic project question.", executionMode: "work" }),
+        });
+        const sent = await sendChat();
+        let accepted = await sent.json();
+        expect(sent.status, JSON.stringify({ accepted, controlFailures, runtimeLog: output })).toBe(202);
+        if (route === "chat-stop") {
+          await waitFor(oldReached);
+          const stopped = await fetch(`${base}/w/ws_contract/opencode/session/${session.id}/abort`, {
+            method: "POST", headers: auth, body: "{}", signal: AbortSignal.timeout(10000),
+          });
+          expect(stopped.status, await stopped.text()).toBe(200);
+          releaseOld();
+          await waitFor(oldChecked);
+          expect(delayedStatus, JSON.stringify({ delayedBody, delayedInput })).toBe(409);
+          releaseNew();
+          const deadline = Date.now() + 12000;
+          let items: Array<{ runId: string; status: string }> = [];
+          do {
+            const receipts = await fetch(`${base}/workspace/ws_contract/agent-run-receipts?sessionId=${session.id}`, { headers: auth });
+            expect(receipts.status).toBe(200);
+            items = (await receipts.json()).items;
+            if (items.some(item => item.runId === accepted.runId && item.status !== "pending")) break;
+            await new Promise(resolve => setTimeout(resolve, 50));
+          } while (Date.now() < deadline);
+          expect(items).toHaveLength(1);
+          expect(items[0].runId).toBe(accepted.runId);
+          expect(items[0].status).toMatch(/^(cancelled|error)$/);
+          const usage = await fetch(`${base}/workspace/ws_contract/model-usage/status`, { headers: auth });
+          expect((await usage.json()).status).toMatchObject({ pendingRequests: 0,
+            monthly: { usedTokens: 0, reservedTokens: 0 } });
+          expect(providerCalls).toBe(0);
+          return;
+        }
+        let oldRunId: string | undefined;
+        if (replacement) {
+          oldRunId = accepted.runId;
+          await waitFor(oldReached);
+          let second = await sendChat();
+          accepted = await second.json();
+          if (second.status === 409) {
+            // Aborting the first native request can change stored history
+            // after preflight. Preserve that denial; explicitly resubmit with
+            // a fresh privacy check rather than weakening transcript binding.
+            expect(accepted.code).toBe("agent_privacy_request_changed");
+            expect(providerCalls).toBe(0);
+            second = await sendChat();
+            accepted = await second.json();
+          }
+          expect(second.status, JSON.stringify(accepted)).toBe(202);
+          expect(accepted.runId).not.toBe(oldRunId);
+          await waitFor(newReached);
+          releaseOld();
+          await waitFor(oldChecked);
+          expect(delayedStatus, JSON.stringify({ delayedBody, delayedInput })).toBe(409);
+          releaseNew();
+        }
+        const deadline = Date.now() + 12000;
+        let history = await call(`/session/${session.id}/message`);
+        while (!history.some((entry: { info: { finish?: string } }) => entry.info.finish === "stop") && Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, 50));
+          history = await call(`/session/${session.id}/message`);
+        }
+        expect(history.at(-1)?.info, JSON.stringify({ history, controlFailures, runtimeLog: output }))
+          .toMatchObject({ role: "assistant", finish: "stop", tokens: { input: 300, output: 173 } });
+        const parent = history.find((entry: { info: { role: string; id: string } }) => entry.info.role === "user" && entry.info.id === history.at(-1).info.parentID);
+        expect(parent?.info.agent).toBe("fixture");
+        expect(history.at(-1).parts).toContainEqual(expect.objectContaining({ type: "text", text: "Fixture answer to the synthetic request." }));
+        if (tool) {
+          expect(JSON.stringify(providerInputs[1])).toContain("cobalt-47");
+          expect(history.flatMap((entry: { parts: unknown[] }) => entry.parts)).toContainEqual(expect.objectContaining({
+            type: "tool", tool: "read", state: expect.objectContaining({ status: "completed" }),
+          }));
+        }
+        for (let i = 0; i < 2; i++) {
+          const usage = await fetch(`${base}/workspace/ws_contract/model-usage/status`, { headers: auth });
+          expect(usage.status).toBe(200);
+          expect((await usage.json()).status).toMatchObject({ pendingRequests: 0,
+            monthly: { usedTokens: tool ? 596 : 473, reservedTokens: 0 } });
+        }
+        const receipts = await fetch(`${base}/workspace/ws_contract/agent-run-receipts?sessionId=${session.id}`, { headers: auth });
+        expect(receipts.status).toBe(200);
+        const items = (await receipts.json()).items;
+        expect(items).toHaveLength(replacement ? 2 : 1);
+        expect(items).toContainEqual(expect.objectContaining({ runId: accepted.runId, status: "success" }));
+        if (oldRunId) expect(items.find((item: { runId: string }) => item.runId === oldRunId)?.status).toMatch(/^(cancelled|error)$/);
+        expect(providerCalls).toBe(throttle || tool ? 2 : 1);
+        expect(controlFailures).toHaveLength(replacement ? 1 : 0);
+        expect(claims).toBe(0);
+        return;
+      }
       const path = route === "compact" ? `/workspace/ws_contract/sessions/${session.id}/compact`
         : `/w/ws_contract/opencode/session/${session.id}/summarize`;
       const send = () => {
@@ -204,14 +329,6 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native compaction preser
       let reply: Response;
       if (replacement) {
         const first = send();
-        const waitFor = async (promise: Promise<void>) => {
-          let timer: ReturnType<typeof setTimeout> | undefined;
-          try {
-            await Promise.race([promise, new Promise<never>((_, reject) => {
-              timer = setTimeout(() => reject(new Error(`Native boundary timeout: ${JSON.stringify(controlFailures)}`)), 10000);
-            })]);
-          } finally { clearTimeout(timer); }
-        };
         await waitFor(oldReached);
         const second = send();
         await waitFor(newReached);
