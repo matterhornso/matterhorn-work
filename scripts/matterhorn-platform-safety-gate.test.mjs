@@ -65,6 +65,7 @@ for (const required of [
   "wallet-security-log-reporter.test.ts",
   "wallet-address-book-contract.test.ts",
   "transaction-simulation-safety.test.ts",
+  "agent-run-completion-recovery.test.ts",
   "wallet-safety-policy-routes.e2e.test.ts",
   "backend-security.e2e.test.ts",
   "notes-routes.e2e.test.ts",

@@ -58,6 +58,7 @@ const STAGES = [
       "apps/server/src/agent-privacy.test.ts",
       "apps/server/src/agent-capability.test.ts",
       "apps/server/src/agent-run-receipts.test.ts",
+      "apps/server/src/agent-run-completion-recovery.test.ts",
       "apps/server/src/guarded-agent-runtime.test.ts",
       "apps/server/src/opencode-plugins/matterhorn-guard.test.ts",
       "apps/server/src/model-usage-store.test.ts",

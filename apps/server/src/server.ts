@@ -1749,6 +1749,36 @@ export async function startServer(
     });
   }, 24 * 60 * 60 * 1_000);
   receiptExpiryTimer.unref?.();
+  // Completion recovery is independent of billing holds and browser activity.
+  // Retry only native history reads; never dispatch inference or tools here.
+  let completionRecoveryStopped = false;
+  let completionRecoveryOffset = 0;
+  const recoverPendingCompletions = async () => {
+    const sessions = guardedRuntime.pendingCompletionSessions();
+    if (!sessions.length) return;
+    const count = Math.min(20, sessions.length);
+    const offset = completionRecoveryOffset % sessions.length;
+    completionRecoveryOffset = (offset + count) % sessions.length;
+    for (let index = 0; index < count && !completionRecoveryStopped; index += 1) {
+      const scope = sessions[(offset + index) % sessions.length];
+      try {
+        const workspace = await resolveWorkspace(config, scope.workspaceId);
+        await recoverNativeSessionCompletions(config, workspace, guardedRuntime, scope.sessionId);
+      } catch {
+        // Retain the sealed identity for a later attempt; never log transcript
+        // content, upstream errors or credentials from a recovery response.
+        logger.log("warn", "Native completion recovery remains pending", { code: "agent_run_completion_retry_pending" });
+      }
+    }
+  };
+  const runCompletionRecovery = () => recoverPendingCompletions().catch(() => {
+    logger.log("error", "Native completion recovery could not verify its state", { code: "agent_run_completion_state_invalid" });
+  });
+  let completionRecoveryTask: Promise<void> | null = runCompletionRecovery().finally(() => { completionRecoveryTask = null; });
+  const completionRecoveryTimer = setInterval(() => {
+    if (!completionRecoveryTask) completionRecoveryTask = runCompletionRecovery().finally(() => { completionRecoveryTask = null; });
+  }, 30_000);
+  completionRecoveryTimer.unref?.();
   const expireCryptoEvidence = () => cryptoEvidenceStore?.destroyExpired().then((result) => {
     if (result.failures.length > 0) {
       logger.log("error", "Crypto evidence key expiry was incomplete", {
@@ -2141,6 +2171,8 @@ export async function startServer(
   return {
     ...server,
     stop: async (closeActiveConnections?: boolean) => {
+      completionRecoveryStopped = true;
+      clearInterval(completionRecoveryTimer);
       clearInterval(receiptExpiryTimer);
       if (cryptoEvidenceExpiryTimer) clearInterval(cryptoEvidenceExpiryTimer);
       if (cryptoEvidenceVerificationTimer) clearInterval(cryptoEvidenceVerificationTimer);
@@ -2155,6 +2187,7 @@ export async function startServer(
       watcherHandle.close();
       reloadBaselineRefreshers.delete(config);
       modelUsageStore.close();
+      await completionRecoveryTask;
       await receiptExpiryTask;
       await cryptoEvidenceMaintenanceTask;
       await cryptoEvidenceVerificationTask;
@@ -2861,13 +2894,23 @@ async function reconcileModelUsageSession(input: {
     await opencode.session.messages({ sessionID: input.sessionId }),
     `/session/${encodeURIComponent(input.sessionId)}/message`,
   );
-  return input.store.reconcile({
+  const reconciled = input.store.reconcile({
     subject: input.subject,
     workspaceId: input.workspace.id,
     sessionId: input.sessionId,
     messages,
     unusedMessageIds: input.guardedRuntime.revokedUnusedProviderMessages({ workspaceId: input.workspace.id, sessionId: input.sessionId }),
   });
+  await input.guardedRuntime.recoverSessionCompletions({ workspaceId: input.workspace.id, sessionId: input.sessionId, messages });
+  return reconciled;
+}
+
+async function recoverNativeSessionCompletions(config: ServerConfig, workspace: WorkspaceInfo,
+  guardedRuntime: MatterhornGuardedAgentRuntime, sessionId: string): Promise<void> {
+  const opencode = createWorkspaceOpencodeClient(config, workspace);
+  const messages = unwrapOpencodeResult(await opencode.session.messages({ sessionID: sessionId }, { signal: AbortSignal.timeout(5_000) }),
+    `/session/${encodeURIComponent(sessionId)}/message`);
+  await guardedRuntime.recoverSessionCompletions({ workspaceId: workspace.id, sessionId, messages });
 }
 
 function scheduleModelUsageReconciliation(input: {
@@ -15844,7 +15887,17 @@ function createRoutes(
     const sessionId = ctx.url.searchParams.get("sessionId")?.trim() || undefined;
     const limit = parseOptionalPositiveInteger(ctx.url.searchParams.get("limit"), "limit");
     const items = await guardedRuntime.receipts.list(workspace.id, { sessionId, limit });
-    return jsonResponse({ items, retention: { windowDays: 365, purgeSupported: true } });
+    for (const pendingSession of [...new Set(items.filter(item => item.status === "pending").map(item => item.sessionId))].slice(0, 4)) {
+      assertRequestAccessCurrent(ctx.request);
+      // This read path also retries after billing has already settled. Native
+      // unavailability must leave the authentic pending receipt readable.
+      await recoverNativeSessionCompletions(config, workspace, guardedRuntime, pendingSession).catch(() => undefined);
+    }
+    assertRequestAccessCurrent(ctx.request);
+    const recoveredItems = items.some(item => item.status === "pending")
+      ? await guardedRuntime.receipts.list(workspace.id, { sessionId, limit }) : items;
+    assertRequestAccessCurrent(ctx.request);
+    return jsonResponse({ items: recoveredItems, retention: { windowDays: 365, purgeSupported: true } });
   });
 
   addRoute(routes, "POST", "/workspace/:id/security-receipts/migrate-legacy", "client", async (ctx) => {
@@ -15888,7 +15941,14 @@ function createRoutes(
     if (!receipt) {
       throw new ApiError(404, "agent_run_receipt_not_found", "Agent run receipt not found");
     }
-    return jsonResponse({ item: receipt });
+    assertRequestAccessCurrent(ctx.request);
+    if (receipt.status === "pending") {
+      await recoverNativeSessionCompletions(config, workspace, guardedRuntime, receipt.sessionId).catch(() => undefined);
+    }
+    const item = receipt.status === "pending" ? await guardedRuntime.receipts.get(workspace.id, receipt.runId) : receipt;
+    assertRequestAccessCurrent(ctx.request);
+    if (!item) throw new ApiError(404, "agent_run_receipt_not_found", "Agent run receipt not found");
+    return jsonResponse({ item });
   });
 
   addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/compact", "client", withSessionPreparation(async (ctx, workspace) => {

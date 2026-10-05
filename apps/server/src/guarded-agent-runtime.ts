@@ -21,6 +21,7 @@ import {
 } from "./agent-capability.js";
 import { MatterhornPrivacyFirewall } from "./agent-privacy.js";
 import { MatterhornAgentRunReceiptStore } from "./agent-run-receipts.js";
+import { isAgentRunCompletionBinding, nativeRunCompletion, type AgentRunCompletionBinding } from "./agent-run-completion-recovery.js";
 import {
   MatterhornGuardedCryptoAppAuthorization,
   type MatterhornCryptoAppCapabilityBinding,
@@ -1438,6 +1439,16 @@ export class MatterhornGuardedAgentRuntime {
         context: selectedContextCounts(input),
         contextOptimization: input.contextOptimization,
       });
+      if (this.durableStateAuthority) {
+        const nowMs = Date.now();
+        this.authorizedState("run_completion_binding", "agent_run_completion_binding_invalid").put({
+          key: runId, workspaceId: input.workspaceId, sessionId: input.sessionId,
+          value: { runId, workspaceId: input.workspaceId, sessionId: input.sessionId,
+            providerId: input.providerId, modelId: input.modelId, messageId: null,
+            acceptedAtMs: nowMs } satisfies AgentRunCompletionBinding,
+          expiresAtMs: nowMs + GUARDED_RECEIPT_INDEX_RETENTION_MS, nowMs,
+        });
+      }
       this.raiseSessionPrivacyFloor({
         workspaceId: input.workspaceId,
         sessionId: input.sessionId,
@@ -1468,25 +1479,40 @@ export class MatterhornGuardedAgentRuntime {
       throw new GuardedRuntimeError(409, "agent_run_not_active", "The message no longer belongs to the active guarded run.");
     }
     const nowMs = Date.now();
-    const stored = this.authorizedState(
-      "user_message_binding",
-      "guarded_message_binding_state_invalid",
-    ).putIfAbsent({
-      key: input.messageId,
-      workspaceId: scope.workspaceId,
-      sessionId: input.sessionId,
-      value: {
-        runId: input.runId,
+    this.stateStore.transaction(() => {
+      if (this.stateStore.isWorkspaceDeleted(scope.workspaceId) || this.activeRun(input.sessionId) !== input.runId) {
+        throw new GuardedRuntimeError(409, "agent_run_not_active", "The message no longer belongs to the active guarded run.");
+      }
+      const stored = this.authorizedState(
+        "user_message_binding",
+        "guarded_message_binding_state_invalid",
+      ).putIfAbsent({
+        key: input.messageId,
         workspaceId: scope.workspaceId,
         sessionId: input.sessionId,
-        messageId: input.messageId,
-      } satisfies GuardedMessageBindingState,
-      expiresAtMs: nowMs + GUARDED_RUN_AUTHORITY_TTL_MS,
-      nowMs,
+        value: {
+          runId: input.runId,
+          workspaceId: scope.workspaceId,
+          sessionId: input.sessionId,
+          messageId: input.messageId,
+        } satisfies GuardedMessageBindingState,
+        expiresAtMs: nowMs + GUARDED_RUN_AUTHORITY_TTL_MS,
+        nowMs,
+      });
+      if (!stored) {
+        throw new GuardedRuntimeError(409, "agent_run_message_already_bound", "The user message is already bound to another Matterhorn run.");
+      }
+      const completion = this.completionBinding(input.runId, nowMs);
+      if (completion) {
+        if (completion.value.workspaceId !== scope.workspaceId || completion.value.sessionId !== input.sessionId
+          || completion.value.messageId !== null) throw new Error("agent_run_completion_binding_invalid");
+        this.authorizedState("run_completion_binding", "agent_run_completion_binding_invalid").put({
+          key: input.runId, workspaceId: scope.workspaceId, sessionId: input.sessionId,
+          value: { ...completion.value, messageId: input.messageId },
+          expiresAtMs: completion.expiresAtMs, nowMs,
+        });
+      }
     });
-    if (!stored) {
-      throw new GuardedRuntimeError(409, "agent_run_message_already_bound", "The user message is already bound to another Matterhorn run.");
-    }
     const dispatch = this.providerDispatchByRunId.get(input.runId);
     if (dispatch) {
       if (dispatch.messageId && dispatch.messageId !== input.messageId) {
@@ -2208,6 +2234,72 @@ export class MatterhornGuardedAgentRuntime {
     }
   }
 
+  private completionBinding(runId: string, nowMs = Date.now()): GuardedRuntimeStateRecord<AgentRunCompletionBinding> | null {
+    const record = this.authorizedState("run_completion_binding", "agent_run_completion_binding_invalid")
+      .getRecord<unknown>(runId, nowMs);
+    if (!record) return null;
+    if (!isAgentRunCompletionBinding(record.value) || record.key !== record.value.runId
+      || record.workspaceId !== record.value.workspaceId || record.sessionId !== record.value.sessionId
+      || record.value.acceptedAtMs > record.updatedAtMs || record.updatedAtMs > nowMs
+      || record.expiresAtMs !== record.value.acceptedAtMs + GUARDED_RECEIPT_INDEX_RETENTION_MS) {
+      throw new Error("agent_run_completion_binding_invalid");
+    }
+    return { ...record, value: record.value };
+  }
+
+  /** Trusted server-only reconciliation, not an HTTP transcript submission API. */
+  pendingCompletionSessions(): Array<{ workspaceId: string; sessionId: string }> {
+    if (!this.durableStateAuthority) return [];
+    const sessions = new Map<string, { workspaceId: string; sessionId: string }>();
+    const nowMs = Date.now();
+    for (const candidate of this.authorizedState("run_completion_binding", "agent_run_completion_binding_invalid").listRecords({ nowMs })) {
+      const binding = this.completionBinding(candidate.key, nowMs);
+      if (!binding?.value.messageId || this.stateStore.isWorkspaceDeleted(binding.workspaceId)) continue;
+      const index = assertGuardedReceiptIndexState(this.authorizedState("receipt_index", "agent_run_receipt_index_invalid")
+        .getRecord<unknown>(binding.key, nowMs), binding.key, nowMs);
+      if (!index || index.status !== "pending") continue;
+      if (index.workspaceId !== binding.workspaceId || index.sessionId !== binding.sessionId) {
+        throw new Error("agent_run_completion_binding_invalid");
+      }
+      const scope = { workspaceId: binding.value.workspaceId, sessionId: binding.value.sessionId };
+      sessions.set(JSON.stringify([scope.workspaceId, scope.sessionId]), scope);
+    }
+    return [...sessions.values()];
+  }
+
+  /** The messages must come from the configured native engine, not a request body. */
+  async recoverSessionCompletions(input: { workspaceId: string; sessionId: string; messages: unknown }): Promise<number> {
+    if (!this.durableStateAuthority || this.stateStore.isWorkspaceDeleted(input.workspaceId)) return 0;
+    const records = this.authorizedState("run_completion_binding", "agent_run_completion_binding_invalid")
+      .listRecords<unknown>({ workspaceId: input.workspaceId });
+    let recovered = 0;
+    for (const candidate of records) {
+      if (candidate.sessionId !== input.sessionId) continue;
+      const binding = this.completionBinding(candidate.key);
+      if (!binding) continue;
+      const completion = nativeRunCompletion(binding.value, input.messages);
+      if (!completion) continue;
+      const receipt = await this.receipts.get(input.workspaceId, binding.key);
+      // Recheck after asynchronous receipt I/O. Deleted/expired bindings never
+      // authorize resurrection, and an old result never closes a different run.
+      const current = this.completionBinding(binding.key);
+      if (this.stateStore.isWorkspaceDeleted(input.workspaceId) || !current
+        || canonicalJson(current.value) !== canonicalJson(binding.value) || !receipt
+        || receipt.sessionId !== input.sessionId) continue;
+      if (receipt.status !== "pending" && Object.entries(completion.usage)
+        .every(([key, value]) => typeof Reflect.get(receipt.usage, key) === "number" && Reflect.get(receipt.usage, key) >= value)) continue;
+      await this.finishRun(binding.key, completion.status, completion.usage, () => {
+        const current = this.completionBinding(binding.key);
+        if (this.stateStore.isWorkspaceDeleted(input.workspaceId) || !current
+          || canonicalJson(current.value) !== canonicalJson(binding.value)) {
+          throw new Error("agent_run_completion_binding_unavailable");
+        }
+      });
+      recovered += 1;
+    }
+    return recovered;
+  }
+
   async failRun(runId: string, status: "cancelled" | "error" = "error"): Promise<void> {
     await this.finishRun(runId, status);
   }
@@ -2316,7 +2408,7 @@ export class MatterhornGuardedAgentRuntime {
     for (const callId of capabilities.callIds) this.stagedCapabilities.delete(callId);
     this.stateStore.purgeWorkspace(
       workspaceId,
-      ["active_agent_run", "agent_run_scope", "session_privacy_floor", "staged_capability", "rollout_bypass", "user_message_binding", "assistant_message_binding", "compaction_message_claim", "crypto_app_reservation", "crypto_app_consumed_dispatch", "crypto_pending_intent", "crypto_evidence_publication_claim", "crypto_evidence_operation_claim", "crypto_evidence_finalization", "crypto_evidence_renewal_intent", "crypto_evidence_deletion_intent", "crypto_evidence_sui_anchor_intent"],
+      ["active_agent_run", "agent_run_scope", "session_privacy_floor", "staged_capability", "rollout_bypass", "user_message_binding", "assistant_message_binding", "run_completion_binding", "compaction_message_claim", "crypto_app_reservation", "crypto_app_consumed_dispatch", "crypto_pending_intent", "crypto_evidence_publication_claim", "crypto_evidence_operation_claim", "crypto_evidence_finalization", "crypto_evidence_renewal_intent", "crypto_evidence_deletion_intent", "crypto_evidence_sui_anchor_intent"],
       { includeConsumedCapabilities: false },
     );
     return {
@@ -2665,6 +2757,7 @@ export class MatterhornGuardedAgentRuntime {
     runId: string,
     status: Exclude<MatterhornAgentRunReceipt["status"], "pending">,
     usage?: Partial<Omit<MatterhornAgentRunReceipt["usage"], "toolCallBudget">>,
+    assertCurrent?: () => void,
   ): Promise<void> {
     const scope = this.runScope(runId);
     const coworker = this.capabilities.coworkerForRun(runId);
@@ -2677,7 +2770,7 @@ export class MatterhornGuardedAgentRuntime {
     if (status === "cancelled") this.revokeRun(runId);
     try {
       if (scope) await this.receipts.get(scope.workspaceId, runId);
-      await this.receipts.complete({ runId, status, usage, capabilityDecisions });
+      await this.receipts.complete({ runId, status, usage, capabilityDecisions, assertCurrent });
       if (scope && coworker) {
         const receipt = await this.receipts.get(scope.workspaceId, runId);
         if (receipt) {

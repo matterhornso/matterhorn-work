@@ -286,9 +286,12 @@ export class MatterhornAgentRunReceiptStore {
     memoryWrittenIds?: string[];
     capabilityDecisions?: MatterhornAgentCapabilityDecision[];
     now?: Date;
+    /** Synchronous completion authorization check under the receipt writer lock. */
+    assertCurrent?: () => void;
   }): Promise<void> {
     const now = input.now ?? new Date();
     await this.mutate(input.runId, (receipt) => {
+      input.assertCurrent?.();
       // The first terminal outcome closes execution. A delayed usage report is
       // not a new run or permission to turn a cancelled/error run into success.
       if (receipt.status === "pending") {

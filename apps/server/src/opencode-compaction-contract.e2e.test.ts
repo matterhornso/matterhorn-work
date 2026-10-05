@@ -8,6 +8,8 @@ import { compactionPromptPart } from "./opencode-compaction-request.js";
 import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
 import { resolveMatterhornManagedAgentPrompt } from "./workspace-init.js";
+import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
+import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
 
 // This is a pinned-runtime contract probe, not production guard acceptance.
 // No live provider, account, workspace or existing engine is used.
@@ -29,6 +31,8 @@ for (const { route, replacement, throttle } of [
   { route: "chat-engine-restart", replacement: false },
   { route: "chat-engine-crash-provider", replacement: false },
   { route: "chat-engine-lost-completion", replacement: false },
+  { route: "chat-engine-lost-completion-startup", replacement: false },
+  { route: "chat-engine-lost-completion-tool", replacement: false },
   { route: "chat-engine-lost-ack", replacement: false },
 ]) {
 test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves request identity: ${route}, replacement=${replacement}, throttle=${Boolean(throttle)}`, async () => {
@@ -44,7 +48,7 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
   let gatewayConfig: ServerConfig | undefined;
   const providerId = route === "contract" ? "fixture" : "ollama";
   const chat = route.startsWith("chat");
-  const tool = route.startsWith("chat-tool");
+  const tool = route.startsWith("chat-tool") || route === "chat-engine-lost-completion-tool";
   const stopProvider = route.endsWith("stop-provider");
   const stopStream = route === "chat-stop-stream";
   const priorEnv = new Map<string, string | undefined>();
@@ -93,7 +97,7 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
         if (!gateway) return new Response(null, { status: 503 });
         const path = new URL(request.url).pathname;
         const forwardedBody = await request.text();
-        if (route === "chat-engine-lost-completion" && path === "/internal/agent-runs/complete") {
+        if (route.startsWith("chat-engine-lost-completion") && path === "/internal/agent-runs/complete") {
           completionBody = forwardedBody;
           reachedOld();
           await oldGate;
@@ -266,6 +270,7 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
       const isolatedEnv = {
         OPENWORK_DATA_DIR: join(root, "gateway"), MATTERHORN_WORK_DATA_DIR: join(root, "work-data"),
         MATTERHORN_AUTH_DB: join(root, "auth.db"), MATTERHORN_WORK_MEMORY_ROOT: join(root, "memory"),
+        MATTERHORN_GUARDED_RUNTIME_DB: join(root, "guarded.db"),
         MATTERHORN_MODEL_USAGE_DB: join(root, "usage.db"), MATTERHORN_MODEL_USAGE_ENFORCEMENT: "hard",
         MATTERHORN_MODEL_USAGE_DAILY_LIMIT: "10000", MATTERHORN_MODEL_USAGE_MONTHLY_LIMIT: "10000",
         MATTERHORN_MODEL_USAGE_GLOBAL_DAILY_LIMIT: "100000", MATTERHORN_MODEL_USAGE_GLOBAL_MONTHLY_LIMIT: "100000",
@@ -339,17 +344,42 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
         const sent = await sendChat();
         let accepted = await sent.json();
         expect(sent.status, JSON.stringify({ accepted, controlFailures, runtimeLog: output })).toBe(202);
-        if (route === "chat-engine-lost-completion" || route === "chat-engine-lost-ack") {
+        if (route.startsWith("chat-engine-lost-completion") || route === "chat-engine-lost-ack") {
           await waitFor(oldReached);
+          const savedHistory = await call(`/session/${session.id}/message`);
+          if (route.endsWith("startup")) {
+            await gateway.stop();
+            gateway = undefined;
+          }
           await restartEngine(true);
           releaseOld();
           const history = await call(`/session/${session.id}/message`);
+          expect(history).toEqual(savedHistory);
           expect(history.at(-1)?.info, JSON.stringify(history)).toMatchObject({ role: "assistant", finish: "stop",
             time: { completed: expect.any(Number) }, tokens: { input: 300, output: 173 } });
+          if (route.endsWith("startup")) {
+            if (!gatewayConfig) throw new Error("Missing disposable gateway configuration");
+            const state = new MatterhornGuardedRuntimeStateStore(join(root, "guarded.db"));
+            const authority = testDurableStateAuthority("disposable-compaction-signing-key-at-least-32-bytes");
+            const status = () => {
+              const record = state.getRecord("receipt_index", accepted.runId);
+              return record ? authority.open<{ status: string }>(record, "fixture_invalid_receipt_index")?.status : undefined;
+            };
+            try {
+              expect(status()).toBe("pending");
+              gateway = await startServer(gatewayConfig);
+              base = `http://127.0.0.1:${gateway.port}`;
+              const deadline = Date.now() + 3000;
+              while (status() === "pending" && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 25));
+              // Inspect the sealed database directly: no billing, receipt or
+              // browser request is allowed to trigger this recovery assertion.
+              expect(status()).toBe("success");
+            } finally { state.close(); authority.close(); }
+          }
           const usage = await fetch(`${base}/workspace/ws_contract/model-usage/status`, { headers: auth });
           expect(usage.status).toBe(200);
           expect((await usage.json()).status).toMatchObject({ pendingRequests: 0,
-            monthly: { usedTokens: 473, reservedTokens: 0 } });
+            monthly: { usedTokens: tool ? 596 : 473, reservedTokens: 0 } });
           const deadline = Date.now() + 3000;
           let items: Array<{ runId: string; status: string }> = [];
           do {
@@ -359,10 +389,16 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
             if (items.some(item => item.runId === accepted.runId && item.status !== "pending")) break;
             await new Promise(resolve => setTimeout(resolve, 100));
           } while (Date.now() < deadline);
-          expect(providerCalls).toBe(1);
+          expect(providerCalls).toBe(tool ? 2 : 1);
           expect(items, JSON.stringify({ history, completionBody, controlFailures })).toEqual([
-            expect.objectContaining({ runId: accepted.runId, status: "success" }),
+            expect.objectContaining({ runId: accepted.runId, status: "success",
+              usage: expect.objectContaining({ inputTokens: tool ? 400 : 300, outputTokens: tool ? 196 : 173 }) }),
           ]);
+          if (tool) {
+            expect(history.flatMap((entry: { parts: Array<{ type: string }> }) => entry.parts)
+              .filter((part: { type: string }) => part.type === "tool")).toHaveLength(1);
+            expect(JSON.stringify(providerInputs[1])).toContain("cobalt-47");
+          }
           return;
         }
         if (route === "chat-engine-crash-provider") {

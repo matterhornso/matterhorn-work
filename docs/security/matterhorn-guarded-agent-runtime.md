@@ -167,15 +167,20 @@ chain before updating the receipt. These counters are runtime observations and
 estimated cost, not provider invoices or a mechanism for downward corrections.
 The separate usage ledger controls reservations and charged allowance.
 
-Known release blocker: if the native engine dies after persisting a terminal
-assistant message but before delivering its completion report, the security
-receipt can stay pending. Plugin usage/binding maps survive a rejected response
-only within the same process; there is no verified durable delivery mechanism.
-Native-history billing reconciliation does not finalize that receipt. A report
-already committed by Matterhorn survives a lost acknowledgement. Do not treat
-a settled charge as a substitute for exact run-bound completion evidence or
-re-execute the model to repair the receipt. See the
-[native crash reproduction](../../qa-reports/launch/2026-10-05/RESULTS.md#native-engine-restart-and-lost-completion-delivery).
+New requests persist a sealed, content-free completion binding before dispatch:
+run, workspace, session, parent message, selected provider/model and admission
+time. It survives execution revocation but expires one year after admission and
+is removed by workspace purge. It confers no execution authority. Startup and
+periodic recovery, plus receipt/usage reads, can reconcile intact terminal history
+fetched by the server from its configured native engine. No public route accepts
+history as completion evidence. Exact parent/session/model identity, complete
+ordered steps, recognized terminal status and valid usage are required; unknown
+or malformed outcomes remain unresolved. The binding and deletion barrier are
+rechecked under the receipt writer lock. Native storage remains a trusted runtime
+boundary, not signed provider evidence. Historical runs without this binding are
+not inferred or migrated. Do not treat billing as proof of receipt success or
+re-execute model/tools to repair a receipt. See
+[native completion recovery and limits](../../qa-reports/launch/2026-10-05/RESULTS.md#native-completion-recovery).
 
 The authenticated receipt writer commits a sealed append intent before file IO.
 It binds the prior index, original file prefix and exact intended receipt bytes.

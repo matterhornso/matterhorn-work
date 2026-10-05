@@ -86,7 +86,7 @@ checksums, and update installers plus compatibility/readiness checks together.
 Repeat native ordinary-chat, tools, cancellation, restart and compaction tests
 against those exact artifacts. The Darwin-only fixture build is not that release.
 
-The local native fixture now has 28 cases: **27 pass and one fails**. The original
+The local native fixture now has **30 passing cases**. The original
 24 cases comprise nine compaction cases and fifteen ordinary-chat, file-tool,
 retry, replacement, Stop and backend-restart cases. Cancellation
 now covers both early authorization boundaries, a received provider request,
@@ -100,11 +100,13 @@ errors and retain unknown-usage holds; the received request completes once with
 See the [current QA evidence](../../qa-reports/launch/2026-10-05/RESULTS.md#in-flight-restart-and-receipt-persistence).
 New native-engine controls verify orderly restart with fresh chat, explicit
 Stop/retry after a provider-side interruption, and a lost acknowledgement after
-Matterhorn commits completion. A fourth case fails: killing the engine before
-completion delivery leaves the receipt pending despite persisted native success
-and correctly settled usage. Durable completion delivery, gateway-downtime recovery
-and concurrent replicas remain unfinished. See the
-[latest native evidence](../../qa-reports/launch/2026-10-05/RESULTS.md#native-engine-restart-and-lost-completion-delivery).
+Matterhorn commits completion. The former lost-delivery failure now passes with
+the server's sealed run/parent/model binding and native-history recovery, without
+repeating model/tool work. Two additional cases cover recovery on backend startup
+without browser/billing reads and cumulative usage after a two-step tool request.
+Concurrent production replicas, extended downtime, deleted history and delivery
+beyond binding retention remain unverified or unavailable. See the
+[latest native evidence](../../qa-reports/launch/2026-10-05/RESULTS.md#native-completion-recovery).
 The server's separate authenticated
 append-journal correction now passes the two receipt-index recovery regressions;
 see [receipt recovery evidence](../../qa-reports/launch/2026-10-05/RESULTS.md#authenticated-receipt-append-recovery).
