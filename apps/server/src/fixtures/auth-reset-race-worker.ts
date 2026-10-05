@@ -32,15 +32,17 @@ port.once("message", (input: unknown) => {
     // after initial validation; no machine or main-thread clock is changed.
     return clock() + ("expireAtCommit" in input && input.expireAtCommit === true && checks > 1 ? 2 * 60 * 60_000 : 0);
   };
+  let result: { phase: "result"; ok: boolean; code?: string };
   try {
     store.resetPassword(input.token, input.password);
-    port.postMessage({ phase: "result", ok: true });
+    result = { phase: "result", ok: true };
   } catch (error) {
-    port.postMessage({ phase: "result", ok: false,
-      code: error instanceof MatterhornAuthError ? error.code : "fixture_failure" });
+    result = { phase: "result", ok: false,
+      code: error instanceof MatterhornAuthError ? error.code : "fixture_failure" };
   } finally {
     Date.now = clock;
     store.close();
-    port.close();
   }
+  port.postMessage(result);
+  port.close();
 });

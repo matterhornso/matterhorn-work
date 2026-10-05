@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Worker } from "node:worker_threads";
 import { MatterhornAuthStore } from "./auth-store.js";
+import { trackFixtureWorker } from "./fixtures/worker-lifecycle.js";
 
 const PASSWORD = "disposable-account-authority";
 const NEW_PASSWORD = "disposable-rotated-authority";
@@ -19,6 +20,7 @@ for (const operation of ["begin-deletion", "revoke-sessions"]) {
       const store = new MatterhornAuthStore(path);
       const db = new Database(path);
       const worker = new Worker(new URL("./fixtures/auth-credential-race-worker.ts", import.meta.url));
+      const lifecycle = trackFixtureWorker(worker);
       const barrier = new Int32Array(new SharedArrayBuffer(4));
       try {
         const owner = store.createAccount({ email: "authority@example.com", password: PASSWORD });
@@ -63,6 +65,7 @@ for (const operation of ["begin-deletion", "revoke-sessions"]) {
         });
         expect(await completed).toEqual({ phase: "result", ok: false,
           code: boundary === "shared-membership" ? "account_owns_shared_organization" : "unauthorized" });
+        await lifecycle.waitForExit();
         expect(interleaved).toBe(true);
         expect(store.listPendingAccountDeletionJobs()).toHaveLength(boundary === "competing-deletion" ? 1 : 0);
         expect(db.query("SELECT COUNT(*) AS count FROM users WHERE id = ?").get(owner.user.id)).toEqual({ count: 1 });
@@ -79,7 +82,7 @@ for (const operation of ["begin-deletion", "revoke-sessions"]) {
         }
       } finally {
         Atomics.store(barrier, 0, 1); Atomics.notify(barrier, 0);
-        await worker.terminate();
+        await lifecycle.stop();
         db.close(); store.close();
         rmSync(root, { recursive: true, force: true });
       }
@@ -95,6 +98,7 @@ for (const operation of ["begin-deletion", "revoke-sessions"]) {
     const db = new Database(path);
     db.exec("PRAGMA busy_timeout = 0");
     const worker = new Worker(new URL("./fixtures/auth-credential-race-worker.ts", import.meta.url));
+    const lifecycle = trackFixtureWorker(worker);
     const barrier = new Int32Array(new SharedArrayBuffer(4));
     try {
       const owner = store.createAccount({ email: "serialized@example.com", password: PASSWORD });
@@ -123,6 +127,7 @@ for (const operation of ["begin-deletion", "revoke-sessions"]) {
           newPassword: NEW_PASSWORD, token: owner.token, code: "", barrier: barrier.buffer, pauseAfterLock: true });
       });
       expect(await completed).toEqual({ phase: "result", ok: true });
+      await lifecycle.waitForExit();
       expect(serialized).toBe(true);
       expect(store.getSession(second.token)).toBeNull();
       expect(store.getSession(other.token)?.user.id).toBe(other.user.id);
@@ -135,7 +140,7 @@ for (const operation of ["begin-deletion", "revoke-sessions"]) {
       }
     } finally {
       Atomics.store(barrier, 0, 1); Atomics.notify(barrier, 0);
-      await worker.terminate(); db.close(); store.close();
+      await lifecycle.stop(); db.close(); store.close();
       rmSync(root, { recursive: true, force: true });
     }
   }, 15000);

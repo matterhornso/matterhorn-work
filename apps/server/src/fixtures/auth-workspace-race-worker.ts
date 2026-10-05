@@ -39,6 +39,7 @@ port.once("message", (input: unknown) => {
       return Reflect.apply(original, this, [sql, ...args]);
     },
   });
+  let result: { phase: "result"; ok: boolean; code?: string };
   try {
     if (input.operation === "create-organization") {
       store.createOrganization(input.token, { name: "Stale workspace", slug: "stale-workspace" });
@@ -49,12 +50,14 @@ port.once("message", (input: unknown) => {
     } else if (input.operation === "revoke-access") {
       store.revokeHostedMcpAccessCredential(input.token, input.credentialId);
     } else throw new Error("Unknown workspace fixture operation");
-    port.postMessage({ phase: "result", ok: true });
+    result = { phase: "result", ok: true };
   } catch (error) {
-    port.postMessage({ phase: "result", ok: false,
-      code: error instanceof MatterhornAuthError ? error.code : "fixture_failure" });
+    result = { phase: "result", ok: false,
+      code: error instanceof MatterhornAuthError ? error.code : "fixture_failure" };
   } finally {
     Object.defineProperty(Database.prototype, "prepare", descriptor);
-    store.close(); port.close();
+    store.close();
   }
+  port.postMessage(result);
+  port.close();
 });

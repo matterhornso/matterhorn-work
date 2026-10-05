@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Worker } from "node:worker_threads";
 import { MatterhornAuthStore } from "./auth-store.js";
+import { trackFixtureWorker } from "./fixtures/worker-lifecycle.js";
 
 const PASSWORD = "disposable-original-credential";
 const WINNER = "disposable-winning-credential";
@@ -31,6 +32,7 @@ for (const scenario of scenarios) {
     const store = new MatterhornAuthStore(path);
     const db = new Database(path);
     const worker = new Worker(new URL("./fixtures/auth-credential-race-worker.ts", import.meta.url));
+    const lifecycle = trackFixtureWorker(worker);
     const barrier = new Int32Array(new SharedArrayBuffer(4));
     try {
       const verify = scenario.operation === "verify-email";
@@ -93,6 +95,7 @@ for (const scenario of scenarios) {
       const expectedCode = scenario.boundary === "expired-code-replacement" ? "expired_verification_code" : verify ? "invalid_verification_code"
         : scenario.operation === "change-password" ? "unauthorized" : "invalid_credentials";
       expect(await completed).toEqual({ phase: "result", ok: false, code: expectedCode });
+      await lifecycle.waitForExit();
       expect(interleaved).toBe(true);
       expect(db.query("SELECT COUNT(*) AS count FROM sessions WHERE user_id = ?").get(owner.user.id)).toEqual({ count: winnerSession ? 1 : 0 });
       if (winnerSession) expect(store.getSession(winnerSession)?.user.id).toBe(owner.user.id);
@@ -111,7 +114,7 @@ for (const scenario of scenarios) {
       }
     } finally {
       Atomics.store(barrier, 0, 1); Atomics.notify(barrier, 0);
-      await worker.terminate();
+      await lifecycle.stop();
       db.close(); store.close();
       rmSync(root, { recursive: true, force: true });
     }

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Worker } from "node:worker_threads";
 import { MatterhornAuthStore } from "./auth-store.js";
+import { trackFixtureWorker } from "./fixtures/worker-lifecycle.js";
 
 const PASSWORD = "disposable-concurrency-password";
 const WINNING_PASSWORD = "disposable-winning-password";
@@ -14,6 +15,7 @@ for (const change of ["authenticated-change", "competing-reset", "replacement-li
     const path = join(root, "accounts.db");
     const store = new MatterhornAuthStore(path);
     const worker = new Worker(new URL("./fixtures/auth-reset-race-worker.ts", import.meta.url));
+    const lifecycle = trackFixtureWorker(worker);
     const barrier = new Int32Array(new SharedArrayBuffer(4));
     try {
       const owner = store.createAccount({ email: "race@example.com", password: PASSWORD });
@@ -49,6 +51,7 @@ for (const change of ["authenticated-change", "competing-reset", "replacement-li
           expireAtCommit: change === "expiry-at-commit" });
       });
       expect(await completed).toEqual({ phase: "result", ok: false, code: "invalid_reset_token" });
+      await lifecycle.waitForExit();
       expect(interleaved).toBe(true);
       if (change === "expiry-at-commit") {
         expect(store.getSession(owner.token)?.user.id).toBe(owner.user.id);
@@ -64,7 +67,7 @@ for (const change of ["authenticated-change", "competing-reset", "replacement-li
     } finally {
       Atomics.store(barrier, 0, 1);
       Atomics.notify(barrier, 0);
-      await worker.terminate();
+      await lifecycle.stop();
       store.close();
       rmSync(root, { recursive: true, force: true });
     }

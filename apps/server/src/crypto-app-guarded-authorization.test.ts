@@ -40,8 +40,16 @@ afterAll(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
+function fixtureStatePath(name: string): string {
+  // Receipt files and their authenticated SQLite index must belong to the same
+  // fixture; independent state databases cannot share one receipt directory.
+  const directory = join(root, name);
+  process.env.OPENWORK_DATA_DIR = directory;
+  return join(directory, "runtime.db");
+}
+
 async function fixture(name: string) {
-  const path = join(root, `${name}.db`);
+  const path = fixtureStatePath(name);
   const runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
   const accepted = await runtime.acceptPrompt({
     workspaceId: "ws_sui",
@@ -82,7 +90,7 @@ function request(runId: string, sessionId: string, overrides: Record<string, unk
 }
 
 async function consumedInteractiveFixture(name: string, callId: string) {
-  const stateStore = new MatterhornGuardedRuntimeStateStore(join(root, `${name}.db`));
+  const stateStore = new MatterhornGuardedRuntimeStateStore(fixtureStatePath(name));
   const runtime = new MatterhornGuardedAgentRuntime(stateStore);
   runtime.setCoworkerResolver(() => true);
   const workspaceId = "ws_sui";
@@ -342,7 +350,7 @@ describe("guarded crypto app authorization bridge", () => {
   });
 
   test("starts a model-free coworker watch run with one exact dynamic read binding", async () => {
-    const path = join(root, "deterministic-watch.db");
+    const path = fixtureStatePath("deterministic-watch");
     const runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
     runtime.setCoworkerResolver(() => true);
     const binding = {
@@ -714,7 +722,7 @@ describe("guarded crypto app authorization bridge", () => {
   test("refuses to bridge capabilities unless guarded enforcement is active", async () => {
     const previous = process.env.MATTERHORN_GUARDED_RUNTIME_MODE;
     process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "off";
-    const path = join(root, "off.db");
+    const path = fixtureStatePath("off");
     const runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
     const store = new MatterhornGuardedRuntimeStateStore(path);
     const authorization = runtime.createCryptoAppAuthorization({
@@ -737,7 +745,7 @@ describe("guarded crypto app authorization bridge", () => {
     const previous = process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
     delete process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
     const runtime = new MatterhornGuardedAgentRuntime(
-      new MatterhornGuardedRuntimeStateStore(join(root, "missing-authority.db")),
+      new MatterhornGuardedRuntimeStateStore(fixtureStatePath("missing-authority")),
     );
     try {
       let failure: unknown;
@@ -765,7 +773,7 @@ describe("guarded crypto app authorization bridge", () => {
   });
 
   test("restores a pending reservation and appends its receipt after a runtime restart", async () => {
-    const path = join(root, "restart.db");
+    const path = fixtureStatePath("restart");
     const first = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
     const accepted = await first.acceptPrompt({
       workspaceId: "ws_sui",

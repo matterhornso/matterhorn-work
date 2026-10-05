@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Worker } from "node:worker_threads";
 import { MatterhornAuthStore } from "./auth-store.js";
+import { trackFixtureWorker } from "./fixtures/worker-lifecycle.js";
 
 const PASSWORD = "disposable-workspace-authority";
 const NEW_PASSWORD = "disposable-workspace-new-authority";
@@ -22,6 +23,7 @@ for (const operation of ["create-organization", "select-organization", "create-a
       const store = new MatterhornAuthStore(path, INTEGRITY_SECRET);
       const db = new Database(path);
       const worker = new Worker(new URL("./fixtures/auth-workspace-race-worker.ts", import.meta.url));
+      const lifecycle = trackFixtureWorker(worker);
       const barrier = new Int32Array(new SharedArrayBuffer(4));
       try {
         const owner = store.createAccount({ email: "workspace@example.com", password: PASSWORD });
@@ -72,6 +74,7 @@ for (const operation of ["create-organization", "select-organization", "create-a
           ? operation === "select-organization" ? "invalid_organization" : "hosted_mcp_access_invalid"
           : boundary === "capacity-filled" ? "hosted_mcp_access_limit_reached" : "unauthorized";
         expect(await completed).toEqual({ phase: "result", ok: false, code });
+        await lifecycle.waitForExit();
         expect(interleaved).toBe(true);
         expect(db.query("SELECT COUNT(*) AS count FROM organizations WHERE slug = 'stale-workspace'").get()).toEqual({ count: 0 });
         expect(db.query("SELECT COUNT(*) AS count FROM hosted_mcp_access_tokens WHERE user_id = ?").get(owner.user.id))
@@ -91,7 +94,7 @@ for (const operation of ["create-organization", "select-organization", "create-a
         }
       } finally {
         Atomics.store(barrier, 0, 1); Atomics.notify(barrier, 0);
-        await worker.terminate(); db.close(); store.close();
+        await lifecycle.stop(); db.close(); store.close();
         rmSync(root, { recursive: true, force: true });
       }
     }, 15000);

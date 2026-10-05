@@ -31,14 +31,14 @@ for (const size of [0, 1023, 1024, 1025]) {
 for (const change of ["unchanged", "grow-under-limit", "grow-over-limit", "shrink"]) {
   test(`workspace file snapshot uses bounded reads when file changes: ${change}`, async () => {
     const path = await fixture(16);
-    const handle = await fs.open(path, "r");
+    const handle = await fs.open(path, "r+");
     const open = spyOn(fs, "open").mockResolvedValueOnce(handle);
     // Return the already-captured metadata once, modelling a filesystem change
     // after the initial stat but before the first read. Later stats are real.
     const before = await handle.stat();
-    if (change === "grow-under-limit") await fs.appendFile(path, Buffer.alloc(16, 98));
-    if (change === "grow-over-limit") await fs.appendFile(path, Buffer.alloc(8192, 98));
-    if (change === "shrink") await fs.truncate(path, 8);
+    if (change === "grow-under-limit") await handle.write(Buffer.alloc(16, 98), 0, 16, before.size);
+    if (change === "grow-over-limit") await handle.write(Buffer.alloc(8192, 98), 0, 8192, before.size);
+    if (change === "shrink") await handle.truncate(8);
     const metadata = spyOn(handle, "stat").mockResolvedValueOnce(before);
     const unbounded = spyOn(handle, "readFile");
     try {

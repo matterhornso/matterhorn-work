@@ -48,6 +48,7 @@ port.once("message", (input: unknown) => {
       return Reflect.apply(original, this, [sql, ...args]);
     },
   });
+  let result: { phase: "result"; ok: boolean; code?: string };
   try {
     if (input.operation === "sign-in") store.signIn(input.email, input.password);
     else if (input.operation === "change-password") {
@@ -56,13 +57,14 @@ port.once("message", (input: unknown) => {
     else if (input.operation === "begin-deletion") store.beginAccountDeletion(input.token, input.password);
     else if (input.operation === "revoke-sessions") store.revokeOtherSessions(input.token);
     else throw new Error("Unknown fixture operation");
-    port.postMessage({ phase: "result", ok: true });
+    result = { phase: "result", ok: true };
   } catch (error) {
-    port.postMessage({ phase: "result", ok: false,
-      code: error instanceof MatterhornAuthError ? error.code : "fixture_failure" });
+    result = { phase: "result", ok: false,
+      code: error instanceof MatterhornAuthError ? error.code : "fixture_failure" };
   } finally {
     Object.defineProperty(Database.prototype, "prepare", descriptor);
     store.close();
-    port.close();
   }
+  port.postMessage(result);
+  port.close();
 });

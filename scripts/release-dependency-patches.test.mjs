@@ -10,7 +10,7 @@ const root = new URL("../", import.meta.url);
 const manifest = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
 const lock = readFileSync(new URL("pnpm-lock.yaml", root), "utf8");
 const require = createRequire(import.meta.url);
-const versions = { "brace-expansion": "5.0.12", "engine.io": "6.6.10", "fast-uri": "3.1.8", axios: "1.20.0" };
+const versions = { "brace-expansion": "5.0.12", "engine.io": "6.6.10", "fast-uri": "3.1.8", "http-cache-semantics": "4.3.0", axios: "1.20.0" };
 const securityPins = { ...versions, next: "16.3.6" };
 function patched(name) {
   const version = versions[name];
@@ -28,8 +28,33 @@ test("release lock and both override sources retain patched versions", () => {
     assert.ok(workspace.includes(`${name}: ${version}`));
     assert.ok(lock.includes(`  ${name}@${version}:`));
   }
-  for (const version of ["brace-expansion@5.0.9:", "engine.io@6.6.7:", "fast-uri@3.1.7:", "axios@1.18.0:", "next@16.3.4:"])
+  for (const version of ["brace-expansion@5.0.9:", "engine.io@6.6.7:", "fast-uri@3.1.7:", "http-cache-semantics@4.2.0:", "axios@1.18.0:", "next@16.3.4:"])
     assert.ok(!lock.includes(version));
+});
+
+// 4.3.0 includes the CVE-2026-93750 Vary fix, not changed max-stale semantics:
+// https://github.com/kornelski/http-cache-semantics/commit/9fb520be70eff3ff502fe965d9c3265ca2c64e26
+// The maintainer disputes the separate CVE-2026-93748 max-stale advisory:
+// https://github.com/kornelski/http-cache-semantics/issues/56#issuecomment-5975759591
+// A version falling outside that advisory's range is not proof of a max-stale fix.
+test("cache policy rejects Vary wildcards and inherited header values", () => {
+  const CachePolicy = patched("http-cache-semantics");
+  for (const vary of ["*", "* ", " *", " * ", "*, weather", "weather, *"]) {
+    const policy = new CachePolicy(
+      { headers: { weather: "ok" } },
+      { headers: { "cache-control": "max-age=60", vary } },
+    );
+    assert.equal(policy.satisfiesWithoutRevalidation({ headers: { weather: "ok" } }), false, vary);
+  }
+  const policy = new CachePolicy(
+    { headers: { "x-tenant": "alpha" } },
+    { headers: { "cache-control": "max-age=60", vary: "x-tenant" } },
+  );
+  assert.equal(policy.satisfiesWithoutRevalidation({ headers: { "x-tenant": "alpha" } }), true);
+  assert.equal(policy.satisfiesWithoutRevalidation({ headers: { "x-tenant": "beta" } }), false);
+  assert.equal(policy.satisfiesWithoutRevalidation({ headers: Object.create({ "x-tenant": "alpha" }) }), false);
+  const restored = CachePolicy.fromObject(policy.toObject());
+  assert.equal(restored.satisfiesWithoutRevalidation({ headers: { "x-tenant": "alpha" } }), true);
 });
 
 test("patched brace expansion preserves ordinary glob expansion", () => {
