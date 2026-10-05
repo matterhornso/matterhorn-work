@@ -3,19 +3,23 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { AiSettingsView } from "../src/react-app/domains/settings/pages/ai-view";
+import { AiSettingsView, type AiSettingsViewProps } from "../src/react-app/domains/settings/pages/ai-view";
 import { MINIMAL_UI } from "../src/app/lib/minimal-ui";
 
-function renderReadySettings(overrides: Record<string, unknown> = {}) {
+function renderReadySettings(overrides: Partial<AiSettingsViewProps> = {}, savedDefault = false) {
   const queryClient = new QueryClient();
   // Seed authoritative catalog data; summary counts cannot identify chat models.
   const connected = overrides.connectedModelCount !== 0;
-  queryClient.setQueryData(["settings-backend-models"], {
+  queryClient.setQueryData(overrides.runtimeWorkspaceId
+    ? ["settings-workspace-backend-models", overrides.runtimeWorkspaceId]
+    : ["settings-backend-models"], {
+    workspaceSelection: savedDefault ? { providerId: "cudos", modelId: "asi1-mini", variant: "high" } : null,
     catalog: {
       serverFetched: true, connectedProviderCount: connected ? 1 : 0,
       defaultModels: connected ? { cudos: "asi1-mini" } : {},
-      providers: connected ? [{ id: "cudos", name: "ASI:Cloud", connected: true,
-        modelCount: 2, modelIds: ["asi1-mini", "text-embedding-3"], sampleModels: ["asi1-mini"] }] : [],
+      providers: connected ? (overrides.connectedProviders ?? [{ id: "cudos", name: "ASI:Cloud" }]).map((provider) => ({
+        ...provider, connected: true, modelCount: 2, modelIds: ["asi1-mini", "text-embedding-3"], sampleModels: ["asi1-mini"],
+      })) : [],
     },
   });
   return renderToStaticMarkup(
@@ -76,7 +80,8 @@ describe("AI settings rendered hierarchy", () => {
       expect(html).not.toContain("text-embedding-3");
       expect(html).toContain("<summary");
       expect(html).toContain("Provider privacy");
-      expect(html).not.toContain("More model settings");
+      expect(html).toContain("Advanced model and provider settings</summary>");
+      expect(html).not.toContain('<details open=""');
       return;
     }
     expect(html).toContain(
@@ -132,5 +137,48 @@ describe("AI settings rendered hierarchy", () => {
     expect(html).toContain(MINIMAL_UI ? 'aria-label="Chat models"' : "Choose model");
     expect(html).toContain("Return to desk");
     expect(html).not.toContain("Connect AI");
+  });
+
+  test("keeps connected desktop provider management available in advanced settings", () => {
+    const html = renderReadySettings({
+      providerCredentialsManaged: false,
+      connectedProviders: [{ id: "cudos", name: "ASI:Cloud" }, { id: "openai", name: "OpenAI", source: "api" }],
+      canDisconnectProvider: () => true,
+      onConnectCudos: () => undefined,
+    });
+    expect(html).toContain("Connect AI");
+    expect(html).toContain("Update CUDOS key");
+    expect(html).toContain("Disconnect");
+    expect(html).not.toContain("Subscribe");
+    if (MINIMAL_UI) expect(html).toContain("Advanced model and provider settings</summary>");
+  });
+
+  test("never exposes credential editing or disconnect for hosted managed providers", () => {
+    const html = renderReadySettings({
+      connectedProviders: [{ id: "cudos", name: "ASI:Cloud" }, { id: "openai", name: "OpenAI", source: "api" }],
+      canDisconnectProvider: () => true,
+      onConnectCudos: () => undefined,
+    });
+    expect(html).not.toContain("Connect AI");
+    expect(html).not.toContain("Update CUDOS key");
+    expect(html).not.toContain("Add CUDOS API key");
+    expect(html).not.toContain(">Disconnect</button>");
+  });
+
+  test("restores saved-default and reasoning controls without replacing the simple picker", () => {
+    const html = renderReadySettings({
+      runtimeWorkspaceId: "workspace-test",
+      hasLocalModelOverride: true,
+      onUseWorkspaceDefault: () => undefined,
+      modelBehaviorOptions: [{ value: "low", label: "Low", description: "Less reasoning" }, { value: "high", label: "High", description: "More reasoning" }],
+      onCurrentAppModelVariantChange: () => undefined,
+    }, true);
+    if (MINIMAL_UI) {
+      expect(html).toContain('aria-label="Chat models"');
+      expect(html).toContain("Clear saved default");
+      expect(html).toContain("Use saved default");
+      expect(html).toContain("New chats</div>");
+      expect(html).toContain("This app</div>");
+    }
   });
 });
