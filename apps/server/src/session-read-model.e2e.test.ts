@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createHash, createHmac } from "node:crypto";
 import { mkdtemp, mkdir, readFile, realpath, rm, symlink, truncate, writeFile } from "node:fs/promises";
@@ -10,6 +10,7 @@ import { connect } from "node:net";
 import { pathToFileURL } from "node:url";
 
 import { startServer } from "./server.js";
+import * as workspaceUtils from "./utils.js";
 import type { ServerConfig } from "./types.js";
 import { configureVenicePrivateModelRegistry } from "./venice-provider.js";
 import { ensureWorkspaceFiles, resolveMatterhornManagedAgentPrompt } from "./workspace-init.js";
@@ -479,6 +480,7 @@ async function startOpenworkServer(input: {
   trustedProxySecret?: string;
   approval?: ServerConfig["approval"];
   jevTransport?: JevTransport;
+  additionalWorkspaces?: ServerConfig["workspaces"];
 }) {
   // Keep every test's durable guarded-runtime state isolated from both the
   // developer machine and other tests that reuse the same workspace/session IDs.
@@ -511,8 +513,9 @@ async function startOpenworkServer(input: {
         workspaceType: "local",
         ...(input.opencodeBaseUrl ? { baseUrl: input.opencodeBaseUrl } : {}),
       },
+      ...(input.additionalWorkspaces ?? []),
     ],
-    authorizedRoots: [input.workspaceRoot],
+    authorizedRoots: [input.workspaceRoot, ...(input.additionalWorkspaces ?? []).map(workspace => workspace.path)],
     readOnly: input.readOnly ?? true,
     startedAt: Date.now(),
     tokenSource: "cli",
@@ -2175,7 +2178,7 @@ describe("workspace session read APIs", () => {
   }
 
   for (const { runtimeMode, boundary } of ["off", "enforce"].flatMap(runtimeMode =>
-    ["agent", "permission", "accepted", "padded-session"].map(boundary => ({ runtimeMode, boundary })))) {
+    ["agent", "permission", "accepted", "padded-session", "alias-workspace", "padded-workspace"].map(boundary => ({ runtimeMode, boundary })))) {
     for (const outcome of ["unchanged", "stopped", "stop-rejected", "other-session", "unauthenticated"]) {
       test(`gateway preparation ${runtimeMode} ${boundary} ${outcome} does not dispatch cancelled work`, async () => {
         process.env.MATTERHORN_GUARDED_RUNTIME_MODE = runtimeMode;
@@ -2184,7 +2187,7 @@ describe("workspace session read APIs", () => {
         const gate = deferred();
         const reached = deferred();
         const cancelled = boundary !== "accepted" && (outcome === "stopped" || outcome === "stop-rejected");
-        const waitingForAgent = boundary === "agent" || boundary === "padded-session";
+        const waitingForAgent = boundary === "agent" || boundary === "padded-session" || boundary === "alias-workspace" || boundary === "padded-workspace";
         let rejectAbort = false;
         const mock = startMockOpencode({
           sessionStatus: "idle",
@@ -2204,7 +2207,8 @@ describe("workspace session read APIs", () => {
         });
         const base = `http://127.0.0.1:${openwork.server.port}`;
         const sessionPath = boundary === "padded-session" ? "%20ses_1%20" : "ses_1";
-        const send = () => fetch(`${base}/workspace/ws_1/sessions/${sessionPath}/messages`, {
+        const workspacePath = boundary === "alias-workspace" ? "rem_ws_1" : boundary === "padded-workspace" ? "%20ws_1%20" : "ws_1";
+        const send = () => fetch(`${base}/workspace/${workspacePath}/sessions/${sessionPath}/messages`, {
           method: "POST", headers: { ...auth(openwork.token), "Content-Type": "application/json" },
           body: JSON.stringify({ messageID: "msg_stop_preparation", message: "Synthetic cancellation test",
             model: { providerID: "openai", modelID: "gpt-4.1" } }),
@@ -2247,6 +2251,122 @@ describe("workspace session read APIs", () => {
           await pending;
         }
       }, 15000);
+    }
+  }
+
+  for (const action of ["messages", "compact"]) {
+    for (const workspacePath of ["ws_1", "rem_ws_1"]) {
+      for (const stopped of [false, true]) {
+        test(`gateway workspace preparation ${action} ${workspacePath} ${stopped ? "stopped" : "unchanged"} registers before filesystem waits`, async () => {
+          const workspaceRoot = await createWorkspaceRoot();
+          const mock = startMockOpencode({ sessionStatus: "idle" });
+          const openwork = await startOpenworkServer({ workspaceRoot, readOnly: false, hardModelUsageLimit: 1000,
+            opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}` });
+          const base = `http://127.0.0.1:${openwork.server.port}`;
+          const gate = deferred();
+          const ensureDirectory = workspaceUtils.ensureDir;
+          let held = false;
+          const directorySpy = spyOn(workspaceUtils, "ensureDir").mockImplementation(async path => {
+            if (!held && path === workspaceRoot) {
+              held = true;
+              await gate.promise;
+            }
+            return ensureDirectory(path);
+          });
+          const pending = fetch(`${base}/workspace/${workspacePath}/sessions/ses_1/${action}`, {
+            method: "POST", headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+            body: JSON.stringify({ message: "Synthetic workspace preparation", model: { providerID: "ollama", modelID: "local-private" } }),
+          });
+          try {
+            expect(await waitUntil(() => held)).toBe(true);
+            if (stopped) expect((await fetch(`${base}/w/ws_1/opencode/session/ses_1/abort`, {
+              method: "POST", headers: auth(openwork.token) })).status).toBe(200);
+            gate.resolve();
+            const response = await pending;
+            expect(response.status).toBe(stopped ? 403 : 202);
+            expect(mock.requests.filter(request => request.method === "POST" &&
+              (request.pathname.endsWith("/prompt_async") || request.pathname.endsWith("/summarize"))))
+              .toHaveLength(stopped ? 0 : 1);
+            const db = new Database(join(workspaceRoot, ".model-usage.db"), { readonly: true });
+            try {
+              expect(db.query("SELECT COUNT(*) AS count FROM model_usage_operations WHERE status = 'pending'").get())
+                .toEqual({ count: stopped ? 0 : 1 });
+            } finally { db.close(); }
+          } finally {
+            gate.resolve();
+            try { await pending; } finally { directorySpy.mockRestore(); }
+          }
+        }, 15000);
+      }
+    }
+  }
+
+  for (const runtimeMode of ["off", "enforce"]) {
+    for (const action of ["messages", "compact", "prompt_async", "command", "summarize"]) {
+      for (const identity of [
+        { name: "alias send", send: "rem_ws_1", stop: "ws_1", exact: false, cancelled: true },
+        { name: "alias stop", send: "ws_1", stop: "rem_ws_1", exact: false, cancelled: true },
+        { name: "padded send", send: "%20ws_1%20", stop: "ws_1", exact: false, cancelled: true },
+        { name: "padded stop", send: "ws_1", stop: "%20ws_1%20", exact: false, cancelled: true },
+        { name: "exact distinct workspace", send: "rem_ws_1", stop: "ws_1", exact: true, cancelled: false },
+        { name: "exact workspace stop", send: "rem_ws_1", stop: "rem_ws_1", exact: true, cancelled: true },
+        { name: "alias of exact workspace", send: "rem_rem_ws_1", stop: "rem_ws_1", exact: true, cancelled: true },
+      ]) {
+        test(`gateway workspace identity ${runtimeMode} ${action} ${identity.name} uses the resolved scope`, async () => {
+          process.env.MATTERHORN_GUARDED_RUNTIME_MODE = runtimeMode;
+          process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "isolated-workspace-identity-runtime-fixture";
+          const workspaceRoot = await createWorkspaceRoot();
+          const exactRoot = identity.exact ? await createWorkspaceRoot() : undefined;
+          const gate = deferred();
+          const mock = startMockOpencode({ sessionStatus: "idle", beforeRead: async pathname => {
+            if (pathname === "/agent") await gate.promise;
+          } });
+          const openwork = await startOpenworkServer({ workspaceRoot, readOnly: false, hardModelUsageLimit: 1000,
+            opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+            additionalWorkspaces: exactRoot ? [{ id: "rem_ws_1", name: "Exact workspace", path: exactRoot,
+              preset: "starter", workspaceType: "local", baseUrl: `http://127.0.0.1:${mock.server.port}` }] : [],
+          });
+          const base = `http://127.0.0.1:${openwork.server.port}`;
+          const primaryRoute = action === "messages" || action === "compact";
+          const target = action === "messages" ? "prompt_async" : action === "compact" ? "summarize" : action;
+          const path = primaryRoute ? `/workspace/${identity.send}/sessions/ses_1/${action}`
+            : `/w/${identity.send}/opencode/session/ses_1/${action}`;
+          const body = action === "command" ? { command: "explain", arguments: "Synthetic identity check", model: "ollama/local-private" }
+            : action === "summarize" ? { providerID: "ollama", modelID: "local-private" }
+            : { messageID: "msg_workspace_identity", model: { providerID: "ollama", modelID: "local-private" },
+              parts: [{ type: "text", text: "Synthetic workspace identity check" }] };
+          const send = () => fetch(`${base}${path}`, { method: "POST",
+            headers: { ...auth(openwork.token), "Content-Type": "application/json" }, body: JSON.stringify(body) });
+          const pending = send();
+          try {
+            expect(await waitUntil(() => mock.requests.some(request => request.pathname === "/agent"))).toBe(true);
+            const preparedReads = mock.requests.filter(request => request.pathname === "/session/ses_1" && request.method === "GET");
+            expect(preparedReads.length).toBeGreaterThan(0);
+            expect(preparedReads.every(request => decodeURIComponent(request.directory ?? "") === (exactRoot ?? workspaceRoot))).toBe(true);
+            expect((await fetch(`${base}/w/${identity.stop}/opencode/session/ses_1/abort`, {
+              method: "POST", headers: auth(openwork.token) })).status).toBe(200);
+            const checkpoint = mock.requests.length;
+            gate.resolve();
+            const response = await pending;
+            expect(response.status).toBe(identity.cancelled ? 403 : primaryRoute ? 202 : 200);
+            const count = () => mock.requests.filter(request => request.method === "POST" && request.pathname === `/session/ses_1/${target}`).length;
+            if (identity.cancelled) {
+              expect(await response.json()).toMatchObject({ code: "write_denied", details: { reason: "cancelled" } });
+              expect(mock.requests.slice(checkpoint).filter(request => request.method !== "GET")).toHaveLength(0);
+            } else expect(await waitUntil(() => count() === 1)).toBe(true);
+            expect(count()).toBe(identity.cancelled ? 0 : 1);
+            const db = new Database(join(workspaceRoot, ".model-usage.db"), { readonly: true });
+            try {
+              expect(db.query("SELECT COUNT(*) AS count FROM model_usage_operations WHERE status = 'pending'").get())
+                .toEqual({ count: identity.cancelled ? 0 : 1 });
+            } finally { db.close(); }
+            if (identity.cancelled) {
+              expect((await send()).status).toBe(primaryRoute ? 202 : 200);
+              expect(await waitUntil(() => count() === 1)).toBe(true);
+            }
+          } finally { gate.resolve(); await pending; }
+        }, 15000);
+      }
     }
   }
 

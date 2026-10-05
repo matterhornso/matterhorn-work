@@ -10360,13 +10360,18 @@ function createRoutes(
   // launch boundary. Do not accept arbitrary consumer names from a browser.
   const stmConsumers = dependencies.stmConsumers ?? [STM_VOICE_CONSUMER];
   const routes: Route[] = [];
-  const withSessionPreparation = (handler: Route["handler"]): Route["handler"] => async (ctx) => {
+  const withSessionPreparation = (handler: (ctx: RequestContext, workspace: WorkspaceInfo) => Promise<Response>): Route["handler"] => async (ctx) => {
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
     if (!ctx.actor) throw new ApiError(401, "unauthorized", "An authenticated account is required.");
-    return sessionPreparations.run({ workspaceId: ctx.params.id, sessionId: (ctx.params.sessionId ?? "").trim(),
+    const workspaceId = resolveConfiguredWorkspace(config, ctx.params.id).id;
+    return sessionPreparations.run({ workspaceId, sessionId: (ctx.params.sessionId ?? "").trim(),
       subjectId: modelUsageSubject({ actor: ctx.actor, session: ctx.matterhornSession }).id },
-    ctx.request, () => handler(ctx));
+    ctx.request, async () => {
+      const workspace = await resolveWorkspace(config, workspaceId);
+      sessionPreparations.assertActive(ctx.request);
+      return handler(ctx, workspace);
+    });
   };
   const billingRouteContext = createBillingRouteContext(config);
   const fileSessions = new FileSessionStore();
@@ -15785,8 +15790,7 @@ function createRoutes(
     return jsonResponse({ item: receipt });
   });
 
-  addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/compact", "client", withSessionPreparation(async (ctx) => {
-    const workspace = await resolveWorkspace(config, ctx.params.id);
+  addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/compact", "client", withSessionPreparation(async (ctx, workspace) => {
     const sessionId = (ctx.params.sessionId ?? "").trim();
     if (!sessionId) {
       throw new ApiError(400, "invalid_payload", "sessionId is required");
@@ -15955,8 +15959,7 @@ function createRoutes(
     }, 202);
   }));
 
-  addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/messages", "client", withSessionPreparation(async (ctx) => {
-    const workspace = await resolveWorkspace(config, ctx.params.id);
+  addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/messages", "client", withSessionPreparation(async (ctx, workspace) => {
     const sessionId = (ctx.params.sessionId ?? "").trim();
     if (!sessionId) {
       throw new ApiError(400, "invalid_payload", "sessionId is required");
@@ -23378,7 +23381,7 @@ async function readWorkspaceSessionSnapshot(
   }
 }
 
-async function resolveWorkspace(config: ServerConfig, id: string): Promise<WorkspaceInfo> {
+function resolveConfiguredWorkspace(config: ServerConfig, id: string): WorkspaceInfo {
   const workspaceId = id.trim();
   const aliasWorkspaceId = workspaceId.startsWith("rem_") ? workspaceId.slice("rem_".length) : "";
   const workspace =
@@ -23387,6 +23390,11 @@ async function resolveWorkspace(config: ServerConfig, id: string): Promise<Works
   if (!workspace) {
     throw new ApiError(404, "workspace_not_found", "Workspace not found");
   }
+  return workspace;
+}
+
+async function resolveWorkspace(config: ServerConfig, id: string): Promise<WorkspaceInfo> {
+  const workspace = resolveConfiguredWorkspace(config, id);
   const resolvedWorkspace = resolve(workspace.path);
   const authorized = await isAuthorizedRoot(resolvedWorkspace, config.authorizedRoots);
   if (!authorized) {

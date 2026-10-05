@@ -641,3 +641,31 @@ Evidence uses `/tmp/matterhorn-submission-authority-`: `red2-2026-10-05.log` rec
 The final broader-suite and safety logs are `/tmp/matterhorn-submission-authority-backend-2026-10-05.log` and `/tmp/matterhorn-submission-authority-safety-2026-10-05.log`.
 
 No frontend source, existing preview/chat, real provider, production account/configuration, wallet, push, merge or deployment was changed. The documentation distinguishes local gateway/auth/storage checks from hosted acceptance. Cross-instance authority propagation and mutation ordering, precise Stop targeting, raw command transport-failure accounting, privacy-preflight response lifetime and the broader launch gates remain open. Source review identified a possible workspace-alias cancellation identity mismatch; reproduce that next, then review the authoritative session mutation boundary across clients and instances. Do not infer full platform safety from this matrix.
+
+## Workspace identity during cancellation
+
+The preceding authority correction is committed locally as `89d3f7c4b6ddd084bddb1ec6a45c5846bfaf1ea6`. Against that baseline, twenty isolated HTTP cases reproduced **eight sends accepted after Stop**, with twelve passing controls. Preparation used the workspace ID from the route, while dispatch and Stop used the resolved workspace ID. An alias such as `rem_ws_1`, or an encoded ID with surrounding spaces, therefore missed cancellation of the same workspace. Successful and rejected upstream Stop acknowledgements both reproduced the mismatch in guarded mode `off` and `enforce`.
+
+The shared workspace lookup now selects the canonical configured ID before registering preparation. Full path authorization and workspace preparation still run through the existing resolver inside that registration. Messages and compaction receive the resolved workspace, and a cancellation/authority check runs immediately after workspace preparation. Exact configured IDs take precedence over aliases: a genuine workspace named `rem_ws_1` remains distinct from `ws_1`.
+
+The first local correction awaited workspace preparation before registering it. Eight added filesystem-wait cases caught four resulting Stop failures, with four unchanged controls passing. The final correction separates synchronous ID lookup from asynchronous preparation, preserving cancellation admission before filesystem waits. This was an intermediate-patch regression caught before commit, not another finding against the preceding committed baseline.
+
+### Workspace identity verification
+
+The final focused group passes **151 tests, zero failures, 1,261 assertions**. It covers the registry lifecycle; canonical, alias and padded workspace/session routes; Stop and rejected Stop; unauthenticated/other-session controls; already-accepted responses; messages, compaction, raw prompts, commands and summaries; distinct exact IDs beginning with `rem_`; and cancellation during workspace filesystem preparation. The identity cases verify the runtime directory, absence of subsequent runtime mutations after cancellation, release of unused holds, and successful fresh sends. All accounts, data and runtime responses are disposable local fixtures.
+
+Server typecheck and build pass. The final broader backend run passes **919 tests, zero failures, 6,626 assertions across six files**. The final full safety gate passes **all 11 stages**, with terminal exit zero.
+
+```sh
+bun test apps/server/src/session-preparation.test.ts apps/server/src/session-read-model.e2e.test.ts --test-name-pattern 'gateway preparation|gateway workspace|Every preparation|Stop |Disconnect' --timeout 15000
+bun test apps/server/src/session-preparation.test.ts apps/server/src/session-read-model.e2e.test.ts apps/server/src/approvals.test.ts apps/server/src/model-usage-store.test.ts apps/server/src/token-authority.e2e.test.ts apps/server/src/auth.e2e.test.ts --timeout 15000
+pnpm --filter matterhorn-work-server typecheck
+pnpm --filter matterhorn-work-server build
+pnpm test:matterhorn-platform-safety
+```
+
+Evidence uses `/tmp/matterhorn-workspace-alias-stop-`: `red2-2026-10-05.log` reproduces the eight baseline failures; `filesystem-red-2026-10-05.log` captures the four intermediate-patch failures; `focused-final-2026-10-05.log` contains the final focused matrix; and `build-final-2026-10-05.log` records typecheck/build. The first `red` attempt could not bind loopback servers in the sandbox and is not product-failure evidence. The earlier `backend` and `safety` logs passed on the intermediate patch and do not certify the final correction.
+
+The final backend and safety logs are `/tmp/matterhorn-workspace-alias-stop-backend-final-2026-10-05.log` and `/tmp/matterhorn-workspace-alias-stop-safety-final-2026-10-05.log`. Source review also found that raw prompt/summary transport failures share the command route's unconditional usage cancellation, while reconciliation selects only pending holds. Include all three raw routes in the next lost-acknowledgement reproduction; source inspection alone does not prove billed usage was lost.
+
+The hosted-account restriction to its assigned workspace is unchanged; an operator alias is not a new hosted access path. No frontend source, visual layout, preview, existing chat, provider account, production setting, wallet or live deployment changed. This remains a per-server preparation registry, not a distributed operation revision. Precise Stop targeting and competing mutations across clients/instances remain open. Next reproduce raw-route accounting after a lost runtime acknowledgement, then continue the cross-client mutation-ordering review. Hosted five-desk responses, signup/recovery delivery, data isolation, encryption, backup restoration and browser/device acceptance remain independent launch gates.
