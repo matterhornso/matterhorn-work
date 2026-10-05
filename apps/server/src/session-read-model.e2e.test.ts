@@ -2563,14 +2563,22 @@ describe("workspace session read APIs", () => {
 
   test("compacts through the Matterhorn privacy and usage gateway", async () => {
     const workspaceRoot = await createWorkspaceRoot();
-    const mock = startMockOpencode();
+    process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "isolated-compaction-usage-fixture-at-least-32-bytes";
+    let base = "";
+    const mock = startMockOpencode({ responseForRequest: async (pathname, method, body) => {
+      if (pathname === "/session/ses_1/message" && method === "POST"
+        && body && typeof body === "object" && "messageID" in body && typeof body.messageID === "string") {
+        await releaseFixtureCompactionProvider(base, workspaceRoot, body.messageID);
+      }
+      return undefined;
+    } });
     const openwork = await startOpenworkServer({
       workspaceRoot,
       opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
       readOnly: false,
       hardModelUsageLimit: 32_000,
     });
-    const base = `http://127.0.0.1:${openwork.server.port}`;
+    base = `http://127.0.0.1:${openwork.server.port}`;
     const compact = () => fetch(`${base}/workspace/ws_1/sessions/ses_1/compact`, {
       method: "POST",
       headers: { ...auth(openwork.token), "Content-Type": "application/json" },
@@ -4906,13 +4914,15 @@ describe("workspace session read APIs", () => {
           let completed = false;
           let dispatched = false;
           let compactionParent = "";
+          let base = "";
           const mock = startMockOpencode({ sessionStatus: "idle",
-            responseForRequest: (pathname, method, body) => {
+            responseForRequest: async (pathname, method, body) => {
               if (pathname === "/session/ses_1/message" && method === "POST") {
                 if (!body || typeof body !== "object" || !("messageID" in body) || typeof body.messageID !== "string") {
                   throw new Error("Missing compaction message binding");
                 }
                 compactionParent = body.messageID;
+                await releaseFixtureCompactionProvider(base, workspaceRoot, compactionParent);
                 dispatched = true;
                 if (otherResult.startsWith("overlapping")) {
                   const now = Date.now();
@@ -4928,7 +4938,7 @@ describe("workspace session read APIs", () => {
             ] });
           const openwork = await startOpenworkServer({ workspaceRoot, readOnly: false, hardModelUsageLimit: 1000,
             opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}` });
-          const base = `http://127.0.0.1:${openwork.server.port}`;
+          base = `http://127.0.0.1:${openwork.server.port}`;
           const path = action === "compact" ? "/workspace/ws_1/sessions/ses_1/compact" : "/w/ws_1/opencode/session/ses_1/summarize";
           // Keep the previous-result fixture inside the existing five-second
           // matching window, and fail explicitly if unusually slow setup invalidates it.

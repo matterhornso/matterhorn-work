@@ -20,6 +20,9 @@ for (const { route, replacement, throttle } of [
   { route: "chat-tool", replacement: false },
   { route: "chat", replacement: "messages" }, { route: "chat", replacement: "system" },
   { route: "chat-stop", replacement: "messages" }, { route: "chat-stop", replacement: "system" },
+  { route: "chat-stop-provider", replacement: false },
+  { route: "chat-tool-stop-provider", replacement: false },
+  { route: "chat-stop-stream", replacement: false },
 ]) {
 test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves request identity: ${route}, replacement=${replacement}, throttle=${Boolean(throttle)}`, async () => {
   const binary = process.env.MATTERHORN_TEST_OPENCODE_BIN;
@@ -33,7 +36,9 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
   let gateway: Awaited<ReturnType<typeof startServer>> | undefined;
   const providerId = route === "contract" ? "fixture" : "ollama";
   const chat = route.startsWith("chat");
-  const tool = route === "chat-tool";
+  const tool = route.startsWith("chat-tool");
+  const stopProvider = route.endsWith("stop-provider");
+  const stopStream = route === "chat-stop-stream";
   const priorEnv = new Map<string, string | undefined>();
   let providerCalls = 0;
   let claims = 0;
@@ -55,11 +60,14 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
   let delayedInput: unknown;
   const claimedRuns: string[] = [];
   const pendingRequests: Promise<Response>[] = [];
+  const eventAbort = new AbortController();
+  let eventRead: Promise<void> | undefined;
+  let eventDiagnostic = "";
   const waitFor = async (promise: Promise<void>) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([promise, new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`Native boundary timeout: ${JSON.stringify(controlFailures)}`)), 10000);
+        timer = setTimeout(() => reject(new Error(`Native boundary timeout: ${JSON.stringify(controlFailures)} ${eventDiagnostic}`)), 10000);
       })]);
     } finally { clearTimeout(timer); }
   };
@@ -121,6 +129,14 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
       if (new URL(request.url).pathname !== "/v1/chat/completions") return new Response(null, { status: 404 });
       providerInputs.push(await request.json());
       providerCalls += 1;
+      if (stopStream) {
+        reachedOld();
+        await newGate;
+      }
+      if (stopProvider && providerCalls === (tool ? 2 : 1)) {
+        reachedOld();
+        await oldGate;
+      }
       if (throttle && providerCalls === 1) {
         return Response.json({ error: { message: "Synthetic rate limit", type: "rate_limit_error" } },
           { status: 429, headers: { "retry-after": "0" } });
@@ -142,6 +158,22 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
         { ...common, choices: [{ index: 0, delta: {}, finish_reason: "stop" }] },
         { ...common, choices: [], usage: { prompt_tokens: 300, completion_tokens: 173, total_tokens: 473 } },
       ];
+      if (stopStream) {
+        let cancelled = false;
+        const encoder = new TextEncoder();
+        return new Response(new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunks[0])}\n\n`));
+            reachedOld();
+            void oldGate.then(() => {
+              if (cancelled) return;
+              controller.enqueue(encoder.encode(chunks.slice(1).map(chunk => `data: ${JSON.stringify(chunk)}\n\n`).join("") + "data: [DONE]\n\n"));
+              controller.close();
+            });
+          },
+          cancel() { cancelled = true; },
+        }), { headers: { "content-type": "text/event-stream" } });
+      }
       return new Response(chunks.map(chunk => `data: ${JSON.stringify(chunk)}\n\n`).join("") + "data: [DONE]\n\n",
         { headers: { "content-type": "text/event-stream" } });
     } });
@@ -224,6 +256,40 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
       const base = `http://127.0.0.1:${gateway.port}`;
       const auth = { authorization: "Bearer disposable-compaction-user", "content-type": "application/json" };
       if (chat) {
+        const observeStream = async () => {
+          const events = await fetch(`${url}/event?directory=${encodeURIComponent(workspace)}`, { headers, signal: eventAbort.signal });
+          expect(events.status).toBe(200);
+          const reader = events.body?.getReader();
+          if (!reader) throw new Error("Native event stream unavailable");
+          eventRead = (async () => {
+            const decoder = new TextDecoder();
+            let buffer = "";
+            try {
+              while (true) {
+                const next = await reader.read();
+                if (next.done) throw new Error("Native event stream ended before text delta");
+                buffer += decoder.decode(next.value, { stream: true }).replaceAll("\r", "");
+                eventDiagnostic = buffer.slice(-6000);
+                const frames = buffer.split("\n\n");
+                buffer = frames.pop() ?? "";
+                for (const frame of frames) {
+                  const data = frame.split("\n").find(line => line.startsWith("data:"))?.slice(5).trim();
+                  if (!data) continue;
+                  const event: unknown = JSON.parse(data);
+                  if (!event || typeof event !== "object" || !("type" in event) || event.type !== "message.part.delta"
+                    || !("properties" in event) || !event.properties || typeof event.properties !== "object") continue;
+                  const properties = event.properties;
+                  if ("sessionID" in properties && properties.sessionID === session.id
+                    && "delta" in properties && properties.delta === "Fixture answer to the synthetic request.") {
+                    reachedNew();
+                    return;
+                  }
+                }
+              }
+            } finally { await reader.cancel().catch(() => undefined); }
+          })();
+          void eventRead.catch(() => {});
+        };
         const sendChat = () => fetch(`${base}/workspace/ws_contract/sessions/${session.id}/messages`, {
           method: "POST", headers: auth, signal: AbortSignal.timeout(20000),
           body: JSON.stringify({ agentId: "fixture", model: { providerID: providerId, modelID: "fixture" },
@@ -232,6 +298,33 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
         const sent = await sendChat();
         let accepted = await sent.json();
         expect(sent.status, JSON.stringify({ accepted, controlFailures, runtimeLog: output })).toBe(202);
+        if (stopStream) {
+          await waitFor(oldReached);
+          // Gateway preparation may reload the native workspace. Subscribe to
+          // the current instance after preparation, before releasing any text.
+          await observeStream();
+          releaseNew();
+        }
+        if (stopProvider || stopStream) {
+          await waitFor(oldReached);
+          if (stopStream && eventRead) await waitFor(Promise.race([newReached, eventRead]));
+          const stopped = await fetch(`${base}/w/ws_contract/opencode/session/${session.id}/abort`, {
+            method: "POST", headers: auth, body: "{}", signal: AbortSignal.timeout(10000),
+          });
+          expect(stopped.status, await stopped.text()).toBe(200);
+          releaseOld();
+          const history = await call(`/session/${session.id}/message`);
+          expect(history.at(-1)?.info, JSON.stringify(history)).toMatchObject({ role: "assistant", error: { name: "MessageAbortedError" } });
+          for (let i = 0; i < 2; i++) {
+            const usage = await fetch(`${base}/workspace/ws_contract/model-usage/status`, { headers: auth });
+            expect(usage.status).toBe(200);
+            expect((await usage.json()).status, JSON.stringify(history)).toMatchObject({ pendingRequests: 1,
+              monthly: { usedTokens: 0, reservedTokens: 1000 } });
+          }
+          expect(providerCalls).toBe(tool ? 2 : 1);
+          if (tool) expect(JSON.stringify(providerInputs[1])).toContain("cobalt-47");
+          return;
+        }
         if (route === "chat-stop") {
           await waitFor(oldReached);
           const stopped = await fetch(`${base}/w/ws_contract/opencode/session/${session.id}/abort`, {
@@ -391,6 +484,8 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
   } finally {
     releaseOld();
     releaseNew();
+    eventAbort.abort();
+    if (eventRead) await Promise.allSettled([eventRead]);
     if (engine) await createManagedProcessClose(engine).close();
     await Promise.allSettled(pendingRequests);
     await gateway?.stop();

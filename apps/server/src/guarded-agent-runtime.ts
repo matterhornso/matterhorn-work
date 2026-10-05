@@ -1505,6 +1505,17 @@ export class MatterhornGuardedAgentRuntime {
       && dispatch.sessionId === input.sessionId && dispatch.messageId === input.messageId;
   }
 
+  revokedUnusedProviderMessages(input: { workspaceId: string; sessionId: string }): string[] {
+    const unused = new Set<string>();
+    const uncertain = new Set<string>();
+    for (const [runId, dispatch] of this.providerDispatchByRunId) {
+      if (dispatch.workspaceId !== input.workspaceId || dispatch.sessionId !== input.sessionId || !dispatch.messageId) continue;
+      const target = this.hasRevokedUnusedProviderDispatch({ ...input, runId, messageId: dispatch.messageId }) ? unused : uncertain;
+      target.add(dispatch.messageId);
+    }
+    return [...unused].filter(messageId => !uncertain.has(messageId));
+  }
+
   revokeUnusedProviderDispatch(input: {
     runId: string; workspaceId: string; sessionId: string; messageId: string;
   }): boolean {

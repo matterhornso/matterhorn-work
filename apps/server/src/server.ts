@@ -2849,6 +2849,7 @@ function clientAccessFromRequestContext(ctx: RequestContext, workspace: Workspac
 }
 
 async function reconcileModelUsageSession(input: {
+  guardedRuntime: MatterhornGuardedAgentRuntime;
   config: ServerConfig;
   workspace: WorkspaceInfo;
   store: MatterhornModelUsageStore;
@@ -2865,10 +2866,12 @@ async function reconcileModelUsageSession(input: {
     workspaceId: input.workspace.id,
     sessionId: input.sessionId,
     messages,
+    unusedMessageIds: input.guardedRuntime.revokedUnusedProviderMessages({ workspaceId: input.workspace.id, sessionId: input.sessionId }),
   });
 }
 
 function scheduleModelUsageReconciliation(input: {
+  guardedRuntime: MatterhornGuardedAgentRuntime;
   config: ServerConfig;
   workspace: WorkspaceInfo;
   store: MatterhornModelUsageStore;
@@ -2892,6 +2895,7 @@ function scheduleModelUsageReconciliation(input: {
 }
 
 async function reserveModelUsage(input: {
+  guardedRuntime: MatterhornGuardedAgentRuntime;
   config: ServerConfig;
   workspace: WorkspaceInfo;
   store: MatterhornModelUsageStore;
@@ -2903,6 +2907,7 @@ async function reserveModelUsage(input: {
 }) {
   const subject = modelUsageSubject(input.access);
   await reconcileModelUsageSession({
+    guardedRuntime: input.guardedRuntime,
     config: input.config,
     workspace: input.workspace,
     store: input.store,
@@ -3073,6 +3078,7 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
   const reconcileUsage = () => {
     if (input.modelUsageStore && usageSubject && usageReservationId && workspace) {
       scheduleModelUsageReconciliation({
+        guardedRuntime: input.guardedRuntime,
         config: input.config,
         workspace,
         store: input.modelUsageStore,
@@ -3249,6 +3255,7 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
       if (input.access && input.modelUsageStore) {
         try {
           const usage = await reserveModelUsage({
+            guardedRuntime: input.guardedRuntime,
             config: input.config,
             workspace,
             store: input.modelUsageStore,
@@ -3340,6 +3347,7 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
         });
         if (input.access && input.modelUsageStore) {
           const usage = await reserveModelUsage({
+            guardedRuntime: input.guardedRuntime,
             config: input.config,
             workspace,
             store: input.modelUsageStore,
@@ -3466,6 +3474,7 @@ async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
     }
     if (input.access && input.modelUsageStore) {
       const usage = await reserveModelUsage({
+        guardedRuntime: input.guardedRuntime,
         config: input.config,
         workspace,
         store: input.modelUsageStore,
@@ -15417,6 +15426,7 @@ function createRoutes(
     const pending = modelUsageStore.pendingSessions(subject)
       .filter((entry) => entry.workspaceId === workspace.id);
     await Promise.all(pending.map((entry) => reconcileModelUsageSession({
+      guardedRuntime,
       config,
       workspace,
       store: modelUsageStore,
@@ -15433,6 +15443,7 @@ function createRoutes(
     if (!sessionId) throw new ApiError(400, "invalid_payload", "sessionId is required");
     const subject = modelUsageSubject(clientAccessFromRequestContext(ctx, workspace));
     const reconciled = await reconcileModelUsageSession({
+      guardedRuntime,
       config,
       workspace,
       store: modelUsageStore,
@@ -15938,6 +15949,7 @@ function createRoutes(
 
     const userMessageId = `msg_${randomUUID().replaceAll("-", "")}`;
     const usage = await reserveModelUsage({
+      guardedRuntime,
       config,
       workspace,
       store: modelUsageStore,
@@ -16004,7 +16016,7 @@ function createRoutes(
         if (guardedAcceptance) await guardedRuntime.failRun(guardedAcceptance.runId);
       } else {
         // The runtime may have accepted compaction before losing its reply.
-        scheduleModelUsageReconciliation({ config, workspace, store: modelUsageStore, subject: usage.subject, sessionId });
+        scheduleModelUsageReconciliation({ guardedRuntime, config, workspace, store: modelUsageStore, subject: usage.subject, sessionId });
       }
       if (dispatchStarted && error instanceof SyntaxError) {
         throw new ApiError(502, "compaction_result_unverified",
@@ -16040,6 +16052,7 @@ function createRoutes(
 
     if (usage.reservation.reservationId) {
       scheduleModelUsageReconciliation({
+        guardedRuntime,
         config,
         workspace,
         store: modelUsageStore,
@@ -16265,6 +16278,7 @@ function createRoutes(
       // reserving anything, so a continuation cannot replace a newer turn.
       if (continuationOf) await validateAnswerContinuation(config, workspace, sessionId, body);
       const usage = await reserveModelUsage({
+        guardedRuntime,
         config,
         workspace,
         store: modelUsageStore,
@@ -16382,7 +16396,7 @@ function createRoutes(
         }
         // A transport error is not proof of rejection. Keep authority and the
         // usage hold while inspecting the exact parent, never a time heuristic.
-        scheduleModelUsageReconciliation({ config, workspace, store: modelUsageStore, subject: usage.subject, sessionId });
+        scheduleModelUsageReconciliation({ guardedRuntime, config, workspace, store: modelUsageStore, subject: usage.subject, sessionId });
         const history = await readWorkspaceSessionMessages(config, workspace, sessionId, {}).catch(() => []);
         const accepted = history.some((message) => message.info.id === userMessageId
           || ("parentID" in message.info && message.info.parentID === userMessageId));
@@ -16404,6 +16418,7 @@ function createRoutes(
 
       if (usage.reservation.reservationId) {
         scheduleModelUsageReconciliation({
+          guardedRuntime,
           config,
           workspace,
           store: modelUsageStore,

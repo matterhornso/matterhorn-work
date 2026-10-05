@@ -2394,6 +2394,7 @@ describe("guarded agent runtime transport", () => {
           sessionId: input.sessionId, messageId: `msg_unused_${released}` };
         runtime.bindUserMessage(scope);
         expect(runtime.hasRevokedUnusedProviderDispatch(scope)).toBe(false);
+        expect(runtime.revokedUnusedProviderMessages(scope)).toEqual([]);
         const provider: Parameters<typeof runtime.resolveRuntimeProviderSystem>[0] & typeof scope = {
           ...scope, runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
           expectedRunId: accepted.runId, providerId: input.providerId, modelId: input.modelId, purpose: "compaction" };
@@ -2411,6 +2412,9 @@ describe("guarded agent runtime transport", () => {
         expect(runtime.revokeUnusedProviderDispatch(scope)).toBe(!released);
         await runtime.failRun(accepted.runId, "cancelled");
         expect(runtime.hasRevokedUnusedProviderDispatch(scope)).toBe(!released);
+        expect(runtime.revokedUnusedProviderMessages(scope)).toEqual(released ? [] : [scope.messageId]);
+        expect(runtime.revokedUnusedProviderMessages({ ...scope, workspaceId: "ws_other" })).toEqual([]);
+        expect(runtime.revokedUnusedProviderMessages({ ...scope, sessionId: "ses_other" })).toEqual([]);
         for (const mutation of [{ runId: "run_unknown" }, { workspaceId: "ws_other" },
           { sessionId: "ses_other" }, { messageId: "msg_other" }]) {
           expect(runtime.hasRevokedUnusedProviderDispatch({ ...scope, ...mutation })).toBe(false);
@@ -2422,11 +2426,21 @@ describe("guarded agent runtime transport", () => {
         try {
           setSystemTime(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
           expect(runtime.hasRevokedUnusedProviderDispatch(scope)).toBe(false);
+          expect(runtime.revokedUnusedProviderMessages(scope)).toEqual([]);
         } finally { setSystemTime(); }
+        // A reused parent cannot borrow an old run's unused-dispatch proof.
+        const second = await runtime.startAuthorizedPrompt(input, runtime.authorizePrompt(input), { purpose: "compaction", sections: [system] });
+        runtime.bindUserMessage({ ...scope, runId: second.runId });
+        expect(runtime.revokedUnusedProviderMessages(scope)).toEqual([]);
+        await runtime.failRun(second.runId, "cancelled");
+        expect(runtime.revokedUnusedProviderMessages(scope)).toEqual(released ? [] : [scope.messageId]);
         runtime.close();
         expect(runtime.hasRevokedUnusedProviderDispatch(scope)).toBe(false);
         const restored = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
-        try { expect(restored.hasRevokedUnusedProviderDispatch(scope)).toBe(false); }
+        try {
+          expect(restored.hasRevokedUnusedProviderDispatch(scope)).toBe(false);
+          expect(restored.revokedUnusedProviderMessages(scope)).toEqual([]);
+        }
         finally { restored.close(); }
       } finally { runtime.close(); }
     });

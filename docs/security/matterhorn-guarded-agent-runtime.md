@@ -83,6 +83,15 @@ monotonic release state. A previous release, missing record, expiry or restart i
 not evidence for cancellation; history reconciliation retains responsibility for
 those outcomes. HTTP 400 or an empty response alone does not prove zero usage.
 
+Ordinary-chat reconciliation uses the same scoped unused-dispatch evidence.
+A completed native error with default zero counters does not settle a request:
+the provider may have received it without returning final usage. The reservation
+stays pending, including when an earlier tool step has recorded usage. Exact
+later usage can settle the request once; replaying an older zero report cannot
+reduce a settled charge. A proven unused parent can release its own hold, never
+another subject/workspace/session's hold or an unbound legacy reservation.
+Unknown provider outcomes need reconciliation, not guessed refunds.
+
 Authenticated Stop revokes the exact workspace/session's active guarded run
 before native abort and before asynchronous receipt finalization. It does not
 depend on the runtime completion notification to disable provider context,
