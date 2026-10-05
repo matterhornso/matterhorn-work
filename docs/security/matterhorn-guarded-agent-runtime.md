@@ -182,6 +182,31 @@ not inferred or migrated. Do not treat billing as proof of receipt success or
 re-execute model/tools to repair a receipt. See
 [native completion recovery and limits](../../qa-reports/launch/2026-10-05/RESULTS.md#native-completion-recovery).
 
+New coworker admissions also persist a sealed audit identity in the same SQLite
+transaction as the execution grant. It contains only run/workspace/session and
+coworker id/owner/revision/policy version, not tool permissions or bearer grants.
+It survives execution expiry for 365 days from admission so the evidence retry
+worker can reconstruct a missing finalization queue from an authenticated terminal
+receipt after restart. It neither dispatches work nor restores expired authority.
+Workspace deletion, the exact retained identity and the current receipt hash are
+rechecked under the writer lock before queuing. Purge removes the identity.
+
+Finalization delivery is at least once: an acknowledgement removes the queued
+snapshot and audit identity atomically, only if the queued row is still exactly
+the one delivered. A delayed acknowledgement cannot discard a newer snapshot.
+The existing encrypted sealer is idempotent per run, and workspace deletion still
+blocks writes after delayed key allocation. Graceful shutdown awaits the evidence
+retry worker before closing storage. This does not guarantee recovery for older
+runs that have neither a live grant nor a retained audit identity.
+
+Encrypted coworker evidence remains the first sealed snapshot per run. Later
+usage corrections to the receipt do not automatically revise that encrypted
+snapshot or an already published proof; do not present it as a current provider
+invoice. Versioned evidence and publication semantics require separate review.
+Synthetic in-memory-key tests prove the local sealing/retry path, not production
+KMS availability, encryption configuration, or backup restoration. See
+[coworker evidence recovery](../../qa-reports/launch/2026-10-05/RESULTS.md#durable-coworker-evidence-finalization).
+
 The authenticated receipt writer commits a sealed append intent before file IO.
 It binds the prior index, original file prefix and exact intended receipt bytes.
 After a partial append or failed index transaction, recovery checks those bindings,

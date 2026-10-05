@@ -10,7 +10,8 @@ import { sha256 } from "./guarded-runtime-crypto.js";
 
 export type MatterhornFinalizedCoworkerRun = {
   receipt: MatterhornAgentRunReceipt;
-  coworker: MatterhornCoworkerRunBinding;
+  /** Audit identity only; retained finalization must not carry execution grants. */
+  coworker: Pick<MatterhornCoworkerRunBinding, "id" | "workspaceId" | "ownerId" | "revision" | "policyVersion">;
 };
 
 export type MatterhornFinalizedCoworkerEvidenceResult = {

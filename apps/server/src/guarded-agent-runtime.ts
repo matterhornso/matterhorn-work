@@ -207,6 +207,13 @@ type GuardedFinalizedCoworkerRunEnvelope = {
   authoritySeal: string;
 };
 
+type GuardedCoworkerFinalizationBinding = {
+  runId: string;
+  workspaceId: string;
+  sessionId: string;
+  coworker: MatterhornFinalizedCoworkerRun["coworker"];
+};
+
 function sessionPrivacyFloorAuthorityKey(secret: string): Buffer {
   const input = Buffer.from(secret, "utf8");
   if (input.byteLength < SESSION_PRIVACY_FLOOR_AUTHORITY_SECRET_MINIMUM_BYTES) {
@@ -2346,18 +2353,107 @@ export class MatterhornGuardedAgentRuntime {
     this.finalizedRunHandler = handler;
   }
 
+  private coworkerFinalizationBinding(runId: string): GuardedRuntimeStateRecord<GuardedCoworkerFinalizationBinding> | null {
+    const nowMs = Date.now();
+    const record = this.authorizedState("crypto_evidence_finalization_binding", "crypto_evidence_finalization_state_invalid")
+      .getRecord<unknown>(runId, nowMs);
+    if (!record) return null;
+    const value = record.value;
+    if (!exactGuardedObjectKeys(value, ["runId", "workspaceId", "sessionId", "coworker"])
+      || !exactGuardedObjectKeys(value.coworker, ["id", "workspaceId", "ownerId", "revision", "policyVersion"])
+      || !guardedRunIdentifier(value.runId) || !GUARDED_RUN_ID.test(value.runId)
+      || value.runId !== record.key || !guardedRunIdentifier(value.workspaceId)
+      || value.workspaceId !== record.workspaceId || !guardedRunIdentifier(value.sessionId)
+      || value.sessionId !== record.sessionId || !guardedRunIdentifier(value.coworker.id)
+      || !guardedRunIdentifier(value.coworker.ownerId) || value.coworker.workspaceId !== value.workspaceId
+      || !guardedRunIdentifier(value.coworker.policyVersion) || typeof value.coworker.revision !== "number"
+      || !Number.isSafeInteger(value.coworker.revision) || value.coworker.revision < 1
+      || record.updatedAtMs > nowMs || record.expiresAtMs !== record.updatedAtMs + EVIDENCE_FINALIZATION_RETENTION_MS) {
+      throw new Error("crypto_evidence_finalization_state_invalid");
+    }
+    return { ...record, value: { runId: value.runId, workspaceId: value.workspaceId, sessionId: value.sessionId,
+      coworker: { id: value.coworker.id, workspaceId: value.workspaceId, ownerId: value.coworker.ownerId,
+        revision: value.coworker.revision, policyVersion: value.coworker.policyVersion } } };
+  }
+
+  private async queueCoworkerFinalization(runId: string, legacy?: GuardedCoworkerFinalizationBinding): Promise<GuardedRuntimeStateRecord<unknown> | null> {
+    const binding = this.coworkerFinalizationBinding(runId);
+    const identity = binding?.value ?? legacy;
+    if (!identity || this.stateStore.isWorkspaceDeleted(identity.workspaceId)) return null;
+    const receipt = await this.receipts.get(identity.workspaceId, runId);
+    if (!receipt || receipt.sessionId !== identity.sessionId || receipt.status === "pending") return null;
+    return this.stateStore.transaction(() => {
+      if (this.stateStore.isWorkspaceDeleted(identity.workspaceId)) return null;
+      if (binding && canonicalJson(this.coworkerFinalizationBinding(runId)) !== canonicalJson(binding)) return null;
+      if (!binding) {
+        const scope = this.runScope(runId);
+        const coworker = this.capabilities.coworkerForRun(runId);
+        if (!scope || !coworker || scope.workspaceId !== identity.workspaceId || scope.sessionId !== identity.sessionId
+          || coworker.id !== identity.coworker.id || coworker.ownerId !== identity.coworker.ownerId
+          || coworker.revision !== identity.coworker.revision || coworker.policyVersion !== identity.coworker.policyVersion) return null;
+      }
+      const nowMs = Date.now();
+      const index = assertGuardedReceiptIndexState(this.authorizedState("receipt_index", "agent_run_receipt_index_invalid")
+        .getRecord<unknown>(runId, nowMs), runId, nowMs);
+      if (!index || index.workspaceId !== identity.workspaceId || index.sessionId !== identity.sessionId
+        || index.recordHash !== receipt.integrity.recordHash) return null;
+      const existing = this.stateStore.getRecord<unknown>("crypto_evidence_finalization", runId, nowMs);
+      if (existing) {
+        const previous = assertFinalizedCoworkerRunState(existing, this.requireFinalizedRunAuthorityKey(), nowMs);
+        if (previous.coworker.id !== identity.coworker.id || previous.coworker.ownerId !== identity.coworker.ownerId
+          || previous.receipt.workspaceId !== identity.workspaceId || previous.receipt.sessionId !== identity.sessionId) {
+          throw new Error("crypto_evidence_finalization_state_invalid");
+        }
+        if (previous.receipt.integrity.recordHash === receipt.integrity.recordHash) return existing;
+      }
+      const finalizedRun: MatterhornFinalizedCoworkerRun = { receipt, coworker: identity.coworker };
+      const expiresAtMs = nowMs + EVIDENCE_FINALIZATION_RETENTION_MS;
+      const authorityValue = finalizedRunAuthorityValue({ key: runId, workspaceId: identity.workspaceId,
+        sessionId: identity.sessionId, expiresAtMs, updatedAtMs: nowMs, finalizedRun });
+      const envelope: GuardedFinalizedCoworkerRunEnvelope = { version: FINALIZED_RUN_ENVELOPE_VERSION,
+        finalizedRun, authoritySeal: sealFinalizedRunAuthority(authorityValue, this.requireFinalizedRunAuthorityKey()) };
+      this.stateStore.put({ kind: "crypto_evidence_finalization", key: runId, workspaceId: identity.workspaceId,
+        sessionId: identity.sessionId, value: envelope, expiresAtMs, nowMs });
+      return this.stateStore.getRecord<unknown>("crypto_evidence_finalization", runId, nowMs);
+    });
+  }
+
+  private async deliverCoworkerFinalization(record: GuardedRuntimeStateRecord<unknown>): Promise<boolean> {
+    if (!this.finalizedRunHandler || this.stateStore.isWorkspaceDeleted(record.workspaceId)) return false;
+    const current = this.stateStore.getRecord<unknown>("crypto_evidence_finalization", record.key);
+    if (canonicalJson(current) !== canonicalJson(record)) return false;
+    const finalizedRun = assertFinalizedCoworkerRunState(record, this.requireFinalizedRunAuthorityKey(), Date.now());
+    await this.finalizedRunHandler(finalizedRun);
+    // A slow acknowledgement must not delete a newer queued receipt snapshot.
+    return this.stateStore.transaction(() => {
+      if (canonicalJson(this.stateStore.getRecord("crypto_evidence_finalization", record.key)) !== canonicalJson(record)) return false;
+      this.stateStore.delete("crypto_evidence_finalization", record.key);
+      this.stateStore.delete("crypto_evidence_finalization_binding", record.key);
+      return true;
+    });
+  }
+
   async retryPendingFinalizedRuns(limit = 50): Promise<{ checked: number; sealed: number; failed: number }> {
     if (!this.finalizedRunHandler) return { checked: 0, sealed: 0, failed: 0 };
     const nowMs = Date.now();
-    let pending: MatterhornFinalizedCoworkerRun[];
+    let pending: GuardedRuntimeStateRecord<unknown>[];
     try {
-      pending = this.stateStore.listRecords<unknown>("crypto_evidence_finalization", { nowMs })
-        .map((record) => assertFinalizedCoworkerRunState(
-          record,
-          this.requireFinalizedRunAuthorityKey(),
-          nowMs,
-        ))
-        .slice(0, Math.max(1, Math.min(limit, 200)));
+      const queued = this.stateStore.listRecords<unknown>("crypto_evidence_finalization", { nowMs });
+      // Never replace an invalid queue record using a retained binding.
+      for (const record of queued) assertFinalizedCoworkerRunState(record, this.requireFinalizedRunAuthorityKey(), nowMs);
+      const pendingByRun = new Map(queued.map(record => [record.key, record]));
+      const bound = this.authorizedState("crypto_evidence_finalization_binding", "crypto_evidence_finalization_state_invalid").listRecords({ nowMs });
+      for (const record of bound) {
+        const binding = this.coworkerFinalizationBinding(record.key);
+        if (!binding || pendingByRun.has(record.key) || this.stateStore.isWorkspaceDeleted(record.workspaceId)) continue;
+        const index = assertGuardedReceiptIndexState(this.authorizedState("receipt_index", "agent_run_receipt_index_invalid")
+          .getRecord<unknown>(record.key, nowMs), record.key, nowMs);
+        if (!index || index.status === "pending") continue;
+        const prepared = await this.queueCoworkerFinalization(record.key);
+        if (prepared) pendingByRun.set(record.key, prepared);
+        if (pendingByRun.size >= Math.max(1, Math.min(limit, 200))) break;
+      }
+      pending = [...pendingByRun.values()].slice(0, Math.max(1, Math.min(limit, 200)));
     } catch (error) {
       if (error instanceof GuardedRuntimeError) throw error;
       throw new GuardedRuntimeError(
@@ -2368,11 +2464,10 @@ export class MatterhornGuardedAgentRuntime {
     }
     let sealed = 0;
     let failed = 0;
-    for (const finalizedRun of pending) {
+    for (const record of pending) {
       try {
-        await this.finalizedRunHandler(finalizedRun);
-        this.stateStore.delete("crypto_evidence_finalization", finalizedRun.receipt.runId);
-        sealed += 1;
+        if (await this.deliverCoworkerFinalization(record)) sealed += 1;
+        else failed += 1;
       } catch {
         failed += 1;
       }
@@ -2408,7 +2503,7 @@ export class MatterhornGuardedAgentRuntime {
     for (const callId of capabilities.callIds) this.stagedCapabilities.delete(callId);
     this.stateStore.purgeWorkspace(
       workspaceId,
-      ["active_agent_run", "agent_run_scope", "session_privacy_floor", "staged_capability", "rollout_bypass", "user_message_binding", "assistant_message_binding", "run_completion_binding", "compaction_message_claim", "crypto_app_reservation", "crypto_app_consumed_dispatch", "crypto_pending_intent", "crypto_evidence_publication_claim", "crypto_evidence_operation_claim", "crypto_evidence_finalization", "crypto_evidence_renewal_intent", "crypto_evidence_deletion_intent", "crypto_evidence_sui_anchor_intent"],
+      ["active_agent_run", "agent_run_scope", "session_privacy_floor", "staged_capability", "rollout_bypass", "user_message_binding", "assistant_message_binding", "run_completion_binding", "compaction_message_claim", "crypto_app_reservation", "crypto_app_consumed_dispatch", "crypto_pending_intent", "crypto_evidence_publication_claim", "crypto_evidence_operation_claim", "crypto_evidence_finalization", "crypto_evidence_finalization_binding", "crypto_evidence_renewal_intent", "crypto_evidence_deletion_intent", "crypto_evidence_sui_anchor_intent"],
       { includeConsumedCapabilities: false },
     );
     return {
@@ -2642,6 +2737,15 @@ export class MatterhornGuardedAgentRuntime {
             jurisdictionPolicy: input.jurisdictionPolicy,
             expiresAtMs: input.expiresAtMs,
           });
+          if (input.coworker) {
+            const { id, workspaceId, ownerId, revision, policyVersion } = input.coworker;
+            this.authorizedState("crypto_evidence_finalization_binding", "crypto_evidence_finalization_state_invalid").put({
+              key: input.runId, workspaceId: input.workspaceId, sessionId: input.sessionId,
+              value: { runId: input.runId, workspaceId: input.workspaceId, sessionId: input.sessionId,
+                coworker: { id, workspaceId, ownerId, revision, policyVersion } } satisfies GuardedCoworkerFinalizationBinding,
+              expiresAtMs: nowMs + EVIDENCE_FINALIZATION_RETENTION_MS, nowMs,
+            });
+          }
         }
       });
     } catch (error) {
@@ -2771,46 +2875,10 @@ export class MatterhornGuardedAgentRuntime {
     try {
       if (scope) await this.receipts.get(scope.workspaceId, runId);
       await this.receipts.complete({ runId, status, usage, capabilityDecisions, assertCurrent });
-      if (scope && coworker) {
-        const receipt = await this.receipts.get(scope.workspaceId, runId);
-        if (receipt) {
-          const finalizedRun = { receipt, coworker };
-          const nowMs = Date.now();
-          const expiresAtMs = nowMs + EVIDENCE_FINALIZATION_RETENTION_MS;
-          const authorityValue = finalizedRunAuthorityValue({
-            key: runId,
-            workspaceId: scope.workspaceId,
-            sessionId: scope.sessionId,
-            expiresAtMs,
-            updatedAtMs: nowMs,
-            finalizedRun,
-          });
-          const envelope: GuardedFinalizedCoworkerRunEnvelope = {
-            version: FINALIZED_RUN_ENVELOPE_VERSION,
-            finalizedRun,
-            authoritySeal: sealFinalizedRunAuthority(
-              authorityValue,
-              this.requireFinalizedRunAuthorityKey(),
-            ),
-          };
-          this.stateStore.put({
-            kind: "crypto_evidence_finalization",
-            key: runId,
-            workspaceId: scope.workspaceId,
-            sessionId: scope.sessionId,
-            value: envelope,
-            expiresAtMs,
-            nowMs,
-          });
-          if (this.finalizedRunHandler) {
-            try {
-              await this.finalizedRunHandler(finalizedRun);
-              this.stateStore.delete("crypto_evidence_finalization", runId);
-            } catch {
-              // The content-free finalized receipt remains queued for retry.
-            }
-          }
-        }
+      const queued = await this.queueCoworkerFinalization(runId, scope && coworker ? { runId, ...scope, coworker } : undefined);
+      if (queued) {
+        try { await this.deliverCoworkerFinalization(queued); }
+        catch { /* Keep the authenticated record for an idempotent retry. */ }
       }
     } finally {
       this.revokeRun(runId);

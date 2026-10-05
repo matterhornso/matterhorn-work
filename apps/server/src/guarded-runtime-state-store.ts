@@ -40,6 +40,7 @@ export type GuardedRuntimeStateKind =
   | "crypto_evidence_publication_claim"
   | "crypto_evidence_operation_claim"
   | "crypto_evidence_finalization"
+  | "crypto_evidence_finalization_binding"
   | "crypto_evidence_audit"
   | "crypto_evidence_verification_status"
   | "crypto_evidence_renewal_intent"

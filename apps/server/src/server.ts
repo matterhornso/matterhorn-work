@@ -2195,6 +2195,7 @@ export async function startServer(
       await accountDeletionRetryTask;
       await emailOutboxTask;
       await coworkerWatchTask;
+      await coworkerEvidenceRetryTask;
       await drainEmailOutbox();
       authStore.close();
       recoveryErasureLedger?.close();

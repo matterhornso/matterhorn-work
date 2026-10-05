@@ -6,6 +6,8 @@ import { MatterhornGuardedAgentRuntime, type GuardedPromptInput } from "./guarde
 import type { MatterhornCoworkerRunBinding } from "./agent-capability.js";
 import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
 import { sha256 } from "./guarded-runtime-crypto.js";
+import { sealFinalizedCoworkerRunEvidence } from "./crypto-evidence-finalizer.js";
+import type { MatterhornEvidenceKeyManager } from "./crypto-evidence-sealer.js";
 import {
   MatterhornGuardedRuntimeStateStore,
   type GuardedRuntimeStateRecord,
@@ -69,6 +71,19 @@ function finalizedRunCoworker(id: string, workspaceId: string): MatterhornCowork
     maxReadCallsPerRun: 4,
     maxPrepareCallsPerFamily: 0,
   };
+}
+
+async function finalizationFixture(name: string) {
+  const path = join(dataDir, `finalization-boundary-${name}.db`);
+  const state = new MatterhornGuardedRuntimeStateStore(path);
+  const runtime = new MatterhornGuardedAgentRuntime(state);
+  const coworker = finalizedRunCoworker(`cw_boundary_${name}`, `ws_boundary_${name}`);
+  runtime.setCoworkerResolver(() => true);
+  const accepted = await runtime.acceptPrompt({ workspaceId: coworker.workspaceId, sessionId: `ses_boundary_${name}`, coworker,
+    parts: [{ type: "text", text: "Synthetic public Sui read" }], providerId: "cudos", modelId: "asi1-mini",
+    agentId: "matterhorn-sui", executionMode: "work",
+    requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }] });
+  return { path, state, runtime, coworker, accepted };
 }
 
 function replaceAuthorizedRecord(
@@ -1848,6 +1863,237 @@ describe("guarded agent runtime transport", () => {
     expect(finalized).toEqual([accepted.runId]);
     expect(await restored.retryPendingFinalizedRuns()).toEqual({ checked: 0, sealed: 0, failed: 0 });
     restored.close();
+  });
+
+  for (const boundary of ["ordinary", "expired-execution", "expired-deterministic", "queue-write-failure", "after-receipt-commit"]) {
+    test(`coworker finalization survives ${boundary} and database reopen`, async () => {
+      const path = join(dataDir, `finalization-durable-${boundary}.db`);
+      const coworker = finalizedRunCoworker(`cw_durable_${boundary}`, `ws_durable_${boundary}`);
+      let state = new MatterhornGuardedRuntimeStateStore(path);
+      let runtime = new MatterhornGuardedAgentRuntime(state);
+      runtime.setCoworkerResolver(() => true);
+      const sessionId = `ses_durable_${boundary}`;
+      try {
+        const accepted = boundary === "expired-deterministic"
+          ? await runtime.startDeterministicCoworkerRun({ workspaceId: coworker.workspaceId, sessionId, coworker,
+            agentId: "matterhorn-sui", maxReadCalls: 1,
+            requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }] })
+          : await runtime.acceptPrompt({ workspaceId: coworker.workspaceId, sessionId, coworker,
+            parts: [{ type: "text", text: "Synthetic public Sui read" }], providerId: "cudos", modelId: "asi1-mini",
+            agentId: "matterhorn-sui", executionMode: "work",
+            requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }] });
+        if (boundary.startsWith("expired")) {
+          setSystemTime(new Date(Date.now() + 6 * 60 * 60 * 1000 + 1));
+          runtime.close();
+          state = new MatterhornGuardedRuntimeStateStore(path);
+          runtime = new MatterhornGuardedAgentRuntime(state);
+          expect(runtime.capabilities.coworkerForRun(accepted.runId)).toBeNull();
+        }
+        if (boundary === "queue-write-failure") {
+          const put = state.put.bind(state);
+          state.put = input => {
+            if (input.kind === "crypto_evidence_finalization") throw new Error("Synthetic finalization queue failure");
+            return put(input);
+          };
+        }
+        if (boundary === "after-receipt-commit") {
+          const complete = runtime.receipts.complete.bind(runtime.receipts);
+          runtime.receipts.complete = async input => {
+            await complete(input);
+            throw new Error("Synthetic crash after receipt commit");
+          };
+        }
+        const complete = runtime.completeRun({ runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+          runId: accepted.runId, status: "success", usage: { inputTokens: 300, outputTokens: 173 } });
+        if (boundary === "queue-write-failure" || boundary === "after-receipt-commit") await expect(complete).rejects.toThrow("Synthetic");
+        else await complete;
+        expect((await runtime.receipts.get(coworker.workspaceId, accepted.runId))?.status).toBe("success");
+        runtime.close();
+        state = new MatterhornGuardedRuntimeStateStore(path);
+        runtime = new MatterhornGuardedAgentRuntime(state);
+        const finalized: Array<{ runId: string; ownerId: string }> = [];
+        runtime.setFinalizedRunHandler(async ({ receipt, coworker: identity }) => {
+          expect(runtime.capabilities.coworkerForRun(receipt.runId)).toBeNull();
+          expect(receipt.usage).toMatchObject({ inputTokens: 300, outputTokens: 173 });
+          finalized.push({ runId: receipt.runId, ownerId: identity.ownerId });
+        });
+        expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 1, sealed: 1, failed: 0 });
+        expect(finalized).toEqual([{ runId: accepted.runId, ownerId: coworker.ownerId }]);
+        expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 0, sealed: 0, failed: 0 });
+      } finally { runtime.close(); setSystemTime(); }
+    });
+  }
+
+  for (const mutation of ["unsealed", "tenant", "session", "expiry", "purged", "deleted", "expired"]) {
+    test(`retained coworker audit identity rejects ${mutation} before retry`, async () => {
+      const fixture = await finalizationFixture(mutation);
+      let runtime = fixture.runtime;
+      const state = fixture.state;
+      try {
+        const identity = state.getRecord("crypto_evidence_finalization_binding", fixture.accepted.runId);
+        if (!identity) throw new Error("Missing retained audit identity");
+        const authority = testDurableStateAuthority(process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET);
+        try {
+          const { id, workspaceId, ownerId, revision, policyVersion } = fixture.coworker;
+          expect<unknown>(authority.open<unknown>(identity, "fixture_invalid_identity")).toEqual({
+            runId: fixture.accepted.runId, workspaceId, sessionId: `ses_boundary_${mutation}`,
+            coworker: { id, workspaceId, ownerId, revision, policyVersion },
+          });
+        } finally { authority.close(); }
+        // Preserve an authentic terminal receipt with no finalization queue,
+        // as after a process exit between those two durable writes.
+        await runtime.receipts.complete({ runId: fixture.accepted.runId, status: "success" });
+        if (mutation === "purged") runtime.purgeWorkspace(fixture.coworker.workspaceId);
+        else if (mutation === "deleted") runtime.beginWorkspaceDeletion(fixture.coworker.workspaceId);
+        else if (mutation === "expired") setSystemTime(new Date(Date.now() + 366 * 24 * 60 * 60 * 1000));
+        else state.put({ kind: identity.kind, key: identity.key,
+          workspaceId: mutation === "tenant" ? "ws_other" : identity.workspaceId,
+          sessionId: mutation === "session" ? "ses_other" : identity.sessionId,
+          value: mutation === "unsealed" ? { runId: fixture.accepted.runId } : identity.value,
+          expiresAtMs: mutation === "expiry" ? (identity.expiresAtMs ?? 0) + 1 : identity.expiresAtMs,
+          nowMs: identity.updatedAtMs });
+        runtime.close();
+        runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(fixture.path));
+        let calls = 0;
+        runtime.setFinalizedRunHandler(async () => { calls += 1; });
+        if (["purged", "deleted", "expired"].includes(mutation)) {
+          expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 0, sealed: 0, failed: 0 });
+        } else await expect(runtime.retryPendingFinalizedRuns()).rejects.toMatchObject({ code: "crypto_evidence_finalization_state_invalid" });
+        expect(calls).toBe(0);
+      } finally { runtime.close(); setSystemTime(); }
+    });
+  }
+
+  test("a delayed evidence acknowledgement cannot discard a newer receipt snapshot", async () => {
+    const { runtime, state, accepted, coworker } = await finalizationFixture("ack_race");
+    let release = () => {};
+    let reached = () => {};
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const started = new Promise<void>(resolve => { reached = resolve; });
+    let first: Promise<void> | undefined;
+    try {
+      runtime.setFinalizedRunHandler(async () => { reached(); await gate; });
+      const report = { runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!, runId: accepted.runId };
+      first = runtime.completeRun({ ...report, status: "success", usage: { inputTokens: 100, outputTokens: 23 } });
+      await started;
+      runtime.setFinalizedRunHandler(async () => { throw new Error("Synthetic unavailable sealer"); });
+      await runtime.completeRun({ ...report, status: "success", usage: { inputTokens: 400, outputTokens: 196 } });
+      const newer = state.getRecord("crypto_evidence_finalization", accepted.runId);
+      expect(newer).not.toBeNull();
+      release();
+      await first;
+      expect(state.getRecord("crypto_evidence_finalization", accepted.runId)).toEqual(newer);
+      expect(state.getRecord("crypto_evidence_finalization_binding", accepted.runId)).not.toBeNull();
+      runtime.setFinalizedRunHandler(async finalized => {
+        expect(finalized.coworker.ownerId).toBe(coworker.ownerId);
+        expect(finalized.receipt.usage).toMatchObject({ inputTokens: 400, outputTokens: 196 });
+      });
+      expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 1, sealed: 1, failed: 0 });
+      expect(state.getRecord("crypto_evidence_finalization", accepted.runId)).toBeNull();
+      expect(state.getRecord("crypto_evidence_finalization_binding", accepted.runId)).toBeNull();
+    } finally { release(); await first?.catch(() => undefined); runtime.close(); }
+  });
+
+  test("workspace purge during finalization receipt read cannot recreate evidence", async () => {
+    const { runtime, state, accepted, coworker } = await finalizationFixture("purge_during_read");
+    try {
+      await runtime.receipts.complete({ runId: accepted.runId, status: "success" });
+      const get = runtime.receipts.get.bind(runtime.receipts);
+      runtime.receipts.get = async (...args) => {
+        const receipt = await get(...args);
+        runtime.purgeWorkspace(coworker.workspaceId);
+        return receipt;
+      };
+      let delivered = 0;
+      runtime.setFinalizedRunHandler(async () => { delivered += 1; });
+      expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 0, sealed: 0, failed: 0 });
+      expect(delivered).toBe(0);
+      expect(state.getRecord("crypto_evidence_finalization", accepted.runId)).toBeNull();
+      expect(state.getRecord("crypto_evidence_finalization_binding", accepted.runId)).toBeNull();
+    } finally { runtime.close(); }
+  });
+
+  test("failed acknowledgement transaction retains both records for retry after reopen", async () => {
+    const fixture = await finalizationFixture("ack_write_failure");
+    let runtime = fixture.runtime;
+    try {
+      await runtime.completeRun({ runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+        runId: fixture.accepted.runId, status: "success" });
+      const remove = fixture.state.delete.bind(fixture.state);
+      fixture.state.delete = (kind, key) => {
+        if (kind === "crypto_evidence_finalization_binding") throw new Error("Synthetic acknowledgement failure");
+        return remove(kind, key);
+      };
+      let delivered = 0;
+      runtime.setFinalizedRunHandler(async () => { delivered += 1; });
+      expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 1, sealed: 0, failed: 1 });
+      expect(fixture.state.getRecord("crypto_evidence_finalization", fixture.accepted.runId)).not.toBeNull();
+      expect(fixture.state.getRecord("crypto_evidence_finalization_binding", fixture.accepted.runId)).not.toBeNull();
+      runtime.close();
+      runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(fixture.path));
+      runtime.setFinalizedRunHandler(async () => { delivered += 1; });
+      expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 1, sealed: 1, failed: 0 });
+      expect(delivered).toBe(2); // At-least-once delivery; the sealer must remain idempotent.
+      expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 0, sealed: 0, failed: 0 });
+    } finally { runtime.close(); }
+  });
+
+  test("finalization identity persistence fails admission atomically", async () => {
+    const state = new MatterhornGuardedRuntimeStateStore(join(dataDir, "finalization-admission.db"));
+    const runtime = new MatterhornGuardedAgentRuntime(state);
+    const coworker = finalizedRunCoworker("cw_atomic_audit", "ws_atomic_audit");
+    const put = state.put.bind(state);
+    state.put = input => {
+      if (input.kind === "crypto_evidence_finalization_binding") throw new Error("Synthetic audit storage failure");
+      return put(input);
+    };
+    runtime.setCoworkerResolver(() => true);
+    try {
+      await expect(runtime.acceptPrompt({ workspaceId: coworker.workspaceId, sessionId: "ses_atomic_audit", coworker,
+        parts: [{ type: "text", text: "Synthetic public state" }], providerId: "cudos", modelId: "asi1-mini",
+        agentId: "matterhorn-sui", executionMode: "work" })).rejects.toThrow("Synthetic audit storage failure");
+      expect(runtime.capabilities.activeRun("ses_atomic_audit")).toBeNull();
+      for (const kind of ["active_agent_run", "agent_run_scope", "run_grant", "receipt_index"] as const) {
+        expect(state.listRecords(kind, { workspaceId: coworker.workspaceId })).toEqual([]);
+      }
+    } finally { runtime.close(); }
+  });
+
+  test("expired execution still recovers one decryptable local coworker evidence record", async () => {
+    const fixture = await finalizationFixture("encrypted_recovery");
+    let runtime = fixture.runtime;
+    let keyLeases = 0;
+    const keyManager: MatterhornEvidenceKeyManager = {
+      createDataKey: async ({ recipientKeyIds }) => {
+        keyLeases += 1;
+        return { plaintextKey: Buffer.alloc(32, 37), keyReference: "kms://synthetic-recovery",
+          wrappedKey: "synthetic-wrapped-key", keyContext: "c".repeat(64), recipientKeyIds };
+      },
+      decryptDataKey: async () => Buffer.alloc(32, 37),
+      destroyKey: async () => undefined,
+    };
+    try {
+      await runtime.receipts.complete({ runId: fixture.accepted.runId, status: "success",
+        usage: { inputTokens: 300, outputTokens: 173 } });
+      runtime.close();
+      setSystemTime(new Date(Date.now() + 6 * 60 * 60 * 1000 + 1));
+      runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(fixture.path));
+      const store = runtime.createCryptoEvidenceStore(keyManager);
+      runtime.setFinalizedRunHandler(async finalizedRun => {
+        await sealFinalizedCoworkerRunEvidence({ finalizedRun, store, keyManager });
+      });
+      expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 1, sealed: 1, failed: 0 });
+      const identity = { workspaceId: fixture.coworker.workspaceId, ownerId: fixture.coworker.ownerId,
+        coworkerId: fixture.coworker.id, runId: fixture.accepted.runId };
+      const evidence = store.findByRun(identity);
+      if (!evidence) throw new Error("Missing encrypted recovery evidence");
+      const decrypted = await store.decrypt({ ...identity, evidenceId: evidence.id });
+      expect(decrypted.receipt).toMatchObject({ status: "success", inputTokens: 300, outputTokens: 173 });
+      expect(evidence.walrusProof).toBeNull();
+      expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 0, sealed: 0, failed: 0 });
+      expect(keyLeases).toBe(1);
+      expect(runtime.capabilities.coworkerForRun(fixture.accepted.runId)).toBeNull();
+    } finally { runtime.close(); setSystemTime(); }
   });
 
   test("rejects tenant, receipt, and SQLite metadata mutation in a pending evidence finalization", async () => {
