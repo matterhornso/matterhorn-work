@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
-import { spawn, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { createServer } from "node:net";
+import { findRuntimeBinary, verifyNativeRuntime } from "./verify-opencode-native-contract.mjs";
 
 const readText = (path) => readFileSync(path, "utf8");
 const readJson = (path) => JSON.parse(readText(path));
@@ -120,78 +119,13 @@ assert.match(
   "the server read model must use the current OpenCode SDK message response type",
 );
 
-const binaryCheck = spawnSync("opencode", ["--version"], { encoding: "utf8" });
-if (binaryCheck.status === 0) {
-  const installedVersion = `${binaryCheck.stdout}${binaryCheck.stderr}`.trim().replace(/^v/, "");
-  assert.equal(installedVersion, pinnedVersion, "installed OpenCode must match the pinned SDK/runtime version");
-
-  const port = await new Promise((resolve, reject) => {
-    const server = createServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      server.close(() => {
-        if (address && typeof address === "object") resolve(address.port);
-        else reject(new Error("failed to reserve an OpenCode compatibility port"));
-      });
-    });
-  });
-  const username = "matterhorn-compatibility";
-  const password = "matterhorn-compatibility-password";
-  const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
-  const child = spawn(
-    "opencode",
-    ["serve", "--hostname", "127.0.0.1", "--port", String(port), "--cors", "*"],
-    {
-      cwd: process.cwd(),
-      env: {
-        ...process.env,
-        OPENCODE_SERVER_USERNAME: username,
-        OPENCODE_SERVER_PASSWORD: password,
-        OPENCODE_CONFIG_CONTENT: JSON.stringify({ permission: { "*": "deny", read: "allow" } }),
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
-  let output = "";
-  const appendOutput = (chunk) => {
-    output = `${output}${String(chunk)}`.slice(-8_192);
-  };
-  child.stdout?.on("data", appendOutput);
-  child.stderr?.on("data", appendOutput);
-
-  try {
-    const deadline = Date.now() + 15_000;
-    let healthy = false;
-    while (Date.now() < deadline && child.exitCode === null) {
-      try {
-        const response = await fetch(`http://127.0.0.1:${port}/global/health`, {
-          headers: { Authorization: authorization },
-          signal: AbortSignal.timeout(1_500),
-        });
-        if (response.ok) {
-          const body = await response.json();
-          assert.equal(body.healthy, true, "the pinned OpenCode runtime must report healthy");
-          assert.equal(body.version, pinnedVersion, "the running OpenCode version must match the repository pin");
-          healthy = true;
-          break;
-        }
-      } catch {
-        // The process may still be binding its loopback listener.
-      }
-      await new Promise((resolve) => setTimeout(resolve, 200));
-    }
-    assert.ok(healthy, `OpenCode ${pinnedVersion} failed its managed runtime boot smoke:\n${output}`);
-  } finally {
-    if (child.exitCode === null) child.kill("SIGTERM");
-    await Promise.race([
-      new Promise((resolve) => child.once("exit", resolve)),
-      new Promise((resolve) => setTimeout(resolve, 2_000)),
-    ]);
-    if (child.exitCode === null) child.kill("SIGKILL");
-  }
+const binary = findRuntimeBinary();
+if (binary) {
+  const evidence = await verifyNativeRuntime({ binary, expectedVersion: pinnedVersion });
+  console.log(JSON.stringify(evidence));
+  console.log(`OpenWork ${openworkVersion} / OpenCode ${pinnedVersion} native compatibility gate passed.`);
 } else if (process.env.MATTERHORN_REQUIRE_OPENCODE_BINARY === "1") {
   assert.fail(`OpenCode ${pinnedVersion} is required for this compatibility gate`);
+} else {
+  console.log(`OpenWork ${openworkVersion} / OpenCode ${pinnedVersion} metadata checks passed; native execution NOT verified (no binary on PATH).`);
 }
-
-console.log(`OpenWork ${openworkVersion} / OpenCode ${pinnedVersion} compatibility gate passed.`);

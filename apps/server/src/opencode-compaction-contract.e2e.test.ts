@@ -213,6 +213,7 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
     engine = spawn(binary, ["serve", "--hostname", "127.0.0.1", "--port", String(port)], {
       cwd: workspace, stdio: "pipe", env: {
         PATH: process.env.PATH,
+        HOME: root, USERPROFILE: root,
         XDG_CONFIG_HOME: join(root, "config"), XDG_DATA_HOME: join(root, "data"), XDG_CACHE_HOME: join(root, "cache"),
         XDG_STATE_HOME: join(root, "state"), OPENCODE_CONFIG_DIR: join(root, "config"),
         OPENCODE_DISABLE_AUTOUPDATE: "true", OPENCODE_DISABLE_MODELS_FETCH: "true", OPENCODE_DISABLE_PROJECT_CONFIG: "true",
@@ -260,6 +261,11 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
       const response = await fetch(`${url}${path}?directory=${encodeURIComponent(workspace)}`, {
         headers, method: body === undefined ? "GET" : "POST", body: body === undefined ? undefined : JSON.stringify(body),
         signal: AbortSignal.timeout(20000),
+      }).catch(async cause => {
+        const freshRead = body === undefined ? await fetch(`${url}${path}?directory=${encodeURIComponent(workspace)}`, {
+          headers, keepalive: false, signal: AbortSignal.timeout(3000),
+        }).then(async response => { await response.arrayBuffer(); return response.status; }).catch(() => "failed") : "not-retried";
+        throw new Error(`Native fixture HTTP failed: ${body === undefined ? "GET" : "POST"} ${path}; providerCalls=${providerCalls}; freshRead=${freshRead}`, { cause });
       });
       expect(response.ok).toBe(true);
       return response.json();
@@ -340,7 +346,7 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
           method: "POST", headers: auth, signal: AbortSignal.timeout(20000),
           body: JSON.stringify({ agentId: "fixture", model: { providerID: providerId, modelID: "fixture" },
             message: tool ? "Read synthetic.txt from this workspace, then answer." : "Answer the synthetic project question.", executionMode: "work" }),
-        });
+        }).catch(cause => { throw new Error(`Gateway fixture chat admission failed; providerCalls=${providerCalls}`, { cause }); });
         const sent = await sendChat();
         let accepted = await sent.json();
         expect(sent.status, JSON.stringify({ accepted, controlFailures, runtimeLog: output })).toBe(202);

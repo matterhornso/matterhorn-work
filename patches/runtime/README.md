@@ -77,6 +77,37 @@ The version override belongs only to this opt-in test harness. Repository runtim
 pins, production download URLs and checksums still refer to official OpenCode
 1.18.31 and have not been replaced with this experimental build.
 
+## Native release verification
+
+Use the isolated verifier for an exact locally available candidate:
+
+```sh
+node scripts/verify-opencode-native-contract.mjs \
+  --binary /absolute/path/to/candidate/opencode \
+  --expected-version 1.18.31-matterhorn-identity.2
+```
+
+The example version identifies this experiment, not a production recommendation.
+The verifier requires Bun and the installed Matterhorn dependencies plus the built
+Crypto App SDK. It runs the complete native suite against disposable loopback
+providers, with private temporary HOME/XDG/config/data paths and no inherited
+provider credentials, runtime configuration or Node/Bun option overrides. It
+requires an exact version and at least 30 passing JUnit cases with no skips or
+failures. The binary checksum must match before and after verification. JSON
+output reports the binary SHA-256 and explicitly marks hosted acceptance false.
+An overall ten-minute timeout and fail-fast suite limit keep failures bounded.
+
+The ordinary compatibility gate now invokes this verifier when a binary is on
+PATH. Without a binary it reports metadata checks only, not native compatibility;
+`MATTERHORN_REQUIRE_OPENCODE_BINARY=1` makes that absence fail. CI requires the
+binary and runs after dependency installation, Bun setup and Crypto App SDK
+build on Linux and macOS. A healthy endpoint or matching version no longer
+suffices. **The unchanged stock runtime pin still lacks the required identity
+contract, so release CI must remain blocked until a maintained compatible
+distribution and coordinated pins are supplied.** Do not waive the native test,
+substitute the fixture binary as a release artifact, or call a metadata-only
+local safety pass a production-runtime pass.
+
 ## Requirements before deployment
 
 Choose a maintained patched distribution or an upstream release carrying the
@@ -86,7 +117,12 @@ checksums, and update installers plus compatibility/readiness checks together.
 Repeat native ordinary-chat, tools, cancellation, restart and compaction tests
 against those exact artifacts. The Darwin-only fixture build is not that release.
 
-The local native fixture now has **30 passing cases**. The original
+The native fixture contains **30 cases** and passed earlier complete runs. A
+subsequent isolated repeat records 29 passes and one intermittent timeout reading
+history after abrupt engine termination during a provider request. Targeted
+repeats reproduce it, including a failed fresh-connection read. This is unresolved;
+see [latest native release verification](../../qa-reports/launch/2026-10-05/RESULTS.md#native-release-verification).
+Do not replace this result with an earlier green run. The original
 24 cases comprise nine compaction cases and fifteen ordinary-chat, file-tool,
 retry, replacement, Stop and backend-restart cases. Cancellation
 now covers both early authorization boundaries, a received provider request,

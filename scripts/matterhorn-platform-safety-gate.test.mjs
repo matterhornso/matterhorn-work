@@ -215,6 +215,9 @@ assert.deepEqual(report.stages.map((stage) => stage.id), [
 ]);
 assert.ok(report.stages.every((stage) => Array.isArray(stage.command) && stage.command.length > 0));
 const moneyPath = report.stages.find((stage) => stage.id === "money.path.security");
+const runtimePerimeter = report.stages.find((stage) => stage.id === "daemon.electron.perimeter");
+assert.ok(runtimePerimeter.command.includes("scripts/verify-opencode-native-contract.test.mjs"),
+  "runtime perimeter must test the isolated native release verifier");
 for (const suite of [
   "apps/server/src/agent-run-receipts.test.ts",
   "apps/server/src/guarded-agent-runtime.test.ts",
