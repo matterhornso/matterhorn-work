@@ -11,19 +11,26 @@ fail closed with the unpatched runtime. Do not deploy them independently.
 - Upstream repository: `https://github.com/anomalyco/opencode`.
 - Base tag: `v1.18.31`; exact commit: `014614d35b397775e5d397a490fc72368c894ec2`.
 - Patch: `opencode-1.18.31-request-identity.patch`.
-- Patch SHA-256: `325ef806f2f2c754117a2c1fe56e5481d69c053923801bb0d8e80f24088816ef`.
-- Experimental version: `1.18.31-matterhorn-identity.1`.
+- Patch SHA-256: `fe5ea43bb2fc4aba455fa85a8026426951e6caf27e993a464b50f50ef7c408eb`.
+- Experimental version: `1.18.31-matterhorn-identity.2`.
 - Build toolchain: Bun `1.3.14`, isolated `@oven/bun-darwin-aarch64@1.3.14` package.
 - Locally built Darwin arm64 binary SHA-256:
-  `2cef0475c9c4985239f7423b35e0b90e8c5407f6100e2834207968ea28d6a0f1`.
+  `cfb690d5b7087a08ed0c0b16b01e94de20c4b748f80f6b344ab28aeff2c4d2b3`.
 - Local source: `/private/tmp/matterhorn-runtime-identity.4gR56K/source`.
 - Local binary: `packages/opencode/dist/opencode-darwin-arm64/bin/opencode` inside that source checkout.
 
-Only four upstream files change. Compaction supplies `input.parentID`; ordinary
+Four upstream implementation files and one prompt test file change. Compaction supplies `input.parentID`; ordinary
 messages supply `lastUser.id`; provider-system preparation supplies `input.user.id`.
 The plugin interface exposes these fields without adding an HTTP API or a
 database migration. Never derive the current compaction ID from the last retained
 history message: native compaction removes its current parent from that history.
+
+Version `.2` also finalizes an assistant error when a preparation hook fails
+before `processor.process()`. The error still propagates; no provider or tool is
+retried. Already completed messages and interruption handling remain unchanged.
+The upstream prompt suite passes 59 tests with one existing skip; its new hook
+rejection test verifies terminal history, idle session state and zero provider
+calls. This does not provide crash recovery for a stopped native engine.
 
 ## Reproducing the isolated experiment
 
@@ -48,7 +55,7 @@ environment, isolated XDG directories, and these explicit build settings:
 
 ```sh
 env OPENCODE_CHANNEL=matterhorn-identity-experiment \
-  OPENCODE_VERSION=1.18.31-matterhorn-identity.1 \
+  OPENCODE_VERSION=1.18.31-matterhorn-identity.2 \
   MODELS_DEV_API_JSON=/private/tmp/matterhorn-runtime-identity.4gR56K/models.fixture.json \
   bun run script/build.ts --single --skip-install --skip-embed-web-ui
 ```
@@ -62,7 +69,7 @@ From the Matterhorn checkout, native acceptance requires both explicit overrides
 
 ```sh
 MATTERHORN_TEST_OPENCODE_BIN=/private/tmp/matterhorn-runtime-identity.4gR56K/source/packages/opencode/dist/opencode-darwin-arm64/bin/opencode \
-MATTERHORN_TEST_OPENCODE_VERSION=1.18.31-matterhorn-identity.1 \
+MATTERHORN_TEST_OPENCODE_VERSION=1.18.31-matterhorn-identity.2 \
 bun test apps/server/src/opencode-compaction-contract.e2e.test.ts
 ```
 
@@ -79,15 +86,21 @@ checksums, and update installers plus compatibility/readiness checks together.
 Repeat native ordinary-chat, tools, cancellation, restart and compaction tests
 against those exact artifacts. The Darwin-only fixture build is not that release.
 
-The local native fixture currently covers 21 cases: nine compaction cases and
-twelve ordinary-chat, file-tool, retry, replacement, Stop and completion-replay cases. Cancellation
+The local native fixture currently passes 24 cases: nine compaction cases and
+fifteen ordinary-chat, file-tool, retry, replacement, Stop and restart cases. Cancellation
 now covers both early authorization boundaries, a received provider request,
 a second provider call after a completed tool step, and an observed text delta
 before final usage. Completion replay covers the existing gateway and a backend
 restart preserving disposable data, while the native engine remains running.
-See the [current QA evidence](../../qa-reports/launch/2026-10-05/RESULTS.md#late-completion-reports-and-backend-restart).
-Mid-request backend restart and native engine restart still need acceptance;
-these checks do not establish production artifacts or provider invoice accuracy.
+Mid-request backend restart now covers the message hook, system hook and an
+already received provider request. Denied pre-provider requests become terminal
+errors and retain unknown-usage holds; the received request completes once with
+473 tokens and no hold. The native engine stays running in all three cases.
+See the [current QA evidence](../../qa-reports/launch/2026-10-05/RESULTS.md#in-flight-restart-and-receipt-persistence).
+Native engine restart, completion notification recovery during gateway downtime
+and concurrent replicas remain unverified. Two separate receipt-index write
+recovery tests fail; this patch does not fix that launch blocker or certify
+production artifacts or provider invoice accuracy.
 
 The reservation correction preserves a hold after any provider-system release,
 including a lost acknowledgement or later HTTP 400. It cancels only after this

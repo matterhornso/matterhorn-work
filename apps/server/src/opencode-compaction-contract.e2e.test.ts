@@ -24,6 +24,8 @@ for (const { route, replacement, throttle } of [
   { route: "chat-tool-stop-provider", replacement: false },
   { route: "chat-stop-stream", replacement: false },
   { route: "chat-replay", replacement: false }, { route: "chat-replay-restart", replacement: false },
+  { route: "chat-restart", replacement: "messages" }, { route: "chat-restart", replacement: "system" },
+  { route: "chat-restart-provider", replacement: false },
 ]) {
 test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves request identity: ${route}, replacement=${replacement}, throttle=${Boolean(throttle)}`, async () => {
   const binary = process.env.MATTERHORN_TEST_OPENCODE_BIN;
@@ -110,7 +112,7 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
         }
         const response = await fetch(`http://127.0.0.1:${gateway.port}${path}`, { method: "POST",
           headers: { "content-type": "application/json", "x-matterhorn-agent-runtime-secret": "disposable-compaction-control-key-at-least-32-bytes" },
-          body: forwardedBody });
+          body: forwardedBody }).catch(() => Response.json({ code: "fixture_gateway_restart_unavailable" }, { status: 503 }));
         if (holdOld) { delayedStatus = response.status; delayedBody = await response.clone().json(); checkedOld(); }
         if (path === "/internal/agent-runs/complete" && response.ok) {
           completionBody = forwardedBody;
@@ -142,7 +144,7 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
         reachedOld();
         await newGate;
       }
-      if (stopProvider && providerCalls === (tool ? 2 : 1)) {
+      if ((stopProvider || route === "chat-restart-provider") && providerCalls === (tool ? 2 : 1)) {
         reachedOld();
         await oldGate;
       }
@@ -263,7 +265,7 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
     });
     if (route !== "contract") {
       if (!gateway) throw new Error("Missing isolated gateway");
-      const base = `http://127.0.0.1:${gateway.port}`;
+      let base = `http://127.0.0.1:${gateway.port}`;
       const auth = { authorization: "Bearer disposable-compaction-user", "content-type": "application/json" };
       if (chat) {
         const observeStream = async () => {
@@ -308,6 +310,41 @@ test.skipIf(!process.env.MATTERHORN_TEST_OPENCODE_BIN)(`native gateway preserves
         const sent = await sendChat();
         let accepted = await sent.json();
         expect(sent.status, JSON.stringify({ accepted, controlFailures, runtimeLog: output })).toBe(202);
+        if (route.startsWith("chat-restart")) {
+          await waitFor(oldReached);
+          if (!gatewayConfig) throw new Error("Missing disposable gateway configuration");
+          await gateway.stop();
+          gateway = await startServer(gatewayConfig);
+          base = `http://127.0.0.1:${gateway.port}`;
+          releaseOld();
+          if (replacement) {
+            await waitFor(oldChecked);
+            expect(delayedStatus, JSON.stringify(delayedBody)).toBe(409);
+            const deadline = Date.now() + 5000;
+            let items: Array<{ runId: string; status: string }> = [];
+            do {
+              const receipts = await fetch(`${base}/workspace/ws_contract/agent-run-receipts?sessionId=${session.id}`, { headers: auth });
+              expect(receipts.status).toBe(200);
+              items = (await receipts.json()).items;
+              if (items.some(item => item.runId === accepted.runId && item.status !== "pending")) break;
+              await new Promise(resolve => setTimeout(resolve, 100));
+            } while (Date.now() < deadline);
+            const history = await call(`/session/${session.id}/message`);
+            expect(history.at(-1)?.info, JSON.stringify(history)).toMatchObject({
+              role: "assistant", time: { completed: expect.any(Number) },
+              error: { name: "UnknownError" }, tokens: { input: 0, output: 0 },
+            });
+            expect(items, JSON.stringify({ history, controlFailures, completionBody })).toEqual([
+              expect.objectContaining({ runId: accepted.runId, status: "error" }),
+            ]);
+            const usage = await fetch(`${base}/workspace/ws_contract/model-usage/status`, { headers: auth });
+            expect(usage.status).toBe(200);
+            expect((await usage.json()).status).toMatchObject({ pendingRequests: 1,
+              monthly: { usedTokens: 0, reservedTokens: 1000 } });
+            expect(providerCalls).toBe(0);
+            return;
+          }
+        }
         if (stopStream) {
           await waitFor(oldReached);
           // Gateway preparation may reload the native workspace. Subscribe to

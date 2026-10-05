@@ -34,22 +34,90 @@ index e000d6c..72ae347 100644
    )
    if (system.length > 2 && system[0] === header) {
 diff --git a/packages/opencode/src/session/prompt.ts b/packages/opencode/src/session/prompt.ts
-index 0f85d44..613492d 100644
+index 0f85d44..766b679 100644
 --- a/packages/opencode/src/session/prompt.ts
 +++ b/packages/opencode/src/session/prompt.ts
 @@ -1252,7 +1252,11 @@ const layer = Layer.effect(
              if (step === 1)
                yield* summary.summarize({ sessionID, messageID: lastUser.id }).pipe(Effect.ignore, Effect.forkIn(scope))
- 
+
 -            yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 +            yield* plugin.trigger(
 +              "experimental.chat.messages.transform",
 +              { sessionID, messageID: lastUser.id },
 +              { messages: msgs },
 +            )
- 
+
              const [skills, env, instructions, mcpInstructions, modelMsgs] = yield* Effect.all([
                sys.skills(agent),
+@@ -1330,6 +1334,17 @@ const layer = Layer.effect(
+           }).pipe(
+             Effect.ensuring(instruction.clear(handle.message.id)),
+             Effect.onInterrupt(() => finalizeInterruptedAssistant),
++            Effect.tapCause((cause) =>
++              Effect.gen(function* () {
++                // Preparation hooks run before process(), whose error handler
++                // cannot finalize an assistant when those hooks fail.
++                if (msg.time.completed || Cause.hasInterruptsOnly(cause)) return
++                msg.error ??= MessageV2.fromError(Cause.squash(cause), { providerID: msg.providerID })
++                msg.time.completed = Date.now()
++                yield* sessions.updateMessage(msg)
++                yield* events.publish(Session.Event.Error, { sessionID, error: msg.error })
++              }),
++            ),
+           )
+           if (outcome === "break") break
+           continue
+diff --git a/packages/opencode/test/session/prompt.test.ts b/packages/opencode/test/session/prompt.test.ts
+index da6e0f8..6e94285 100644
+--- a/packages/opencode/test/session/prompt.test.ts
++++ b/packages/opencode/test/session/prompt.test.ts
+@@ -8,7 +8,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
+ import { expect } from "bun:test"
+ import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
+ import path from "path"
+-import { fileURLToPath } from "url"
++import { fileURLToPath, pathToFileURL } from "url"
+ import { NamedError } from "@opencode-ai/core/util/error"
+ import { Agent as AgentSvc } from "../../src/agent/agent"
+ import { BackgroundJob } from "@/background/job"
+@@ -1148,6 +1148,36 @@ it.instance(
+
+ // Cancel semantics
+
++it.instance("finalizes assistant when provider-message preparation fails", () =>
++  Effect.gen(function* () {
++    const test = yield* TestInstance
++    const file = path.join(test.directory, "reject-messages.ts")
++    yield* writeText(file, `export default async () => ({
++      "experimental.chat.messages.transform": async () => { throw new Error("Fixture message authorization denied") }
++    })`)
++    const { llm } = yield* useServerConfig((url) => ({
++      ...providerCfg(url), plugin: [pathToFileURL(file).href],
++    }))
++    const prompt = yield* SessionPrompt.Service
++    const sessions = yield* Session.Service
++    const status = yield* SessionStatus.Service
++    const chat = yield* sessions.create({})
++    yield* user(chat.id, "hello")
++    const exit = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.exit)
++    expect(Exit.isFailure(exit)).toBe(true)
++    const messages = yield* sessions.messages({ sessionID: chat.id })
++    const assistant = messages.find((message) => message.info.role === "assistant")?.info
++    expect(assistant?.role).toBe("assistant")
++    if (assistant?.role !== "assistant") throw new Error("Missing assistant message")
++    expect(assistant.time.completed).toBeNumber()
++    expect(assistant.error).toMatchObject({ name: "UnknownError", data: { message: "Fixture message authorization denied" } })
++    expect(assistant.tokens.input).toBe(0)
++    expect(assistant.tokens.output).toBe(0)
++    expect((yield* status.get(chat.id)).type).toBe("idle")
++    expect(yield* llm.calls).toBe(0)
++  }),
++)
++
+ it.instance("cancel interrupts loop and resolves with an assistant message", () =>
+   Effect.gen(function* () {
+     const { llm } = yield* useServerConfig(providerCfg)
 diff --git a/packages/plugin/src/index.ts b/packages/plugin/src/index.ts
 index edfa013..2d4c004 100644
 --- a/packages/plugin/src/index.ts
