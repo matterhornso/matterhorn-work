@@ -1,4 +1,4 @@
-# OpenCode request identity experiment
+# OpenCode runtime compatibility experiments
 
 This source patch carries the current user-message ID through the early message,
 compaction and system hooks used by Matterhorn's provider authorization. It is a
@@ -7,6 +7,9 @@ deploy. The accompanying server and plugin changes require these hook fields and
 fail closed with the unpatched runtime. Do not deploy them independently.
 
 ## Source and artifact provenance
+
+The list below identifies the original `.2` identity artifact. The `.3` candidate
+adds the separate lock-recovery patch and is identified in the next section.
 
 - Upstream repository: `https://github.com/anomalyco/opencode`.
 - Base tag: `v1.18.31`; exact commit: `014614d35b397775e5d397a490fc72368c894ec2`.
@@ -31,6 +34,35 @@ retried. Already completed messages and interruption handling remain unchanged.
 The upstream prompt suite passes 59 tests with one existing skip; its new hook
 rejection test verifies terminal history, idle session state and zero provider
 calls. This does not provide crash recovery for a stopped native engine.
+
+## Local lock recovery candidate
+
+Apply the original identity patch and `opencode-1.18.31-lock-recovery.patch` to
+the same exact upstream base. The latter includes the fresh-lock regression;
+do **not** also apply `opencode-1.18.31-fresh-lock-regression.patch`. That older
+file remains a standalone negative reproduction for the uncorrected source.
+
+- Recovery patch SHA-256: `676994e9a0cecc7dc0d46f9ccccfeab95ecdc78bf7fe048004595432f3b1f248`.
+- Candidate version: `1.18.31-matterhorn-identity.3`.
+- Final Darwin arm64 binary: `/private/tmp/matterhorn-runtime-identity.4gR56K/lock-runtime-final-Dg7mOK/candidate-dist/opencode-darwin-arm64/bin/opencode`.
+- Binary SHA-256: `7eacfd199c41bab87cf5bc1c412b73ca3ab0d9eaaec78fc5ce02203400ce029e`.
+- Build toolchain/flags and empty model fixture: same as `.2`, with the explicit version changed to `.3`; no release-upload variable is set. The `.2` binary remains at its original path and checksum.
+
+The patch records a kernel boot identity and, on Linux, the PID namespace. Only
+a comparable PID proven absent enables early reclaim. Live owners, reused PIDs
+and permission errors preserve exclusion. Unknown scopes and legacy metadata
+retain the prior lease behavior. Windows has no early-recovery scope here;
+Linux namespace behavior needs execution on an actual Linux/container host.
+Partially initialized locks and crashed breakers may still wait for expiry.
+This does not migrate old data, bypass authorization or replay model/tool work.
+
+The final local candidate passes all 30 native cases and six repeated
+chat-crash cases. The lock suite passes 96 repeated executions; final local
+install/lock and plugin/MCP-auth groups pass 36 and 28 cases. See
+[commands, evidence and limits](../../qa-reports/launch/2026-10-05/RESULTS.md#local-orphan-lock-recovery-candidate).
+Use the isolated verifier below with this exact candidate path and expected
+version `.3`. It remains a synthetic-provider experiment, not a production
+artifact or hosted acceptance result. Release pins still refer to stock 1.18.31.
 
 ## Reproducing the isolated experiment
 
@@ -117,22 +149,24 @@ checksums, and update installers plus compatibility/readiness checks together.
 Repeat native ordinary-chat, tools, cancellation, restart and compaction tests
 against those exact artifacts. The Darwin-only fixture build is not that release.
 
-The separate `opencode-1.18.31-fresh-lock-regression.patch` adds one currently
-failing upstream EffectFlock crash test without backdating lock timestamps. It
-is not included in the binary above and contains no recovery implementation.
+The separate `opencode-1.18.31-fresh-lock-regression.patch` adds one upstream
+EffectFlock crash test that fails on the uncorrected base without backdating
+lock timestamps. It is not included in `.2` and contains no recovery implementation.
 Apply it to the same source base, then run `bun test test/util/effect-flock.test.ts`
-from `packages/core`; the current result is 11 passes and one failure. Native
+from `packages/core` on that uncorrected source; the result is 11 passes and one failure. Native
 diagnostics found two fresh dependency-install locks owned by the killed engine
 while global health remained responsive and workspace reads stalled. See
 [fresh lock recovery evidence and safety requirements](../../qa-reports/launch/2026-10-05/RESULTS.md#fresh-lock-recovery-after-engine-termination).
 Do not delete locks or shorten lease safety checks merely to pass the test.
 
-The native fixture contains **30 cases** and passed earlier complete runs. A
-subsequent isolated repeat records 29 passes and one intermittent timeout reading
+The native fixture contains **30 cases**. An isolated `.2` repeat records
+29 passes and one intermittent timeout reading
 history after abrupt engine termination during a provider request. Targeted
-repeats reproduce it, including a failed fresh-connection read. This is unresolved;
-see [latest native release verification](../../qa-reports/launch/2026-10-05/RESULTS.md#native-release-verification).
-Do not replace this result with an earlier green run. The original
+repeats reproduce it, including a failed fresh-connection read. The `.3` candidate
+above corrects the demonstrated fresh-owner lock case and passes the final full
+matrix and six targeted repeats; lease fallback and platform limits remain.
+See [candidate verification](../../qa-reports/launch/2026-10-05/RESULTS.md#local-orphan-lock-recovery-candidate).
+Do not apply `.3` results to the unchanged `.2` binary. The original
 24 cases comprise nine compaction cases and fifteen ordinary-chat, file-tool,
 retry, replacement, Stop and backend-restart cases. Cancellation
 now covers both early authorization boundaries, a received provider request,
