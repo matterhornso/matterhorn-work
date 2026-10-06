@@ -1,10 +1,70 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
 describe("durable guarded runtime state", () => {
+  test("expiry retains only receipt predecessors with a live same-workspace append intent", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-guarded-receipt-expiry-"));
+    const state = new MatterhornGuardedRuntimeStateStore(join(root, "state.db"));
+    try {
+      for (const workspaceId of ["ws_pending", "ws_no_intent", "ws_wrong_key", "ws_wrong_workspace"]) {
+        state.put({ kind: "receipt_index", key: `run_${workspaceId}`, workspaceId,
+          value: { fixture: true }, expiresAtMs: 90, nowMs: 10 });
+      }
+      state.put({ kind: "receipt_append_intent", key: "ws_pending", workspaceId: "ws_pending",
+        value: { fixture: true }, expiresAtMs: 200, nowMs: 80 });
+      state.put({ kind: "receipt_append_intent", key: "wrong", workspaceId: "ws_wrong_key",
+        value: { fixture: true }, expiresAtMs: 200, nowMs: 80 });
+      state.put({ kind: "receipt_append_intent", key: "ws_wrong_workspace", workspaceId: "ws_other",
+        value: { fixture: true }, expiresAtMs: 200, nowMs: 80 });
+      state.put({ kind: "privacy_challenge", key: "expired_challenge", workspaceId: "ws_pending",
+        value: { fixture: true }, expiresAtMs: 90, nowMs: 10 });
+      expect(state.deleteExpired(100).states).toBe(4);
+      expect(state.getRecord("receipt_index", "run_ws_pending", 100)).toBeNull();
+      expect(state.getRecord("receipt_index", "run_ws_pending", 0)).not.toBeNull();
+      for (const workspaceId of ["ws_no_intent", "ws_wrong_key", "ws_wrong_workspace"]) {
+        expect(state.getRecord("receipt_index", `run_${workspaceId}`, 0)).toBeNull();
+      }
+      expect(state.getRecord("privacy_challenge", "expired_challenge", 0)).toBeNull();
+      expect(state.deleteExpired(200).states).toBe(4);
+      expect(state.getRecord("receipt_index", "run_ws_pending", 0)).toBeNull();
+    } finally { state.close(); rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test("workspace deletion barriers survive other connections, cleanup, mutation and restart", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-deletion-barrier-"));
+    const path = join(root, "state.db");
+    const first = new MatterhornGuardedRuntimeStateStore(path);
+    const second = new MatterhornGuardedRuntimeStateStore(path);
+    try {
+      expect(second.isWorkspaceDeleted("ws_deleted")).toBe(false);
+      first.markWorkspaceDeleted("ws_deleted");
+      expect(second.isWorkspaceDeleted("ws_deleted")).toBe(true);
+      expect(second.isWorkspaceDeleted("ws_other")).toBe(false);
+      first.markWorkspaceDeleted("ws_deleted");
+      first.purgeWorkspace("ws_deleted");
+      second.purgeWorkspace("ws_deleted", ["workspace_deletion_barrier"]);
+      expect(second.isWorkspaceDeleted("ws_deleted")).toBe(true);
+      // Denial depends on the canonical marker key, not editable metadata.
+      first.put({ kind: "workspace_deletion_barrier", key: "ws_deleted", workspaceId: "ws_other", value: { deleted: false }, expiresAtMs: 1 });
+      second.deleteExpired();
+      expect(second.isWorkspaceDeleted("ws_deleted")).toBe(true);
+      expect(second.isWorkspaceDeleted("ws_other")).toBe(false);
+    } finally {
+      first.close();
+      second.close();
+    }
+    const reopened = new MatterhornGuardedRuntimeStateStore(path);
+    try {
+      expect(reopened.isWorkspaceDeleted("ws_deleted")).toBe(true);
+    } finally {
+      reopened.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("commits or rolls back multi-record security mutations atomically", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-guarded-transaction-"));
     const state = new MatterhornGuardedRuntimeStateStore(join(root, "state.db"));

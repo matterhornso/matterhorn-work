@@ -31,6 +31,18 @@ export class ApprovalService {
     return Array.from(this.pending.values()).map((entry) => entry.request);
   }
 
+  // A status signal, not approval authority. Never expose the queued request
+  // or match by its human-readable summary: only the original exact scope.
+  hasPendingSession(scope: ApprovalCancellationScope, action: ApprovalRequest["action"]): boolean {
+    return Array.from(this.pending.values()).some((entry) => (
+      entry.request.action === action
+      && entry.request.workspaceId === scope.workspaceId
+      && entry.cancellationScope?.workspaceId === scope.workspaceId
+      && entry.cancellationScope.sessionId === scope.sessionId
+      && entry.cancellationScope.subjectId === scope.subjectId
+    ));
+  }
+
   async requestApproval(
     input: Omit<ApprovalRequest, "id" | "createdAt">,
     signal?: AbortSignal,
@@ -86,6 +98,14 @@ export class ApprovalService {
       if (candidate?.workspaceId === scope.workspaceId
         && candidate.sessionId === scope.sessionId
         && candidate.subjectId === scope.subjectId) {
+        pending.resolve({ id, allowed: false, reason: "cancelled" });
+      }
+    }
+  }
+
+  cancelWorkspace(workspaceId: string): void {
+    for (const [id, pending] of this.pending) {
+      if (pending.request.workspaceId === workspaceId) {
         pending.resolve({ id, allowed: false, reason: "cancelled" });
       }
     }

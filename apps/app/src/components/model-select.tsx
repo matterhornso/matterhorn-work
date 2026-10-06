@@ -167,6 +167,7 @@ interface ModelSelectProps {
   onChange: (model: ModelRef) => void;
   disabled?: boolean;
   displayLabel?: string;
+  showLabel?: boolean;
 }
 
 export function ModelSelect({
@@ -176,6 +177,7 @@ export function ModelSelect({
   onChange,
   disabled = false,
   displayLabel,
+  showLabel = false,
 }: ModelSelectProps) {
   const [search, setSearch] = React.useState("");
   const searchInputRef = React.useRef<HTMLInputElement>(null);
@@ -211,9 +213,7 @@ export function ModelSelect({
   const selectedModelLabel =
     selectedOption?.title || value.modelID || "Select model";
   const triggerLabel = displayLabel ?? selectedModelLabel;
-  const tooltipLabel = displayLabel
-    ? `Change model (${selectedModelLabel})`
-    : "Change model";
+  const tooltipLabel = `Change model (${selectedModelLabel})`;
 
   // Filter out models the user has hidden via the "Available models" tab.
   // Re-read localStorage when the popover opens so changes from the
@@ -257,17 +257,18 @@ export function ModelSelect({
               disabled={disabled}
               aria-label={tooltipLabel}
               aria-keyshortcuts="Meta+Alt+/"
-              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-gray-10 transition-colors hover:bg-gray-3 hover:text-gray-12 disabled:pointer-events-none disabled:opacity-60"
+              className="flex min-h-11 min-w-0 max-w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-gray-10 transition-colors hover:bg-gray-3 hover:text-gray-12 disabled:pointer-events-none disabled:opacity-60 md:min-h-0"
             />
           }
         >
-          <span className="max-w-48 truncate">{triggerLabel}</span>
-          <ChevronDown className="h-3 w-3" />
+          {showLabel ? <span className="shrink-0">Model</span> : null}
+          <span className="min-w-0 max-w-48 truncate">{triggerLabel}</span>
+          <ChevronDown className="h-3 w-3 shrink-0" aria-hidden="true" />
         </TooltipTrigger>
         <TooltipContent>{tooltipLabel}</TooltipContent>
       </Tooltip>
       <PopoverContent
-        className="h-80 max-h-(--available-height) w-72 gap-0 overflow-hidden p-px **:data-[slot=scroll-area-viewport]:data-has-overflow-y:pe-0.5"
+        className="h-80 max-h-(--available-height) w-72 max-w-[calc(100vw-1rem)] gap-0 overflow-hidden p-px **:data-[slot=scroll-area-viewport]:data-has-overflow-y:pe-0.5"
         align="start"
         initialFocus={false}
       >

@@ -1,12 +1,17 @@
 import { SuiGrpcClient } from "@mysten/sui/grpc";
+import type { SuiClientTypes } from "@mysten/sui/client";
 import { Transaction } from "@mysten/sui/transactions";
 import {
   isValidStructTag,
   isValidSuiAddress,
+  isValidSuiObjectId,
   normalizeStructTag,
   normalizeSuiAddress,
+  normalizeSuiObjectId,
+  parseStructTag,
 } from "@mysten/sui/utils";
 import { createHash } from "node:crypto";
+import { GrpcWebFetchTransport } from "@protobuf-ts/grpcweb-transport";
 
 export const SUI_NETWORKS = ["testnet", "mainnet"] as const;
 export type SuiNetwork = (typeof SUI_NETWORKS)[number];
@@ -21,6 +26,7 @@ export const SUI_NATIVE_COIN_TYPE =
 
 type SuiRouteInputErrorCode =
   | "invalid_sui_address"
+  | "invalid_sui_object_id"
   | "invalid_sui_network"
   | "invalid_sui_amount"
   | "invalid_sui_preview"
@@ -47,6 +53,7 @@ export interface SuiBalanceResponse {
 }
 
 export interface SuiReadClient {
+  getObjects(input: SuiClientTypes.GetObjectsOptions): Promise<SuiClientTypes.GetObjectsResponse>;
   getBalance(input: { owner: string; coinType?: string; signal?: AbortSignal }): Promise<SuiBalanceResponse>;
   getTransaction(input: { digest: string; signal?: AbortSignal }): Promise<SuiTransactionLookupResponse>;
 }
@@ -62,6 +69,20 @@ export interface SuiSource {
   network: SuiNetwork;
   endpoint: string;
   fetchedAt: string;
+}
+
+export interface SuiObjectSnapshot {
+  version: "matterhorn.sui.object.v1";
+  objectId: string;
+  network: SuiNetwork;
+  objectVersion: string;
+  digest: string;
+  isPackage: boolean;
+  type: "package" | { packageAddress: string; module: string; name: string; typeArgumentCount: number; typeArgumentsOmitted: boolean };
+  owner: { kind: SuiClientTypes.ObjectOwner["$kind"]; address?: string; objectId?: string; initialSharedVersion?: string; startVersion?: string };
+  custody: false;
+  canSubmit: false;
+  source: SuiSource;
 }
 
 export interface SuiBalanceSnapshot {
@@ -331,6 +352,46 @@ export function normalizeMatterhornSuiAddress(value: string): string {
     throw new SuiInputError("invalid_sui_address", "address must be a valid Sui public address");
   }
   return normalized;
+}
+
+export function normalizeMatterhornSuiObjectId(value: string): string {
+  const trimmed = value.trim();
+  if (!/^0x[0-9a-f]{1,64}$/i.test(trimmed)) {
+    throw new SuiInputError("invalid_sui_object_id", "objectId must be a public Sui hex object ID");
+  }
+  const normalized = normalizeSuiObjectId(trimmed);
+  if (!isValidSuiObjectId(normalized)) {
+    throw new SuiInputError("invalid_sui_object_id", "objectId must be a valid Sui object ID");
+  }
+  return normalized;
+}
+
+function suiObjectVersion(value: string): string {
+  if (!/^[0-9]{1,20}$/.test(value)) throw new Error("Sui object metadata is invalid");
+  return value;
+}
+
+function suiObjectOwner(owner: SuiClientTypes.ObjectOwner): SuiObjectSnapshot["owner"] {
+  switch (owner.$kind) {
+    case "AddressOwner": return { kind: owner.$kind, address: normalizeMatterhornSuiAddress(owner.AddressOwner) };
+    case "ObjectOwner": return { kind: owner.$kind, objectId: normalizeMatterhornSuiObjectId(owner.ObjectOwner) };
+    case "Shared": return { kind: owner.$kind, initialSharedVersion: suiObjectVersion(owner.Shared.initialSharedVersion) };
+    case "ConsensusAddressOwner": return { kind: owner.$kind, address: normalizeMatterhornSuiAddress(owner.ConsensusAddressOwner.owner), startVersion: suiObjectVersion(owner.ConsensusAddressOwner.startVersion) };
+    case "Immutable": case "Unknown": return { kind: owner.$kind };
+  }
+}
+
+function suiObjectType(value: string): SuiObjectSnapshot["type"] {
+  if (value === "package") return value;
+  if (value.length > 512 || !isValidStructTag(value)) throw new Error("Sui object type exceeds supported metadata bounds");
+  const tag = parseStructTag(value);
+  if (!/^[a-z_][a-z0-9_]{0,127}$/i.test(tag.module) || !/^[a-z_][a-z0-9_]{0,127}$/i.test(tag.name)) {
+    throw new Error("Sui object type is invalid");
+  }
+  return {
+    packageAddress: normalizeMatterhornSuiObjectId(tag.address), module: tag.module, name: tag.name,
+    typeArgumentCount: tag.typeParams.length, typeArgumentsOmitted: tag.typeParams.length > 0,
+  };
 }
 
 export function formatMistToSui(value: string | bigint | number | null | undefined): string {
@@ -684,6 +745,12 @@ export class SuiPublicReadProvider {
         baseUrl: SUI_GRPC_URLS[network],
       });
       return {
+        getObjects: (input) => new SuiGrpcClient({
+          network,
+          transport: new GrpcWebFetchTransport({
+            baseUrl: SUI_GRPC_URLS[network], abort: input.signal, timeout: 8_000, fetchInit: { redirect: "error" },
+          }),
+        }).core.getObjects(input),
         getBalance: (input) => client.getBalance(input),
         async getTransaction(input) {
           const result = await client.getTransaction(input);
@@ -697,6 +764,40 @@ export class SuiPublicReadProvider {
       };
     });
     this.now = options.now ?? (() => new Date());
+  }
+
+  async getObjectSnapshot(
+    objectId: string,
+    options: { network?: string | null; signal?: AbortSignal } = {},
+  ): Promise<SuiObjectSnapshot | null> {
+    const normalizedId = normalizeMatterhornSuiObjectId(objectId);
+    const network = normalizeMatterhornSuiNetwork(options.network);
+    const timeout = AbortSignal.timeout(8_000);
+    const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+    signal.throwIfAborted();
+    try {
+      // No include flags: the SDK read mask requests metadata, never BCS or object contents.
+      const response = await this.clientFactory(network).getObjects({ objectIds: [normalizedId], signal });
+      const object = response.objects[0];
+      if (response.objects.length !== 1 || !object) throw new Error("Invalid object response");
+      if (object instanceof Error) {
+        if (/not found|not_found|does not exist|has been deleted/i.test(object.message)) return null;
+        throw new Error("Object lookup failed");
+      }
+      if (normalizeMatterhornSuiObjectId(object.objectId) !== normalizedId || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(object.digest)) {
+        throw new Error("Invalid object metadata");
+      }
+      return {
+        version: "matterhorn.sui.object.v1", objectId: normalizedId, network,
+        objectVersion: suiObjectVersion(object.version), digest: object.digest,
+        isPackage: object.type === "package", type: suiObjectType(object.type), owner: suiObjectOwner(object.owner),
+        custody: false, canSubmit: false,
+        source: { source: "sui.grpc", network, endpoint: SUI_GRPC_URLS[network], fetchedAt: this.now().toISOString() },
+      };
+    } catch {
+      // Provider messages and payloads are untrusted and may contain oversized or sensitive data.
+      throw new Error("Sui object metadata is unavailable from the public network");
+    }
   }
 
   async getBalance(

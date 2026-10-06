@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { t } from "@/i18n";
 import { MATTERHORN_CLOUD_ENABLED } from "../../../../app/lib/den";
+import { isWebDeployment } from "../../../../app/lib/matterhorn-deployment";
+import { workspaceSettingsRoute } from "../../../shell/workspace-routes";
 import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
 import { CloudAccountSection } from "../cloud/cloud-account-section";
 import { AccountSecuritySection } from "../cloud/account-security-section";
@@ -206,10 +208,12 @@ function cloudAuthState(isSignedIn: boolean, authError: string | null | undefine
 function ProfileReadinessSupportSection({
   compact = false,
   onSendFeedback,
+  accountSettingsPath,
   readiness,
 }: {
   compact?: boolean;
   onSendFeedback?: () => void;
+  accountSettingsPath?: string;
   readiness: ProfileReadiness;
 }) {
   const { docsUrl, feedbackUrl, issueUrl, accountUrl } = readiness.supportLinks;
@@ -246,7 +250,9 @@ function ProfileReadinessSupportSection({
             Report issue <ExternalLink size={10} />
           </a>
         ) : null}
-        {accountUrl ? (
+        {accountSettingsPath ? (
+          <Link className={actionClass} to={accountSettingsPath}>Account settings</Link>
+        ) : accountUrl ? (
           <a className={actionClass} href={accountUrl} target="_blank" rel="noreferrer">
             Account settings <ExternalLink size={10} />
           </a>
@@ -274,6 +280,9 @@ export function CloudAccountView({
 }: CloudAccountViewProps) {
   const { activeOrganization, client, isSignedIn, statusMessage, user } = useCloudSession();
   const navigate = useNavigate();
+  const accountSettingsPath = isWebDeployment()
+    ? workspaceId?.trim() ? workspaceSettingsRoute(workspaceId, "cloud-account") : "/settings/cloud-account"
+    : undefined;
 
   const profileReadiness = React.useMemo(
     () => getProfileReadiness(cloudAuthState(isSignedIn, session.authError)),
@@ -297,9 +306,9 @@ export function CloudAccountView({
   const cloudAvailable = MATTERHORN_CLOUD_ENABLED || developerMode;
 
   React.useEffect(() => {
-    if (!isSignedIn || !session.needsOrgSelection) return;
+    if (!cloudAvailable || !isSignedIn || !session.needsOrgSelection) return;
     navigate("/onboarding", { replace: true });
-  }, [isSignedIn, navigate, session.needsOrgSelection]);
+  }, [cloudAvailable, isSignedIn, navigate, session.needsOrgSelection]);
 
   if (compact) {
     return (
@@ -348,7 +357,9 @@ export function CloudAccountView({
 
         {session.baseUrlError ? <SettingsNotice tone="error">{session.baseUrlError}</SettingsNotice> : null}
 
-        {cloudAvailable ? isSignedIn ? (
+        {session.authError && isSignedIn ? <SettingsNotice role="alert" tone="error">{session.authError}</SettingsNotice> : null}
+
+        {isSignedIn ? (
           <CloudAccountSection
             activeOrgId={activeOrganization?.id ?? ""}
             authBusy={session.authBusy}
@@ -357,11 +368,12 @@ export function CloudAccountView({
             orgsBusy={session.orgsBusy}
             orgsError={session.orgsError}
             sessionBusy={session.sessionBusy}
+            showOrganizations={cloudAvailable}
             onActiveOrgChange={session.onActiveOrgChange}
             onRefreshOrgs={session.onRefreshOrgs}
             onSignOut={session.onSignOut}
           />
-        ) : (
+        ) : cloudAvailable ? (
           <DenSignedOutPanel
             compact
             authBusy={session.authBusy}
@@ -389,6 +401,7 @@ export function CloudAccountView({
         <ProfileReadinessSupportSection
           compact
           onSendFeedback={onSendFeedback}
+          accountSettingsPath={accountSettingsPath}
           readiness={profileReadiness}
         />
       </SettingsStack>
@@ -406,19 +419,19 @@ export function CloudAccountView({
         />
       </SettingsSection>
 
-      {cloudAvailable ? <SettingsSection>
+      {isSignedIn || cloudAvailable ? <SettingsSection>
         <SettingsSectionHeader>
           <SettingsSectionHeaderContent>
             <SettingsSectionHeaderTitle>
-              {t("den.cloud_section_title")}
+              {t(cloudAvailable ? "den.cloud_section_title" : "settings.tab_cloud_account")}
               <SettingsStatusBadge
-                tone={cloudAvailable ? session.summaryTone : "neutral"}
-                label={cloudAvailable ? session.summaryLabel : "Not included"}
+                tone={session.summaryTone}
+                label={session.summaryLabel}
               />
             </SettingsSectionHeaderTitle>
-            <SettingsSectionHeaderDescription>
+            {cloudAvailable ? <SettingsSectionHeaderDescription>
               {t(isSignedIn ? "den.cloud_signed_in_desc" : "den.cloud_section_desc")}
-            </SettingsSectionHeaderDescription>
+            </SettingsSectionHeaderDescription> : null}
             {!isSignedIn ? (
               <SettingsSectionHeaderDescription className="text-xs">
                 {t("den.cloud_sleep_hint")}
@@ -440,6 +453,7 @@ export function CloudAccountView({
         ) : null}
 
         {session.baseUrlError ? <SettingsNotice tone="error">{session.baseUrlError}</SettingsNotice> : null}
+        {session.authError && isSignedIn ? <SettingsNotice role="alert" tone="error">{session.authError}</SettingsNotice> : null}
 
         {statusMessage && !session.authError && !session.orgsError ? (
           <SettingsNotice>{statusMessage}</SettingsNotice>
@@ -454,6 +468,7 @@ export function CloudAccountView({
             orgsBusy={session.orgsBusy}
             orgsError={session.orgsError}
             sessionBusy={session.sessionBusy}
+            showOrganizations={cloudAvailable}
             onActiveOrgChange={session.onActiveOrgChange}
             onRefreshOrgs={session.onRefreshOrgs}
             onSignOut={session.onSignOut}

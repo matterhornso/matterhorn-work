@@ -41,6 +41,45 @@ describe("cancelled approval responses", () => {
   });
 });
 
+describe("host approval failures before model dispatch", () => {
+  for (const reason of ["timeout", "denied"]) {
+    test(`${reason} explains owner approval instead of blaming the model`, () => {
+      const body = { code: "write_denied", message: "Write request denied", details: { reason } };
+      for (const error of [body, new Error(JSON.stringify(body)),
+        new MatterhornServerError(403, body.code, body.message, body.details)]) {
+        const parsed = parseSessionError(error);
+        expect(parsed.message).toBe(reason === "timeout"
+          ? "Workspace approval timed out." : "The workspace owner declined this request.");
+        expect(parsed.detail).toContain("not sent to the model");
+        expect(parsed.detail).toContain("workspace owner");
+        expect(parsed.detail).toContain("draft is preserved");
+        expect(parsed.retryable).toBe(false);
+        expect(parsed.kind).toBe("generic");
+        expect(JSON.stringify(parsed)).not.toMatch(/write_denied|run may still be active|model took too long/);
+      }
+    });
+  }
+
+  test("does not call ambiguous or unrelated failures unsent", () => {
+    for (const body of [
+      { code: "write_denied", details: { reason: "unknown" } },
+      { code: "write_denied", details: null },
+      { code: "provider_error", details: { reason: "timeout" } },
+      { code: "provider_error", details: { reason: "denied" } },
+      { code: "message_outcome_unknown", details: { reason: "timeout" } },
+    ]) {
+      const parsed = parseSessionError(new Error(JSON.stringify(body)));
+      expect(JSON.stringify(parsed)).not.toMatch(/not sent|before it was sent|owner declined|Workspace approval/);
+    }
+    const ambiguous = parseSessionError(new Error(JSON.stringify({ code: "message_outcome_unknown", details: { reason: "timeout" } })));
+    expect(ambiguous.message).toBe("Checking whether your message was received.");
+    expect(ambiguous.detail).toContain("run may still be active");
+    const timeout = parseSessionError(new Error("Provider response timeout"));
+    expect(timeout.message).toBe("The model took too long to respond.");
+    expect(timeout.detail).toContain("run may still be active");
+  });
+});
+
 test("missing desk agents explain setup instead of offering an ineffective retry", () => {
   const result = parseSessionError(new Error("Agent matterhorn-bittensor is not available in this workspace"));
   expect(result.message).toBe("This desk needs setup.");
@@ -171,10 +210,18 @@ describe("session error copy", () => {
     expect(secret.retryable).toBe(false);
     expect(secret.detail).toContain("Nothing was shared");
 
-    const allowance = parseSessionError(new Error(JSON.stringify({ code: "model_usage_exceeded" })));
-    expect(allowance.retryable).toBe(false);
-    expect(allowance.message).toContain("model allowance");
-    expect(allowance.detail).toContain("reset date");
+    for (const code of ["model_usage_exceeded", "model_usage_limit_reached"]) {
+      const body = { code, statusCode: 429, message: "Model usage limit reached" };
+      for (const error of [body, new Error(JSON.stringify(body)),
+        new MatterhornServerError(429, code, body.message)]) {
+        const allowance = parseSessionError(error);
+        expect(allowance.kind).toBe("generic");
+        expect(allowance.retryable).toBe(false);
+        expect(allowance.message).toContain("model allowance");
+        expect(allowance.detail).toContain("reset date");
+        expect(allowance.detail).not.toContain("choose another model");
+      }
+    }
 
     const wallet = parseSessionError(new Error(JSON.stringify({ code: "wallet_airlock_required" })));
     expect(wallet.retryable).toBe(false);

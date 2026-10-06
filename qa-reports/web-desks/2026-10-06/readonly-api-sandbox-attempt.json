@@ -1,0 +1,172 @@
+{
+  "version": 1,
+  "checkedAt": "2026-10-05T22:48:53.814Z",
+  "appUrl": "http://desks-qa.localhost:50631",
+  "workspaceId": "ws_web_101b932cbdeab015",
+  "scope": "Authenticated read-only API probes against the isolated local runtime; public provider reads, not hosted/browser/inference/wallet acceptance.",
+  "safety": {
+    "requestMethod": "GET",
+    "inferenceRequests": 0,
+    "walletConnections": 0,
+    "transactionSubmissions": 0,
+    "privatePayloadsPersisted": false
+  },
+  "requestCount": 14,
+  "observations": [
+    {
+      "id": "capabilities",
+      "method": "GET",
+      "path": "/api/backend/capabilities",
+      "httpStatus": null,
+      "elapsedMs": 9,
+      "status": "failed",
+      "errorCode": "",
+      "cause": "connect EPERM 127.0.0.1:50631 - Local (0.0.0.0:0)"
+    },
+    {
+      "id": "workspace-readiness",
+      "method": "GET",
+      "path": "/workspace/ws_web_101b932cbdeab015/backend/readiness",
+      "httpStatus": null,
+      "elapsedMs": 4,
+      "status": "failed",
+      "errorCode": "",
+      "cause": "connect EPERM 127.0.0.1:50631 - Local (0.0.0.0:0)"
+    },
+    {
+      "id": "models",
+      "method": "GET",
+      "path": "/workspace/ws_web_101b932cbdeab015/backend/models",
+      "httpStatus": null,
+      "elapsedMs": 2,
+      "status": "failed",
+      "errorCode": "",
+      "cause": "connect EPERM 127.0.0.1:50631 - Local (0.0.0.0:0)"
+    },
+    {
+      "id": "market-readiness",
+      "method": "GET",
+      "path": "/api/crypto/market-execution-readiness",
+      "httpStatus": null,
+      "elapsedMs": 1,
+      "status": "failed",
+      "errorCode": "",
+      "cause": "connect EPERM 127.0.0.1:50631 - Local (0.0.0.0:0)"
+    },
+    {
+      "id": "bittensor-sidecar",
+      "method": "GET",
+      "path": "/api/bittensor/sidecar/health",
+      "httpStatus": null,
+      "elapsedMs": 1,
+      "status": "failed",
+      "errorCode": "",
+      "cause": "connect EPERM 127.0.0.1:50631 - Local (0.0.0.0:0)"
+    },
+    {
+      "id": "bittensor-subnets",
+      "method": "GET",
+      "path": "/api/bittensor/subnets",
+      "httpStatus": null,
+      "elapsedMs": 0,
+      "status": "failed",
+      "errorCode": "",
+      "cause": "connect EPERM 127.0.0.1:50631 - Local (0.0.0.0:0)"
+    },
+    {
+      "id": "bittensor-readiness",
+      "method": "GET",
+      "path": "/api/bittensor/readiness",
+      "httpStatus": null,
+      "elapsedMs": 1,
+      "status": "failed",
+      "errorCode": "",
+      "cause": "connect EPERM 127.0.0.1:50631 - Local (0.0.0.0:0)"
+    },
+    {
+      "id": "hyperliquid-markets",
+      "method": "GET",
+      "path": "/api/hyperliquid/markets?limit=3",
+      "httpStatus": null,
+      "elapsedMs": 1,
+      "status": "failed",
+      "errorCode": "",
+      "cause": "connect EPERM 127.0.0.1:50631 - Local (0.0.0.0:0)"
+    },
+    {
+      "id": "hyperliquid-funding",
+      "method": "GET",
+      "path": "/api/hyperliquid/funding/BTC",
+      "httpStatus": null,
+      "elapsedMs": 1,
+      "status": "failed",
+      "errorCode": "",
+      "cause": "connect EPERM 127.0.0.1:50631 - Local (0.0.0.0:0)"
+    },
+    {
+      "id": "hyperliquid-orderbook",
+      "method": "GET",
+      "path": "/api/hyperliquid/orderbook/BTC",
+      "httpStatus": null,
+      "elapsedMs": 0,
+      "status": "failed",
+      "errorCode": "",
+      "cause": "connect EPERM 127.0.0.1:50631 - Local (0.0.0.0:0)"
+    },
+    {
+      "id": "polymarket-compliance",
+      "method": "GET",
+      "path": "/api/polymarket/compliance",
+      "httpStatus": null,
+      "elapsedMs": 0,
+      "status": "failed",
+      "errorCode": "",
+      "cause": "connect EPERM 127.0.0.1:50631 - Local (0.0.0.0:0)"
+    },
+    {
+      "id": "sui-balance",
+      "method": "GET",
+      "path": "/api/sui/balance/0x0000000000000000000000000000000000000000000000000000000000000002?network=testnet",
+      "httpStatus": null,
+      "elapsedMs": 0,
+      "status": "failed",
+      "errorCode": "",
+      "cause": "connect EPERM 127.0.0.1:50631 - Local (0.0.0.0:0)"
+    },
+    {
+      "id": "sui-account",
+      "method": "GET",
+      "path": "/api/sui/account/0x0000000000000000000000000000000000000000000000000000000000000002?network=testnet",
+      "httpStatus": null,
+      "elapsedMs": 0,
+      "status": "failed",
+      "errorCode": "",
+      "cause": "connect EPERM 127.0.0.1:50631 - Local (0.0.0.0:0)"
+    },
+    {
+      "id": "polymarket-discovery",
+      "method": "GET",
+      "path": "/api/polymarket/markets?limit=3",
+      "httpStatus": null,
+      "elapsedMs": 1,
+      "status": "failed",
+      "errorCode": "",
+      "cause": "connect EPERM 127.0.0.1:50631 - Local (0.0.0.0:0)"
+    },
+    {
+      "id": "polymarket-detail",
+      "status": "blocked",
+      "cause": "Discovery did not return a current public market with a usable token ID; no fixture result substituted."
+    },
+    {
+      "id": "polymarket-orderbook",
+      "status": "blocked",
+      "cause": "Discovery did not return a current public market with a usable token ID; no fixture result substituted."
+    }
+  ],
+  "limitations": [
+    "HTTP 200 and readiness claims are not live-source proof; inspect freshness and fallback labels.",
+    "No owner-authorized wallet signing, browser connector, chat response, production endpoint, or paid resource was exercised.",
+    "Readiness endpoints may refresh internal caches or their diagnostic context; no user workflow mutation was requested."
+  ]
+}

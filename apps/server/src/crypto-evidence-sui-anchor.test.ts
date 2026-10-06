@@ -218,6 +218,7 @@ async function builtTransaction() {
 }
 
 async function serviceFixture(input: {
+  onCertification?: () => void | Promise<void>;
   onBuild?: () => void | Promise<void>;
   onVerify?: () => void | Promise<void>;
   now?: () => Date;
@@ -298,16 +299,19 @@ async function serviceFixture(input: {
     await input.onVerify?.();
     return { objectId: ANCHOR_OBJECT, observedAt: "2026-09-03T00:01:00.000Z" };
   };
-  const certification = async (): Promise<MatterhornWalrusCertification> => ({
-    network: "testnet",
-    blobId: "test-blob-id",
-    suiObjectId: WALRUS_OBJECT,
-    certifiedEpoch: 10,
-    currentEpoch: 12,
-    validUntilEpoch: 15,
-    deletable: true,
-    suiTransactionDigest: null,
-  });
+  const certification = async (): Promise<MatterhornWalrusCertification> => {
+    await input.onCertification?.();
+    return {
+      network: "testnet",
+      blobId: "test-blob-id",
+      suiObjectId: WALRUS_OBJECT,
+      certifiedEpoch: 10,
+      currentEpoch: 12,
+      validUntilEpoch: 15,
+      deletable: true,
+      suiTransactionDigest: null,
+    };
+  };
   const service = new MatterhornCryptoEvidenceSuiAnchorService(
     store, state, testDurableStateAuthority(), PACKAGE, build, verify, certification, input.now,
   );
@@ -328,6 +332,122 @@ async function serviceFixture(input: {
 }
 
 describe("Sui evidence anchor wallet airlock", () => {
+  for (const stage of ["certification", "build", "confirmation"]) {
+    for (const deletedWorkspace of ["workspace_alpha", "workspace_other"]) {
+      test(`deletion during ${stage}: ${deletedWorkspace}`, async () => {
+        let release!: () => void;
+        let entered!: () => void;
+        const gate = new Promise<void>((resolve) => { release = resolve; });
+        const started = new Promise<void>((resolve) => { entered = resolve; });
+        const pause = async () => { entered(); await gate; };
+        const fixture = await serviceFixture({
+          onCertification: stage === "certification" ? pause : undefined,
+          onBuild: stage === "build" ? pause : undefined,
+          onVerify: stage === "confirmation" ? pause : undefined,
+        });
+        const request = {
+          workspaceId: "workspace_alpha", ownerId: "owner_alpha",
+          evidenceId: fixture.published.id, expectedRevision: fixture.published.revision,
+          signer: SIGNER, signal: new AbortController().signal,
+          now: new Date("2026-09-03T00:00:00.000Z"),
+        };
+        try {
+          const prepared = stage === "confirmation" ? await fixture.service.prepare(request) : null;
+          const before = fixture.state.getRecord<unknown>("crypto_evidence_sui_anchor_intent", request.evidenceId, request.now.getTime());
+          const pending = prepared ? fixture.service.confirm({
+            ...request, intentId: prepared.preview.intentId, intentHash: prepared.preview.intentHash,
+            transactionDigest: prepared.preview.transactionDigest,
+          }) : fixture.service.prepare(request);
+          await started;
+          fixture.state.markWorkspaceDeleted(deletedWorkspace);
+          release();
+          if (deletedWorkspace === request.workspaceId) {
+            await expect(pending).rejects.toThrow("crypto_evidence_workspace_deleted");
+            expect(fixture.store.get(request)?.revision).toBe(fixture.published.revision);
+            expect(fixture.store.get(request)?.suiAnchor).toBeNull();
+            expect(fixture.state.getRecord<unknown>("crypto_evidence_sui_anchor_intent", request.evidenceId, request.now.getTime())).toEqual(before);
+            if (stage === "certification") expect(fixture.buildCalls).toHaveLength(0);
+          } else {
+            await pending;
+            expect(fixture.buildCalls).toHaveLength(1);
+            if (prepared) expect(fixture.store.get(request)?.suiAnchor?.objectId).toBe(ANCHOR_OBJECT);
+          }
+        } finally {
+          release();
+          fixture.state.close();
+        }
+      });
+    }
+  }
+
+  test("rejects expired preparation without writing an intent", async () => {
+    let now = new Date("2026-09-03T00:00:00.000Z");
+    const fixture = await serviceFixture({
+      now: () => now,
+      onBuild: () => { now = new Date("2026-09-03T00:06:00.000Z"); },
+    });
+    try {
+      await expect(fixture.service.prepare({
+        workspaceId: "workspace_alpha", ownerId: "owner_alpha", evidenceId: fixture.published.id,
+        expectedRevision: fixture.published.revision, signer: SIGNER, signal: new AbortController().signal,
+      })).rejects.toThrow("crypto_evidence_sui_anchor_expired_or_replayed");
+      expect(fixture.state.getRecord<unknown>("crypto_evidence_sui_anchor_intent", fixture.published.id, now.getTime())).toBeNull();
+    } finally {
+      fixture.state.close();
+    }
+  });
+
+  test("does not serve cached previews or verify confirmations after deletion", async () => {
+    const fixture = await serviceFixture();
+    const request = {
+      workspaceId: "workspace_alpha", ownerId: "owner_alpha", evidenceId: fixture.published.id,
+      expectedRevision: fixture.published.revision, signer: SIGNER, signal: new AbortController().signal,
+      now: new Date("2026-09-03T00:00:00.000Z"),
+    };
+    try {
+      const prepared = await fixture.service.prepare(request);
+      fixture.state.markWorkspaceDeleted(request.workspaceId);
+      await expect(fixture.service.prepare(request)).rejects.toThrow("crypto_evidence_workspace_deleted");
+      await expect(fixture.service.confirm({
+        ...request, intentId: prepared.preview.intentId, intentHash: prepared.preview.intentHash,
+        transactionDigest: prepared.preview.transactionDigest,
+      })).rejects.toThrow("crypto_evidence_workspace_deleted");
+      expect(fixture.buildCalls).toHaveLength(1);
+      expect(fixture.verifyCalls).toHaveLength(0);
+    } finally {
+      fixture.state.close();
+    }
+  });
+
+  test("a delayed preparation cannot retain an intent or clear a replacement claim", async () => {
+    let release!: () => void;
+    let entered!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    let now = new Date("2026-09-03T00:00:00.000Z");
+    const fixture = await serviceFixture({
+      now: () => now,
+      onBuild: async () => { entered(); await gate; },
+    });
+    const request = {
+      workspaceId: "workspace_alpha", ownerId: "owner_alpha", evidenceId: fixture.published.id,
+      expectedRevision: fixture.published.revision, signer: SIGNER, signal: new AbortController().signal,
+    };
+    try {
+      const pending = fixture.service.prepare(request);
+      await started;
+      now = new Date("2026-09-03T00:06:00.000Z");
+      const replacement = fixture.store.beginSuiAnchor({ ...request, now });
+      release();
+      await expect(pending).rejects.toThrow("crypto_evidence_sui_anchor_expired_or_replayed");
+      expect(fixture.store.hasSuiAnchorClaim({ ...request, now, claimId: replacement.claimId })).toBe(true);
+      expect(fixture.state.getRecord<unknown>("crypto_evidence_sui_anchor_intent", request.evidenceId, now.getTime())).toBeNull();
+    } finally {
+      release();
+      fixture.state.close();
+    }
+  });
+
   test("rejects a restored anchor intent with changed expiry before chain verification", async () => {
     const fixture = await serviceFixture();
     try {

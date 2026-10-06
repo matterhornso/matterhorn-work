@@ -27,11 +27,18 @@ export type CreateWorkspaceLocalState = {
 
 type CreateWorkspaceLocalAction<K extends keyof CreateWorkspaceLocalState = keyof CreateWorkspaceLocalState> =
   | { type: "set"; key: K; value: SetStateAction<any> }
-  | { type: "reset"; settings: ReturnType<typeof readDenSettings> };
+  | {
+      type: "reset";
+      settings: ReturnType<typeof readDenSettings>;
+      screen?: CreateWorkspaceScreen;
+    };
 
-export function createInitialWorkspaceLocalState(settings = readDenSettings()): CreateWorkspaceLocalState {
+export function createInitialWorkspaceLocalState(
+  settings = readDenSettings(),
+  screen: CreateWorkspaceScreen = "chooser",
+): CreateWorkspaceLocalState {
   return {
-    screen: "chooser",
+    screen,
     selectedFolder: null,
     pickingFolder: false,
     showProgressDetails: false,
@@ -57,7 +64,9 @@ export function createWorkspaceLocalReducer(
   state: CreateWorkspaceLocalState,
   action: CreateWorkspaceLocalAction,
 ): CreateWorkspaceLocalState {
-  if (action.type === "reset") return createInitialWorkspaceLocalState(action.settings);
+  if (action.type === "reset") {
+    return createInitialWorkspaceLocalState(action.settings, action.screen);
+  }
   const current = state[action.key];
   const next =
     typeof action.value === "function"

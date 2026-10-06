@@ -4,12 +4,14 @@ import {
   useCallback,
   use,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 import { useLocation, useNavigate } from "react-router";
+import { captureAccountGeneration } from "../../../app/lib/account-client-state";
 
 export type MatterhornControlSideEffect = "none" | "navigation" | "mutation" | "external";
 
@@ -198,8 +200,17 @@ export function MatterhornControlProvider({ children }: { children: ReactNode })
   const status: MatterhornControlSnapshot["status"] = !enabled ? "off" : busyActionId ? "acting" : "ready";
 
   const setEnabled = useCallback((nextEnabled: boolean) => {
+    if (!nextEnabled) {
+      spotlightRunRef.current += 1;
+      setSpotlight({ visible: false, phase: "target", rect: null });
+    }
     setEnabledState(nextEnabled);
   }, []);
+
+  useLayoutEffect(() => {
+    setSpotlight({ visible: false, phase: "target", rect: null });
+    return () => { spotlightRunRef.current += 1; };
+  }, [location.key]);
 
   const listActionMetadata = useCallback((nextBusyActionId = busyActionId) => {
     return Array.from(actionsRef.current.values())
@@ -286,6 +297,8 @@ export function MatterhornControlProvider({ children }: { children: ReactNode })
     }
 
     const runId = spotlightRunRef.current + 1;
+    const isCurrentAccount = captureAccountGeneration();
+    const target = action.targetRef?.current;
     spotlightRunRef.current = runId;
     busyActionIdRef.current = action.id;
     setEnabled(true);
@@ -294,6 +307,17 @@ export function MatterhornControlProvider({ children }: { children: ReactNode })
 
     try {
       await playTargetChoreography(action, runId);
+      const current = actionsRef.current.get(actionId);
+      if (spotlightRunRef.current !== runId || !isCurrentAccount() ||
+          current?.token !== registered.token || current.ref.current !== action ||
+          current.ref.current.disabled || (target && (!target.isConnected || action.targetRef?.current !== target))) {
+        const error = "The action changed before it started. Review the current screen and try again.";
+        if (spotlightRunRef.current === runId && isCurrentAccount()) {
+          setNarration(error);
+          setSpotlight({ visible: false, phase: "target", rect: null });
+        }
+        return { ok: false, actionId, error };
+      }
       setNarration(`Running ${action.label}…`);
       const effectiveArgs = args === undefined ? action.previewArgs : args;
       const result = await action.execute(effectiveArgs, { setNarration });

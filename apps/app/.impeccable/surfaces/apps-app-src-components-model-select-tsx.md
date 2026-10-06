@@ -36,3 +36,11 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 - Inventory: `docs/ui/retro-platform-inventory-2026-09-29.md`.
 - Found model display-name search mismatch, unlabelled compact search, no visible selected check in compact picker, and missing compound-field retro treatment. Fixes and regressions in progress.
 - Next: finish shared-control tests, then perform normal-user model selection and real read-only requests on every desk; document exact failures instead of substituting fixtures.
+
+## 6 October 2026 visibility refinement
+
+Mode: Operate. The user requested findable controls across all five desks, not a visual redesign. The compact header now visibly names Model, Desks and Workspace tools. Below 768px, two bounded header rows preserve those controls alongside long chat/model names; the compact footer retains Profile text. Model selection, connected-provider filtering, disabled state, draft preservation and capability gates are unchanged. The selected model remains in the trigger's accessible name and the popup is viewport-bounded.
+
+The confirmation batch also found that Profile restored the last Settings section and that selecting a mobile Settings section left its drawer open. The minimal footer now opens the existing profile panel directly; the Settings drawer trigger is named and section selection closes only the mobile drawer. Legacy/back navigation remains unchanged.
+
+Source and rendered-fixture evidence is recorded in `qa-reports/web-desks/2026-10-06/VISIBILITY-INVENTORY.md`. The root task owns the authenticated desktop/mobile captures and final screenshot-based finish verdict. No new raster assets or replacement visual world were introduced.

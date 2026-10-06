@@ -6,7 +6,7 @@ import { join } from "node:path";
 
 import { Transaction, TransactionDataBuilder } from "@mysten/sui/transactions";
 import { normalizeSuiAddress } from "@mysten/sui/utils";
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
 
 import type {
   MatterhornAgentPrivacyPreflightResponse,
@@ -334,6 +334,8 @@ async function boot(
   let walrusCurrentEpoch = 11;
   let walrusValidUntilEpoch = 15;
   let walrusRenewalTransactionStatus: "confirmed" | "failed" = "confirmed";
+  let onWalletVerification: ((digest: string) => void) | undefined;
+  let walletBuildCalls = 0;
   const dependencies: MatterhornServerDependencies = {};
   if (keyManager) dependencies.evidenceKeyManager = keyManager;
   if (walrusTransport) {
@@ -360,6 +362,7 @@ async function boot(
     const renewalBytes = await renewalTransaction.build();
     const renewalDigest = TransactionDataBuilder.getDigestFromBytes(renewalBytes);
     dependencies.agentFileWalrusRenewalTransactionBuilder = async (input) => {
+      walletBuildCalls += 1;
       expect(input.network).toBe("sui:testnet");
       expect(input.signer).toBe(signer);
       expect(input.blobObjectId).toBe("0x1234");
@@ -372,6 +375,7 @@ async function boot(
       };
     };
     dependencies.cryptoEvidenceWalrusDeletionTransactionBuilder = async (input) => {
+      walletBuildCalls += 1;
       expect(input.network).toBe("sui:testnet");
       expect(input.signer).toBe(signer);
       expect(input.blobObjectId).toBe("0x1234");
@@ -382,12 +386,15 @@ async function boot(
         simulatedAt: new Date().toISOString(),
       };
     };
-    dependencies.agentFileWalrusTransactionStatusVerifier = async (input) => ({
-      digest: input.digest,
-      signer: input.signer,
-      status: walrusRenewalTransactionStatus,
-      observedAt: new Date().toISOString(),
-    });
+    dependencies.agentFileWalrusTransactionStatusVerifier = async (input) => {
+      onWalletVerification?.(input.digest);
+      return {
+        digest: input.digest,
+        signer: input.signer,
+        status: walrusRenewalTransactionStatus,
+        observedAt: new Date().toISOString(),
+      };
+    };
     if (options.anchor) {
       dependencies.cryptoEvidenceSuiAnchorPackageVerifier = async () => {
         if (options.anchorVerificationFailure) {
@@ -401,6 +408,7 @@ async function boot(
         };
       };
       dependencies.cryptoEvidenceSuiAnchorTransactionBuilder = async (input) => {
+        walletBuildCalls += 1;
         expect(input.network).toBe("sui:testnet");
         expect(input.signer).toBe(signer);
         expect(input.packageId).toBe(`0x${"8".repeat(64)}`);
@@ -413,6 +421,7 @@ async function boot(
         };
       };
       dependencies.cryptoEvidenceSuiAnchorTransactionVerifier = async (input) => {
+        onWalletVerification?.(input.digest);
         expect(input.network).toBe("sui:testnet");
         expect(input.signer).toBe(signer);
         expect(input.packageId).toBe(`0x${"8".repeat(64)}`);
@@ -449,6 +458,8 @@ async function boot(
     setWalrusRenewalTransactionStatus: (value: "confirmed" | "failed") => {
       walrusRenewalTransactionStatus = value;
     },
+    setWalletVerificationHook: (hook: (digest: string) => void) => { onWalletVerification = hook; },
+    walletBuildCalls: () => walletBuildCalls,
     stop,
   };
 }
@@ -482,13 +493,14 @@ function cookie(response: Response): string {
 function startCoworkerSessionServer(
   sessionIds: string[],
   deleteFailureSessionIds: string[] = [],
+  beforeRead?: (sessionId: string) => Promise<void>,
 ): Served {
   const allowed = new Set(sessionIds);
   const deleteFailures = new Set(deleteFailureSessionIds);
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    fetch(request) {
+    async fetch(request) {
       const url = new URL(request.url);
       const match = /^\/session\/([^/]+)$/.exec(url.pathname);
       const sessionId = match ? decodeURIComponent(match[1] ?? "") : "";
@@ -505,6 +517,7 @@ function startCoworkerSessionServer(
       if (request.method !== "GET") {
         return Response.json({ code: "not_found", message: "Not found" }, { status: 404 });
       }
+      await beforeRead?.(sessionId);
       return Response.json({
         id: sessionId,
         title: `Chat ${sessionId}`,
@@ -727,7 +740,12 @@ async function seedPendingSuiIntent(input: {
       },
       reason: "Exact transaction terms remain inside the guarded runtime until wallet review.",
     };
-    const receipts = new MatterhornAgentRunReceiptStore(state);
+    // Seed the same authenticated receipt/index pair as the real runtime.
+    // Unsigned fixture indexes must not be promoted by wallet reconciliation.
+    const receipts = new MatterhornAgentRunReceiptStore(
+      state,
+      testDurableStateAuthority(process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET),
+    );
     await receipts.start({
       runId: intent.runId,
       workspaceId: input.workspaceId,
@@ -863,6 +881,117 @@ afterEach(async () => {
 });
 
 describe("crypto coworker HTTP boundary", () => {
+  for (const surface of ["read", "bind", "unbind", "fork-source", "fork-target"]) {
+    for (const change of ["sign-out", "workspace-switch", "access-revoked", "unchanged"]) {
+      test(`coworker session authority survives runtime wait: ${surface}, ${change}`, async () => {
+        let reach!: () => void;
+        let release!: () => void;
+        const reached = new Promise<void>(resolve => { reach = resolve; });
+        const released = new Promise<void>(resolve => { release = resolve; });
+        let armed = false;
+        let observed = false;
+        const waitSession = surface === "bind" || surface === "fork-target" ? "ses_fork" : "ses_source";
+        const opencode = startCoworkerSessionServer(["ses_source", "ses_fork"], [], async sessionId => {
+          if (!armed || sessionId !== waitSession) return;
+          observed = true;
+          reach();
+          await released;
+        });
+        const server = await boot("invite", {
+          opencodeBaseUrl: `http://127.0.0.1:${opencode.port}`, seedCryptoApps: true,
+        });
+        const signup = await request(server.base, "/api/auth/sign-up/email", {
+          body: { email: "coworker-revocation@example.com", password: PASSWORD },
+        });
+        expect(signup.response.status).toBe(200);
+        const accountCookie = cookie(signup.response);
+        const ownerId = String(signup.payload.user.id);
+        const workspaceId = String((await request(server.base, "/workspaces", { cookie: accountCookie })).payload.items[0].id);
+        const invite = await request(server.base, "/operator/coworker-access/invites", {
+          host: true, body: { ttlMinutes: 60 },
+        });
+        expect((await request(server.base, "/coworker-access/accept", {
+          cookie: accountCookie, body: { inviteToken: String(invite.payload.invite.token) },
+        })).response.status).toBe(200);
+        const created = await request(server.base, `/workspace/${workspaceId}/coworkers`, {
+          cookie: accountCookie, body: coworkerInput(),
+        });
+        expect(created.response.status).toBe(201);
+        const coworkerId = String(created.payload.coworker.id);
+        const connection = await request(server.base, `/workspace/${workspaceId}/crypto-app-connections`, {
+          cookie: accountCookie, body: { appId: "matterhorn.sui-testnet", grantedActionIds: ["sui_account_read"],
+            grantedScopes: [], grantedNetworks: ["sui:testnet"] },
+        });
+        expect(connection.response.status).toBe(201);
+        expect((await request(server.base, `/workspace/${workspaceId}/coworkers/${coworkerId}/resources`, {
+          cookie: accountCookie, method: "PUT", body: { expectedRevision: 0, profileRevision: 1,
+            agentFileIds: [], memoryIds: [], connectionIds: [String(connection.payload.connection.id)] },
+        })).response.status).toBe(200);
+        const sourcePath = `/workspace/${workspaceId}/sessions/ses_source/coworker`;
+        expect((await request(server.base, sourcePath, {
+          cookie: accountCookie, method: "PUT", body: { coworkerId, coworkerRevision: 1, expectedRevision: 0 },
+        })).response.status).toBe(200);
+        const store = new MatterhornCoworkerStore(server.coworkerDb);
+        const sourceBefore = store.getSessionBinding(workspaceId, ownerId, "ses_source");
+        expect(sourceBefore).not.toBeNull();
+        expect(store.getSessionBinding(workspaceId, ownerId, "ses_fork")).toBeNull();
+        armed = true;
+        const pending = request(server.base, surface.startsWith("fork") ? `${sourcePath}/fork`
+          : surface === "bind" ? `/workspace/${workspaceId}/sessions/ses_fork/coworker` : sourcePath, {
+          cookie: accountCookie,
+          method: surface === "read" ? "GET" : surface === "bind" ? "PUT" : surface === "unbind" ? "DELETE" : "POST",
+          ...(surface === "read" ? {} : { body: surface === "bind"
+            ? { coworkerId, coworkerRevision: 1, expectedRevision: 0 }
+            : surface === "unbind" ? { expectedRevision: 1 } : { targetSessionId: "ses_fork" } }),
+        });
+        const watchdog = setTimeout(reach, 4000);
+        try {
+          await reached;
+          clearTimeout(watchdog);
+          expect(observed).toBe(true);
+          if (change === "sign-out") {
+            expect((await request(server.base, "/api/auth/sign-out", {
+              cookie: accountCookie, method: "POST",
+            })).response.status).toBe(200);
+          } else if (change === "workspace-switch") {
+            expect((await request(server.base, "/api/auth/organization/create", {
+              cookie: accountCookie, body: { name: "New test workspace", slug: "coworker-new-workspace" },
+            })).response.status).toBe(200);
+          } else if (change === "access-revoked") {
+            const accessList = await request(server.base, "/operator/coworker-access", { host: true });
+            expect(accessList.response.status).toBe(200);
+            expect((await request(server.base, "/operator/coworker-access/revoke", {
+              host: true, body: { accessId: String(accessList.payload.accounts[0].accessId) },
+            })).response.status).toBe(200);
+          }
+          release();
+          const result = await pending;
+          // Inspect persistence even when the HTTP status is wrong.
+          const sourceAfter = store.getSessionBinding(workspaceId, ownerId, "ses_source");
+          const targetAfter = store.getSessionBinding(workspaceId, ownerId, "ses_fork");
+          expect({ status: result.response.status, sourceUnchanged: JSON.stringify(sourceAfter) === JSON.stringify(sourceBefore),
+            targetExists: targetAfter !== null }).toEqual({
+            status: change === "unchanged" ? surface.startsWith("fork") ? 201 : 200
+              : change === "sign-out" ? 401 : change === "access-revoked" && surface === "bind" ? 409 : 403,
+            sourceUnchanged: change !== "unchanged" || surface !== "unbind",
+            targetExists: change === "unchanged" && (surface === "bind" || surface.startsWith("fork")),
+          });
+          if (change !== "unchanged") {
+            expect(result.payload.coworker).toBeUndefined();
+            expect(result.payload.binding).toBeUndefined();
+          } else if (surface === "read") expect(result.payload.coworker.id).toBe(coworkerId);
+          else if (targetAfter) expect(targetAfter.coworkerId).toBe(coworkerId);
+          else expect(sourceAfter).toBeNull();
+        } finally {
+          clearTimeout(watchdog);
+          release();
+          await pending.catch(() => undefined);
+          store.close();
+        }
+      }, 15000);
+    }
+  }
+
   test("requires a one-time account invite and applies revocation immediately", async () => {
     const server = await boot("invite");
     const signupA = await request(server.base, "/api/auth/sign-up/email", {
@@ -1496,6 +1625,59 @@ describe("crypto coworker HTTP boundary", () => {
     });
     expect(replay.response.status).toBe(410);
     expect(replay.payload.code).toBe("agent_file_walrus_renewal_expired_or_replayed");
+  });
+
+  test("account deletion removes an expired Sui anchor preview without signing", async () => {
+    const server = await boot("internal", { agentFiles: true, walrus: true, anchor: true });
+    const email = "anchor-deletion-cleanup@example.com";
+    const signup = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email, password: PASSWORD },
+    });
+    const other = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "anchor-deletion-control@example.com", password: PASSWORD },
+    });
+    const sessionCookie = cookie(signup.response);
+    const workspaceId = String((await request(server.base, "/workspaces", { cookie: sessionCookie })).payload.items[0].id);
+    const coworker = await request(server.base, `/workspace/${workspaceId}/coworkers`, {
+      cookie: sessionCookie, body: privateCoworkerInput(),
+    });
+    if (!server.keyManager) throw new Error("route_test_key_manager_missing");
+    const record = await seedCryptoEvidence({
+      guardedDb: server.guardedDb, keyManager: server.keyManager, workspaceId,
+      ownerId: String(signup.payload.user.id), coworkerId: String(coworker.payload.coworker.id),
+      runId: "run_anchor_deletion_cleanup",
+    });
+    const path = `/workspace/${workspaceId}/crypto-evidence/${record.id}`;
+    expect((await request(server.base, `${path}/publish`, {
+      cookie: sessionCookie, body: {
+        expectedRevision: 1, network: "testnet", ownerAddress: ROUTE_SIGNER, acknowledgePublicCiphertext: true,
+      },
+    })).response.status).toBe(200);
+    const prepared = await request(server.base, `${path}/anchor`, {
+      cookie: sessionCookie, body: {
+        expectedRevision: 2, network: "testnet", signer: ROUTE_SIGNER, acknowledgePermanentPublicAnchor: true,
+      },
+    });
+    expect(prepared.response.status).toBe(200);
+    const observedAt = Date.now();
+    const state = new MatterhornGuardedRuntimeStateStore(server.guardedDb);
+    try {
+      expect(state.getRecord("crypto_evidence_sui_anchor_intent", record.id, observedAt)).not.toBeNull();
+      setSystemTime(new Date(Date.parse(prepared.payload.preview.expiresAt) + 1));
+      const deleted = await request(server.base, "/api/auth/account", {
+        method: "DELETE", cookie: sessionCookie, body: { confirmationEmail: email, password: PASSWORD },
+      });
+      expect(deleted.response.status).toBe(200);
+      expect(deleted.payload.status).toBe("deleted");
+      expect(server.keyManager.keys.size).toBe(0);
+      // Inspect physical retention using the pre-expiry read time, not a TTL-filtered absence.
+      expect(state.getRecord("crypto_evidence_sui_anchor_intent", record.id, observedAt)).toBeNull();
+      expect(state.isWorkspaceDeleted(workspaceId)).toBe(true);
+      expect((await request(server.base, "/workspaces", { cookie: cookie(other.response) })).response.status).toBe(200);
+    } finally {
+      setSystemTime();
+      state.close();
+    }
   });
 
   test("destroys Agent File recovery keys before account deletion completes", async () => {
@@ -2185,6 +2367,233 @@ describe("crypto coworker HTTP boundary", () => {
     expect(replay.response.status).toBe(410);
     expect(replay.payload.code).toBe("crypto_evidence_sui_anchor_expired_or_replayed");
   });
+
+  for (const kind of ["crypto-evidence", "agent-files"]) {
+    for (const failure of ["deleted", "unavailable"]) {
+      test(`renewal recovery guidance for ${kind} when ${failure}`, async () => {
+        const server = await boot("internal", { agentFiles: true, walrus: true });
+        const signup = await request(server.base, "/api/auth/sign-up/email", {
+          body: { email: "renewal-recovery@example.com", password: PASSWORD },
+        });
+        const sessionCookie = cookie(signup.response);
+        const workspaceId = String((await request(server.base, "/workspaces", { cookie: sessionCookie })).payload.items[0].id);
+        const coworker = await request(server.base, `/workspace/${workspaceId}/coworkers`, {
+          cookie: sessionCookie, body: privateCoworkerInput(),
+        });
+        if (!server.keyManager) throw new Error("route_test_key_manager_missing");
+        let id: string;
+        if (kind === "crypto-evidence") {
+          id = (await seedCryptoEvidence({
+            guardedDb: server.guardedDb, keyManager: server.keyManager, workspaceId,
+            ownerId: String(signup.payload.user.id), coworkerId: String(coworker.payload.coworker.id),
+            runId: "run_renewal_recovery",
+          })).id;
+        } else {
+          const created = await request(server.base, `/workspace/${workspaceId}/agent-files`, {
+            cookie: sessionCookie, body: {
+              name: "test.txt", mimeType: "text/plain", expiresAt: null,
+              coworkerIds: [String(coworker.payload.coworker.id)], contentBase64: Buffer.from("Test file").toString("base64"),
+            },
+          });
+          expect(created.response.status).toBe(201);
+          id = String(created.payload.item.id);
+        }
+        const path = `/workspace/${workspaceId}/${kind}/${id}`;
+        expect((await request(server.base, `${path}/publish`, {
+          cookie: sessionCookie, body: {
+            expectedRevision: 1, network: "testnet", acknowledgePublicCiphertext: true,
+            ...(kind === "crypto-evidence" ? { ownerAddress: ROUTE_SIGNER } : {}),
+          },
+        })).response.status).toBe(200);
+        server.setWalrusCurrentEpoch(13);
+        const prepared = await request(server.base, `${path}/renew`, {
+          cookie: sessionCookie, body: {
+            expectedRevision: 2, network: "testnet", signer: ROUTE_SIGNER, acknowledgeWalletPayment: true,
+          },
+        });
+        expect(prepared.response.status).toBe(200);
+        server.setWalrusValidUntilEpoch(20);
+        let verificationCalls = 0;
+        server.setWalletVerificationHook(() => {
+          verificationCalls += 1;
+          if (failure === "unavailable") throw new Error("synthetic transport failure private-detail");
+          const state = new MatterhornGuardedRuntimeStateStore(server.guardedDb);
+          try { state.markWorkspaceDeleted(workspaceId); } finally { state.close(); }
+        });
+        const result = await request(server.base, `${path}/renew/confirm`, {
+          cookie: sessionCookie, body: {
+            intentId: prepared.payload.preview.intentId, intentHash: prepared.payload.preview.intentHash,
+            transactionDigest: prepared.payload.preview.transactionDigest,
+          },
+        });
+        expect(verificationCalls).toBe(1);
+        expect(result.response.status).toBe(failure === "deleted" ? 410 : 503);
+        if (failure === "deleted") expect(result.payload.code).toBe(kind === "crypto-evidence"
+          ? "crypto_evidence_workspace_deleted" : "agent_file_workspace_deleted");
+        expect(result.payload.message).toContain("wallet");
+        expect(result.payload.message).not.toMatch(/Nothing was (?:changed|sent|recorded)/);
+        expect(JSON.stringify(result.payload)).not.toContain("private-detail");
+      });
+    }
+  }
+
+  test("reads an exact owned evidence record beyond the default list window", async () => {
+    const server = await boot("internal", { agentFiles: true });
+    const signup = await request(server.base, "/api/auth/sign-up/email", {
+      body: { email: "evidence-query-owner@example.com", password: PASSWORD },
+    });
+    const sessionCookie = cookie(signup.response);
+    const workspaceId = String((await request(server.base, "/workspaces", { cookie: sessionCookie })).payload.items[0].id);
+    const coworker = await request(server.base, `/workspace/${workspaceId}/coworkers`, {
+      cookie: sessionCookie, body: privateCoworkerInput(),
+    });
+    if (!server.keyManager) throw new Error("route_test_key_manager_missing");
+    const records: string[] = [];
+    for (let index = 0; index < 51; index++) {
+      records.push((await seedCryptoEvidence({
+        guardedDb: server.guardedDb, keyManager: server.keyManager, workspaceId,
+        ownerId: String(signup.payload.user.id), coworkerId: String(coworker.payload.coworker.id),
+        runId: `run_exact_evidence_${index}`,
+      })).id);
+    }
+    const path = `/workspace/${workspaceId}/crypto-evidence`;
+    const firstPage = await request(server.base, path, { cookie: sessionCookie });
+    expect(firstPage.payload.items).toHaveLength(50);
+    const target = records.find((id) => !firstPage.payload.items.some((item: { evidenceId: string }) => item.evidenceId === id));
+    if (!target) throw new Error("fixture_record_not_outside_window");
+    const exact = await request(server.base, `${path}?limit=1&evidenceId=${encodeURIComponent(target)}`, { cookie: sessionCookie });
+    expect(exact.response.status).toBe(200);
+    expect(exact.payload.items).toHaveLength(1);
+    expect(exact.payload.items[0].evidenceId).toBe(target);
+    const foreign = await seedCryptoEvidence({
+      guardedDb: server.guardedDb, keyManager: server.keyManager, workspaceId,
+      ownerId: "synthetic-other-owner", coworkerId: String(coworker.payload.coworker.id), runId: "run_exact_foreign",
+    });
+    for (const id of [foreign.id, "missing-record"]) {
+      const hidden = await request(server.base, `${path}?evidenceId=${encodeURIComponent(id)}`, { cookie: sessionCookie });
+      expect(hidden.response.status).toBe(200);
+      expect(hidden.payload.items).toEqual([]);
+    }
+    for (const id of ["", "x".repeat(257)]) {
+      expect((await request(server.base, `${path}?evidenceId=${id}`, { cookie: sessionCookie })).response.status).toBe(400);
+    }
+  });
+
+  for (const scenario of [
+    { kind: "crypto-evidence", action: "renew" },
+    { kind: "agent-files", action: "renew" },
+    { kind: "crypto-evidence", action: "delete" },
+    { kind: "crypto-evidence", action: "anchor" },
+  ]) {
+    test(`confirmation recovery without a new preview for ${scenario.kind} ${scenario.action}`, async () => {
+      const { kind, action } = scenario;
+      const server = await boot("internal", { agentFiles: true, walrus: true, anchor: action === "anchor" });
+      const signup = await request(server.base, "/api/auth/sign-up/email", {
+        body: { email: "confirmation-owner@example.com", password: PASSWORD },
+      });
+      const outsider = await request(server.base, "/api/auth/sign-up/email", {
+        body: { email: "confirmation-outsider@example.com", password: PASSWORD },
+      });
+      const sessionCookie = cookie(signup.response);
+      const workspaceId = String((await request(server.base, "/workspaces", { cookie: sessionCookie })).payload.items[0].id);
+      const coworker = await request(server.base, `/workspace/${workspaceId}/coworkers`, {
+        cookie: sessionCookie, body: privateCoworkerInput(),
+      });
+      if (!server.keyManager) throw new Error("route_test_key_manager_missing");
+      let id: string;
+      if (kind === "crypto-evidence") {
+        id = (await seedCryptoEvidence({
+          guardedDb: server.guardedDb, keyManager: server.keyManager, workspaceId,
+          ownerId: String(signup.payload.user.id), coworkerId: String(coworker.payload.coworker.id),
+          runId: "run_confirmation_recovery",
+        })).id;
+      } else {
+        const created = await request(server.base, `/workspace/${workspaceId}/agent-files`, {
+          cookie: sessionCookie, body: {
+            name: "recovery.txt", mimeType: "text/plain", expiresAt: null,
+            coworkerIds: [String(coworker.payload.coworker.id)], contentBase64: Buffer.from("Disposable recovery fixture").toString("base64"),
+          },
+        });
+        expect(created.response.status).toBe(201);
+        id = String(created.payload.item.id);
+      }
+      const listPath = `/workspace/${workspaceId}/${kind}`;
+      const path = `${listPath}/${id}`;
+      expect((await request(server.base, `${path}/publish`, {
+        cookie: sessionCookie, body: {
+          expectedRevision: 1, network: "testnet", acknowledgePublicCiphertext: true,
+          ...(kind === "crypto-evidence" ? { ownerAddress: ROUTE_SIGNER } : {}),
+        },
+      })).response.status).toBe(200);
+      server.setWalrusCurrentEpoch(13);
+      const prepared = await request(server.base, `${path}/${action}`, {
+        cookie: sessionCookie, body: {
+          expectedRevision: 2, network: "testnet", signer: ROUTE_SIGNER,
+          ...(action === "renew" ? { acknowledgeWalletPayment: true }
+            : action === "anchor" ? { acknowledgePermanentPublicAnchor: true }
+              : { confirm: `delete-walrus-copy:${id}` }),
+        },
+      });
+      expect(prepared.response.status).toBe(200);
+      expect(server.walletBuildCalls()).toBe(1);
+      const confirmation = {
+        intentId: prepared.payload.preview.intentId, intentHash: prepared.payload.preview.intentHash,
+        transactionDigest: prepared.payload.preview.transactionDigest,
+      };
+      if (action === "renew") server.setWalrusValidUntilEpoch(20);
+      const digests: string[] = [];
+      let unavailable = true;
+      server.setWalletVerificationHook((digest) => {
+        digests.push(digest);
+        if (unavailable) throw new Error("synthetic private verifier detail");
+      });
+      const failed = await request(server.base, `${path}/${action}/confirm`, {
+        cookie: sessionCookie, body: confirmation,
+      });
+      expect(failed.response.status).toBe(503);
+      expect(JSON.stringify(failed.payload)).not.toContain("private verifier detail");
+      const beforeRetry = await request(server.base, listPath, { cookie: sessionCookie });
+      expect(beforeRetry.response.status).toBe(200);
+      expect(beforeRetry.payload.items[0].revision).toBe(2);
+      expect(server.keyManager.keys.size).toBe(1);
+      unavailable = false;
+      // Knowing the pending request is not sufficient authority to recover another account's operation.
+      expect((await request(server.base, `${path}/${action}/confirm`, {
+        cookie: cookie(outsider.response), body: confirmation,
+      })).response.status).toBe(404);
+      expect((await request(server.base, `${path}/${action}/confirm`, {
+        cookie: sessionCookie, body: { ...confirmation, intentHash: "0".repeat(64) },
+      })).response.status).toBe(409);
+      expect(digests).toEqual([confirmation.transactionDigest]);
+      // Retry only confirmation. There is no second prepare or wallet submission in this test.
+      expect((await request(server.base, `${path}/${action}/confirm`, {
+        cookie: sessionCookie, body: confirmation,
+      })).response.status).toBe(200);
+      expect(digests).toEqual([confirmation.transactionDigest, confirmation.transactionDigest]);
+      // Model a lost acknowledgment by ignoring the success body and reconciling through an authenticated read.
+      const replay = await request(server.base, `${path}/${action}/confirm`, {
+        cookie: sessionCookie, body: confirmation,
+      });
+      expect(replay.response.status).toBe(410);
+      expect(replay.payload.code).toContain("expired_or_replayed");
+      expect(digests).toHaveLength(2);
+      const restored = await request(server.base, listPath, { cookie: sessionCookie });
+      expect(restored.response.status).toBe(200);
+      expect(restored.payload.items).toHaveLength(1);
+      expect(restored.payload.items[0].revision).toBe(3);
+      if (action === "anchor") {
+        expect(restored.payload.items[0].anchor.transactionDigest).toBe(confirmation.transactionDigest);
+      } else {
+        const publication = restored.payload.items[0].publication;
+        expect(action === "renew" ? publication.renewalTransactionDigest : publication.deletionTransactionDigest)
+          .toBe(confirmation.transactionDigest);
+        if (action === "renew") expect(publication.validUntilEpoch).toBe(20);
+      }
+      expect(server.keyManager.keys.size).toBe(action === "delete" ? 0 : 1);
+      expect(server.walletBuildCalls()).toBe(1);
+      expect((await request(server.base, listPath, { cookie: cookie(outsider.response) })).response.status).toBe(404);
+    });
+  }
 
   test("renews published evidence only through one exact connected-wallet transaction", async () => {
     const server = await boot("internal", { agentFiles: true, walrus: true });
@@ -3047,7 +3456,7 @@ describe("crypto coworker HTTP boundary", () => {
       `/workspace/${workspaceA}/coworkers/${coworkerId}/wallet-intents/${pending.id}/receipt`,
       { cookie: cookieA, body: receiptBody },
     );
-    expect(reconciled.response.status).toBe(200);
+    expect(reconciled.response.status, JSON.stringify(reconciled.payload)).toBe(200);
     expect(reconciled.payload.item).toMatchObject({
       id: pending.id,
       revision: 2,

@@ -1,11 +1,13 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setSystemTime, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MatterhornGuardedAgentRuntime } from "./guarded-agent-runtime.js";
+import { MatterhornGuardedAgentRuntime, type GuardedPromptInput } from "./guarded-agent-runtime.js";
 import type { MatterhornCoworkerRunBinding } from "./agent-capability.js";
 import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
 import { sha256 } from "./guarded-runtime-crypto.js";
+import { sealFinalizedCoworkerRunEvidence } from "./crypto-evidence-finalizer.js";
+import type { MatterhornEvidenceKeyManager } from "./crypto-evidence-sealer.js";
 import {
   MatterhornGuardedRuntimeStateStore,
   type GuardedRuntimeStateRecord,
@@ -71,6 +73,19 @@ function finalizedRunCoworker(id: string, workspaceId: string): MatterhornCowork
   };
 }
 
+async function finalizationFixture(name: string) {
+  const path = join(dataDir, `finalization-boundary-${name}.db`);
+  const state = new MatterhornGuardedRuntimeStateStore(path);
+  const runtime = new MatterhornGuardedAgentRuntime(state);
+  const coworker = finalizedRunCoworker(`cw_boundary_${name}`, `ws_boundary_${name}`);
+  runtime.setCoworkerResolver(() => true);
+  const accepted = await runtime.acceptPrompt({ workspaceId: coworker.workspaceId, sessionId: `ses_boundary_${name}`, coworker,
+    parts: [{ type: "text", text: "Synthetic public Sui read" }], providerId: "cudos", modelId: "asi1-mini",
+    agentId: "matterhorn-sui", executionMode: "work",
+    requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }] });
+  return { path, state, runtime, coworker, accepted };
+}
+
 function replaceAuthorizedRecord(
   store: MatterhornGuardedRuntimeStateStore,
   record: GuardedRuntimeStateRecord<unknown>,
@@ -104,6 +119,68 @@ function replaceAuthorizedRecord(
 }
 
 describe("guarded agent runtime transport", () => {
+  for (const mode of ["off", "enforce"]) {
+    test(`compaction claims require exact authority and cannot be replayed (${mode})`, async () => {
+      const oldMode = process.env.MATTERHORN_GUARDED_RUNTIME_MODE;
+      process.env.MATTERHORN_GUARDED_RUNTIME_MODE = mode;
+      const state = new MatterhornGuardedRuntimeStateStore(join(dataDir, `compaction-claim-${mode}.db`));
+      const runtime = new MatterhornGuardedAgentRuntime(state);
+      try {
+        const system = "Summarize synthetic history only.";
+        const request = (purpose: "message" | "compaction"): GuardedPromptInput => ({ workspaceId: `ws_compact_${mode}`, sessionId: "ses_compact",
+          parts: [
+            { type: "system_context", text: system, source: "system", label: "public", contentHash: sha256(system) },
+            { type: "provider_system_manifest", source: "system", label: "public", contentHash: sha256(system),
+              version: `matterhorn.provider-system.${purpose}.v1` },
+          ], providerId: "ollama", modelId: "fixture", executionMode: "work" });
+        const input = request("compaction");
+        const accepted = await runtime.startAuthorizedPrompt(input, runtime.authorizePrompt(input), {
+          purpose: "compaction", sections: [system],
+        });
+        const claim = { runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!, runId: accepted.runId,
+          workspaceId: input.workspaceId, sessionId: input.sessionId, messageId: "msg_exact_compaction", providerId: input.providerId, modelId: input.modelId };
+        expect(() => runtime.claimRuntimeCompactionMessage(claim)).toThrow("not bound");
+        runtime.bindUserMessage({ runId: accepted.runId, sessionId: input.sessionId, messageId: claim.messageId });
+        for (const mutation of [
+          { runtimeSecret: "wrong-secret" }, { runId: "wrong-run" }, { workspaceId: "ws_other" },
+          { sessionId: "ses_other" }, { messageId: "msg_other" }, { providerId: "wrong-provider" }, { modelId: "wrong-model" },
+        ]) expect(() => runtime.claimRuntimeCompactionMessage({ ...claim, ...mutation })).toThrow();
+        expect(runtime.claimRuntimeCompactionMessage(claim)).toEqual({ runId: accepted.runId, messageId: claim.messageId });
+        expect(() => runtime.claimRuntimeCompactionMessage(claim)).toThrow("already been submitted");
+        expect(state.list("compaction_message_claim", { workspaceId: input.workspaceId })).toHaveLength(1);
+        await runtime.failRun(accepted.runId);
+        expect(() => runtime.claimRuntimeCompactionMessage(claim)).toThrow("not bound");
+        expect(state.list("compaction_message_claim", { workspaceId: input.workspaceId })).toHaveLength(0);
+
+        const ordinaryInput = request("message");
+        const ordinary = await runtime.startAuthorizedPrompt(ordinaryInput, runtime.authorizePrompt(ordinaryInput), {
+          purpose: "message", sections: [system],
+        });
+        runtime.bindUserMessage({ runId: ordinary.runId, sessionId: input.sessionId, messageId: "msg_ordinary" });
+        expect(() => runtime.claimRuntimeCompactionMessage({ ...claim, runId: ordinary.runId, messageId: "msg_ordinary" })).toThrow("not bound");
+        const replacement = await runtime.startAuthorizedPrompt(input, runtime.authorizePrompt(input), { purpose: "compaction", sections: [system] });
+        runtime.bindUserMessage({ runId: replacement.runId, sessionId: input.sessionId, messageId: "msg_replacement" });
+        expect(() => runtime.claimRuntimeCompactionMessage(claim)).toThrow("not bound");
+        const replacementClaim = { ...claim, runId: replacement.runId, messageId: "msg_replacement" };
+        const restored = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(join(dataDir, `compaction-claim-${mode}.db`)));
+        try {
+          // Provider consent context is intentionally not restored from disk.
+          // An instance without it must not claim another instance's request.
+          expect(() => restored.claimRuntimeCompactionMessage(replacementClaim)).toThrow("not bound");
+        } finally { restored.close(); }
+        runtime.beginWorkspaceDeletion(input.workspaceId);
+        expect(() => runtime.claimRuntimeCompactionMessage(replacementClaim)).toThrow("not bound");
+        expect(state.list("compaction_message_claim", { workspaceId: input.workspaceId })).toHaveLength(0);
+        runtime.purgeWorkspace(input.workspaceId);
+        expect(state.list("user_message_binding", { workspaceId: input.workspaceId })).toHaveLength(0);
+      } finally {
+        runtime.close();
+        if (oldMode === undefined) delete process.env.MATTERHORN_GUARDED_RUNTIME_MODE;
+        else process.env.MATTERHORN_GUARDED_RUNTIME_MODE = oldMode;
+      }
+    });
+  }
+
   test("persists a monotonic session privacy floor and purges it with the chat", async () => {
     const path = join(dataDir, "session-privacy-floor.db");
     const first = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
@@ -566,19 +643,12 @@ describe("guarded agent runtime transport", () => {
     })).toThrow("capability_run_or_tool_not_found");
     expect(secondStore.list("staged_capability", { workspaceId: prompt.workspaceId })).toHaveLength(0);
 
-    const replacement = await second.acceptPrompt(prompt);
-    expect(replacement.runId).not.toBe(accepted.runId);
-    expect((await second.receipts.get(prompt.workspaceId, accepted.runId))?.status).toBe("cancelled");
-    expect(second.stageRuntimeTool({
-      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
-      runId: replacement.runId,
-      workspaceId: prompt.workspaceId,
-      sessionId: prompt.sessionId,
-      callId: "call_restored_replacement",
-      agentId: prompt.agentId,
-      toolName: "matterhorn-work_matterhorn_sui_get_balance",
-      args: { address: `0x${"2".repeat(64)}` },
-    })).toEqual(expect.objectContaining({ accepted: true, callId: "call_restored_replacement" }));
+    // A missing index without a sealed append intent is not a recoverable
+    // partial write. Replacement must not silently authenticate that file.
+    await expect(second.acceptPrompt(prompt)).rejects.toThrow("agent_run_receipt_index_invalid");
+    expect(second.capabilities.activeRun(prompt.sessionId)).toBeNull();
+    expect(secondStore.getRecord("receipt_index", accepted.runId)).toBeNull();
+    await expect(second.receipts.get(prompt.workspaceId, accepted.runId)).rejects.toThrow("agent_run_receipt_index_invalid");
     second.close();
   });
 
@@ -1246,6 +1316,99 @@ describe("guarded agent runtime transport", () => {
     runtime.close();
   });
 
+  for (const restart of [false, true]) {
+    test(`completion retries recover a receipt-index write failure (restart=${restart})`, async () => {
+      const path = join(dataDir, `receipt-index-failure-${restart}.db`);
+      const state = new MatterhornGuardedRuntimeStateStore(path);
+      let runtime = new MatterhornGuardedAgentRuntime(state);
+      const scope = { workspaceId: `ws_index_failure_${restart}`, sessionId: `ses_index_failure_${restart}` };
+      try {
+        const accepted = await runtime.acceptPrompt({ ...scope,
+          parts: [{ type: "text", text: "Read public Sui balance" }], providerId: "cudos",
+          modelId: "asi1-mini", agentId: "matterhorn-sui", executionMode: "work" });
+        const put = state.put.bind(state);
+        let failIndex = true;
+        state.put = (input) => {
+          if (failIndex && input.kind === "receipt_index") throw new Error("Synthetic receipt-index write failure");
+          return put(input);
+        };
+        const report: Parameters<typeof runtime.completeRun>[0] = {
+          runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!, runId: accepted.runId,
+          status: "success", usage: { inputTokens: 300, outputTokens: 173 } };
+        await expect(runtime.completeRun(report)).rejects.toThrow("Synthetic receipt-index write failure");
+        expect(runtime.capabilities.activeRun(scope.sessionId)).toBeNull();
+        failIndex = false;
+        if (restart) { runtime.close(); runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path)); }
+        await runtime.completeRun(report);
+        expect(await runtime.receipts.get(scope.workspaceId, accepted.runId)).toMatchObject({
+          status: "success", usage: report.usage,
+        });
+      } finally { runtime.close(); }
+    });
+  }
+
+  test("restored execution cannot use a pending index while a terminal append awaits recovery", async () => {
+    const path = join(dataDir, "receipt-terminal-intent-authority.db");
+    const state = new MatterhornGuardedRuntimeStateStore(path);
+    const first = new MatterhornGuardedAgentRuntime(state);
+    const scope = { workspaceId: "ws_terminal_intent", sessionId: "ses_terminal_intent" };
+    const accepted = await first.acceptPrompt({ ...scope,
+      parts: [{ type: "text", text: "Read public Sui state" }], providerId: "cudos", modelId: "asi1-mini",
+      agentId: "matterhorn-sui", executionMode: "work" });
+    const put = state.put.bind(state);
+    state.put = (input) => {
+      if (input.kind === "receipt_index") throw new Error("fixture terminal index failure");
+      return put(input);
+    };
+    // Persist terminal receipt intent without running the gateway's finally
+    // cleanup, matching authority left behind by an abrupt process exit.
+    await expect(first.receipts.complete({ runId: accepted.runId, status: "success" })).rejects.toThrow();
+    first.close();
+    const restored = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+    const stage = () => restored.stageRuntimeTool({ ...scope, runId: accepted.runId,
+      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!, agentId: "matterhorn-sui", callId: "call_terminal_intent",
+      toolName: "matterhorn-work_matterhorn_sui_get_balance", args: { address: `0x${"1".repeat(64)}` } });
+    try {
+      expect(stage).toThrow("capability_run_or_tool_not_found");
+      expect(await restored.receipts.get(scope.workspaceId, accepted.runId)).toMatchObject({ status: "success" });
+      expect(stage).toThrow("capability_run_or_tool_not_found");
+      await restored.completeRun({ runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!, runId: accepted.runId, status: "success" });
+      expect(restored.capabilities.activeRun(scope.sessionId)).toBeNull();
+    } finally { restored.close(); }
+  });
+
+  for (const restart of [false, true]) {
+    for (const cancelled of [false, true]) {
+      test(`late completion preserves terminal outcome and cumulative usage (restart=${restart}, cancelled=${cancelled})`, async () => {
+        const path = join(dataDir, `late-completion-${restart}-${cancelled}.db`);
+        let runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+        const workspaceId = `ws_late_${restart}_${cancelled}`;
+        const sessionId = `ses_late_${restart}_${cancelled}`;
+        try {
+          const accepted = await runtime.acceptPrompt({ workspaceId, sessionId,
+            parts: [{ type: "text", text: "Read public Sui balance" }], providerId: "cudos",
+            modelId: "asi1-mini", agentId: "matterhorn-sui", executionMode: "work" });
+          const report = { runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!, runId: accepted.runId };
+          const status = cancelled ? "cancelled" : "success";
+          if (cancelled) await runtime.cancelSessionRun({ workspaceId, sessionId });
+          else await runtime.completeRun({ ...report, status, usage: { inputTokens: 100, outputTokens: 23 } });
+          const before = await runtime.receipts.get(workspaceId, accepted.runId);
+          if (restart) { runtime.close(); runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path)); }
+          await runtime.completeRun({ ...report, status: "success", usage: { inputTokens: 400, outputTokens: 73 } });
+          await runtime.completeRun({ ...report, status: "error", usage: { inputTokens: 50, outputTokens: 10 } });
+          const after = await runtime.receipts.get(workspaceId, accepted.runId);
+          expect(after).toMatchObject({ status, completedAt: before?.completedAt, responseDurationMs: before?.responseDurationMs,
+            usage: { inputTokens: 400, outputTokens: 73 } });
+          expect(after?.capabilities).toEqual(before?.capabilities);
+          expect(runtime.capabilities.activeRun(sessionId)).toBeNull();
+          const reloaded = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+          try { expect(await reloaded.receipts.get(workspaceId, accepted.runId)).toEqual(after); }
+          finally { reloaded.close(); }
+        } finally { runtime.close(); }
+      });
+    }
+  }
+
   test("refuses a mismatched or missing receipt index and revokes remaining authority", async () => {
     for (const variant of ["missing", "hash", "workspace"]) {
       const path = join(dataDir, `completion-index-${variant}.db`);
@@ -1265,7 +1428,7 @@ describe("guarded agent runtime transport", () => {
       await expect(runtime.completeRun({ runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
         runId: accepted.runId, status: "success", usage: { inputTokens: 473 } })).rejects.toThrow();
       expect(runtime.capabilities.activeRun(sessionId)).toBeNull();
-      expect((await runtime.receipts.get(workspaceId, accepted.runId))?.status).toBe("pending");
+      await expect(runtime.receipts.get(workspaceId, accepted.runId)).rejects.toThrow();
       runtime.close();
     }
   });
@@ -1338,83 +1501,103 @@ describe("guarded agent runtime transport", () => {
     })).toThrow("unknown, expired, or replayed");
   });
 
-  test("carries only a content-free current Polymarket jurisdiction decision through the capability", async () => {
-    const runtime = new MatterhornGuardedAgentRuntime();
-    runtime.setCoworkerResolver(() => true);
-    const nowMs = Date.now();
-    const jurisdiction = {
-      version: "matterhorn.edge-jurisdiction.v2" as const,
-      source: "vercel_ip_country" as const,
-      country: "CH",
-      region: "ZH",
-      observedAt: new Date(nowMs - 1_000).toISOString(),
-      expiresAt: new Date(nowMs + 59_000).toISOString(),
-      evidenceHash: "c".repeat(64),
-    };
-    const coworker = {
-      id: "cw_polymarket_policy",
-      workspaceId: "ws_polymarket_policy",
-      ownerId: "account_polymarket_policy",
-      revision: 1,
-      policyVersion: "coworker-policy-1",
-      allowedAppIds: ["matterhorn.polymarket-wallet-preview"],
-      allowedActionIds: ["polymarket_preview_trade"],
-      allowedNetworks: ["polygon:mainnet"],
-      automaticAuthorities: ["prepare"] as Array<"prepare">,
-      actionBindings: [{
-        connectionId: "cxc_polymarket_policy",
-        appId: "matterhorn.polymarket-wallet-preview",
-        manifestRevision: "1.0.0",
-        actionId: "polymarket_preview_trade",
-        network: "polygon:mainnet",
-        proxyToolName: "matterhorn_polymarket_preview_order",
-        access: "prepare" as const,
-      }],
-      allowedDataLabels: ["public", "wallet_private", "untrusted_external"] as Array<
-        "public" | "wallet_private" | "untrusted_external"
-      >,
-      allowUnverifiedProviderConsent: false,
-      maxReadCallsPerRun: 0,
-      maxPrepareCallsPerFamily: 1,
-    };
-    const accepted = await runtime.acceptPrompt({
-      workspaceId: "ws_polymarket_policy",
-      sessionId: "ses_polymarket_policy",
-      parts: [{ type: "text", text: "Prepare a five dollar public market order for wallet review" }],
-      providerId: "cudos",
-      modelId: "asi1-mini",
-      agentId: "matterhorn-polymarket",
-      executionMode: "work",
-      requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_polymarket_preview_order": true }],
-      coworker,
-      jurisdiction,
-    });
-    const args = { marketId: "market_1", outcome: "YES", side: "buy", amountUsdc: "5" };
-    runtime.stageRuntimeTool({
-      runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
-      runId: accepted.runId,
-      workspaceId: "ws_polymarket_policy",
-      sessionId: "ses_polymarket_policy",
-      callId: "call_polymarket_policy",
-      agentId: "matterhorn-polymarket",
-      toolName: "matterhorn-work_matterhorn_polymarket_preview_order",
-      args,
-    });
-    const authorization = runtime.authorizeMcpTool({
-      toolName: "matterhorn_polymarket_preview_order",
-      args: { ...args, _matterhornCallId: "call_polymarket_policy" },
-    });
-    expect(authorization.jurisdictionPolicy).toMatchObject({
-      evidenceHash: jurisdiction.evidenceHash,
-      polymarketOpenPositionAllowed: true,
-    });
-    const serializedAuthorization = JSON.stringify(authorization);
-    expect(serializedAuthorization).not.toContain(jurisdiction.country);
-    expect(serializedAuthorization).not.toContain(jurisdiction.region);
-    const receipt = await runtime.receipts.get("ws_polymarket_policy", accepted.runId);
-    expect(JSON.stringify(receipt)).not.toContain(jurisdiction.country);
-    expect(JSON.stringify(receipt)).not.toContain(jurisdiction.region);
-    runtime.close();
+  test.each([
+    { state: "reviewed", now: "2026-09-04T12:00:00.000Z", allowed: true },
+    { state: "review expired", now: "2026-10-04T00:00:00.000Z", allowed: false },
+  ])("carries a content-free Polymarket decision and enforces policy expiry: $state", async ({ now, allowed }) => {
+    // Pin both sides of the real policy deadline. Advancing the test clock is
+    // not a policy renewal and must never change the production review date.
+    const runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(
+      join(dataDir, `polymarket-policy-${allowed ? "reviewed" : "expired"}.db`),
+    ));
+    setSystemTime(new Date(now));
+    try {
+      runtime.setCoworkerResolver(() => true);
+      const nowMs = Date.now();
+      const jurisdiction = {
+        version: "matterhorn.edge-jurisdiction.v2" as const,
+        source: "vercel_ip_country" as const,
+        country: "CH",
+        region: "ZH",
+        observedAt: new Date(nowMs - 1_000).toISOString(),
+        expiresAt: new Date(nowMs + 59_000).toISOString(),
+        evidenceHash: "c".repeat(64),
+      };
+      const coworker = {
+        id: "cw_polymarket_policy",
+        workspaceId: `ws_polymarket_policy_${allowed}`,
+        ownerId: "account_polymarket_policy",
+        revision: 1,
+        policyVersion: "coworker-policy-1",
+        allowedAppIds: ["matterhorn.polymarket-wallet-preview"],
+        allowedActionIds: ["polymarket_preview_trade"],
+        allowedNetworks: ["polygon:mainnet"],
+        automaticAuthorities: ["prepare"] as Array<"prepare">,
+        actionBindings: [{
+          connectionId: "cxc_polymarket_policy",
+          appId: "matterhorn.polymarket-wallet-preview",
+          manifestRevision: "1.0.0",
+          actionId: "polymarket_preview_trade",
+          network: "polygon:mainnet",
+          proxyToolName: "matterhorn_polymarket_preview_order",
+          access: "prepare" as const,
+        }],
+        allowedDataLabels: ["public", "wallet_private", "untrusted_external"] as Array<
+          "public" | "wallet_private" | "untrusted_external"
+        >,
+        allowUnverifiedProviderConsent: false,
+        maxReadCallsPerRun: 0,
+        maxPrepareCallsPerFamily: 1,
+      };
+      const accepted = await runtime.acceptPrompt({
+        workspaceId: `ws_polymarket_policy_${allowed}`,
+        sessionId: "ses_polymarket_policy",
+        parts: [{ type: "text", text: "Prepare a five dollar public market order for wallet review" }],
+        providerId: "cudos",
+        modelId: "asi1-mini",
+        agentId: "matterhorn-polymarket",
+        executionMode: "work",
+        requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_polymarket_preview_order": true }],
+        coworker,
+        jurisdiction,
+      });
+      const args = { marketId: "market_1", outcome: "YES", side: "buy", amountUsdc: "5" };
+      const stage = () => runtime.stageRuntimeTool({
+        runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+        runId: accepted.runId,
+        workspaceId: `ws_polymarket_policy_${allowed}`,
+        sessionId: "ses_polymarket_policy",
+        callId: "call_polymarket_policy",
+        agentId: "matterhorn-polymarket",
+        toolName: "matterhorn-work_matterhorn_polymarket_preview_order",
+        args,
+      });
+      if (!allowed) {
+        expect(stage).toThrow("capability_polymarket_jurisdiction_denied");
+        const receipt = await runtime.receipts.get(`ws_polymarket_policy_${allowed}`, accepted.runId);
+        expect(JSON.stringify(receipt)).not.toContain(jurisdiction.country);
+        expect(JSON.stringify(receipt)).not.toContain(jurisdiction.region);
+        return;
+      }
+      stage();
+      const authorization = runtime.authorizeMcpTool({
+        toolName: "matterhorn_polymarket_preview_order",
+        args: { ...args, _matterhornCallId: "call_polymarket_policy" },
+      });
+      expect(authorization.jurisdictionPolicy).toMatchObject({
+        evidenceHash: jurisdiction.evidenceHash,
+        polymarketOpenPositionAllowed: true,
+      });
+      const serializedAuthorization = JSON.stringify(authorization);
+      expect(serializedAuthorization).not.toContain(jurisdiction.country);
+      expect(serializedAuthorization).not.toContain(jurisdiction.region);
+      const receipt = await runtime.receipts.get(`ws_polymarket_policy_${allowed}`, accepted.runId);
+      expect(JSON.stringify(receipt)).not.toContain(jurisdiction.country);
+      expect(JSON.stringify(receipt)).not.toContain(jurisdiction.region);
+    } finally {
+      setSystemTime();
+      runtime.close();
+    }
   });
 
   test("revokes staged authority immediately when an exact app connection is disconnected", async () => {
@@ -1551,6 +1734,28 @@ describe("guarded agent runtime transport", () => {
     expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 0, sealed: 0, failed: 0 });
   });
 
+  test("workspace purge removes active Sui anchor intents only for its workspace", () => {
+    const state = new MatterhornGuardedRuntimeStateStore(join(dataDir, "anchor-intent-purge.db"));
+    const runtime = new MatterhornGuardedAgentRuntime(state);
+    const nowMs = Date.now();
+    try {
+      for (const workspaceId of ["ws_anchor_purge", "ws_anchor_keep"]) {
+        state.put({
+          kind: "crypto_evidence_sui_anchor_intent", key: `evidence_${workspaceId}`, workspaceId,
+          value: { syntheticPendingWalletReview: true }, expiresAtMs: nowMs + 300_000, nowMs,
+        });
+      }
+      runtime.beginWorkspaceDeletion("ws_anchor_purge");
+      runtime.purgeWorkspace("ws_anchor_purge");
+      expect(state.getRecord("crypto_evidence_sui_anchor_intent", "evidence_ws_anchor_purge", nowMs)).toBeNull();
+      expect(state.getRecord("crypto_evidence_sui_anchor_intent", "evidence_ws_anchor_keep", nowMs)?.value)
+        .toEqual({ syntheticPendingWalletReview: true });
+      expect(state.isWorkspaceDeleted("ws_anchor_purge")).toBe(true);
+    } finally {
+      runtime.close();
+    }
+  });
+
   test("retries a failed coworker evidence seal without retaining agent authority", async () => {
     const runtime = new MatterhornGuardedAgentRuntime();
     runtime.setCoworkerResolver(() => true);
@@ -1658,6 +1863,237 @@ describe("guarded agent runtime transport", () => {
     expect(finalized).toEqual([accepted.runId]);
     expect(await restored.retryPendingFinalizedRuns()).toEqual({ checked: 0, sealed: 0, failed: 0 });
     restored.close();
+  });
+
+  for (const boundary of ["ordinary", "expired-execution", "expired-deterministic", "queue-write-failure", "after-receipt-commit"]) {
+    test(`coworker finalization survives ${boundary} and database reopen`, async () => {
+      const path = join(dataDir, `finalization-durable-${boundary}.db`);
+      const coworker = finalizedRunCoworker(`cw_durable_${boundary}`, `ws_durable_${boundary}`);
+      let state = new MatterhornGuardedRuntimeStateStore(path);
+      let runtime = new MatterhornGuardedAgentRuntime(state);
+      runtime.setCoworkerResolver(() => true);
+      const sessionId = `ses_durable_${boundary}`;
+      try {
+        const accepted = boundary === "expired-deterministic"
+          ? await runtime.startDeterministicCoworkerRun({ workspaceId: coworker.workspaceId, sessionId, coworker,
+            agentId: "matterhorn-sui", maxReadCalls: 1,
+            requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }] })
+          : await runtime.acceptPrompt({ workspaceId: coworker.workspaceId, sessionId, coworker,
+            parts: [{ type: "text", text: "Synthetic public Sui read" }], providerId: "cudos", modelId: "asi1-mini",
+            agentId: "matterhorn-sui", executionMode: "work",
+            requestToolProfiles: [{ "*": false, "matterhorn-work_matterhorn_sui_get_balance": true }] });
+        if (boundary.startsWith("expired")) {
+          setSystemTime(new Date(Date.now() + 6 * 60 * 60 * 1000 + 1));
+          runtime.close();
+          state = new MatterhornGuardedRuntimeStateStore(path);
+          runtime = new MatterhornGuardedAgentRuntime(state);
+          expect(runtime.capabilities.coworkerForRun(accepted.runId)).toBeNull();
+        }
+        if (boundary === "queue-write-failure") {
+          const put = state.put.bind(state);
+          state.put = input => {
+            if (input.kind === "crypto_evidence_finalization") throw new Error("Synthetic finalization queue failure");
+            return put(input);
+          };
+        }
+        if (boundary === "after-receipt-commit") {
+          const complete = runtime.receipts.complete.bind(runtime.receipts);
+          runtime.receipts.complete = async input => {
+            await complete(input);
+            throw new Error("Synthetic crash after receipt commit");
+          };
+        }
+        const complete = runtime.completeRun({ runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+          runId: accepted.runId, status: "success", usage: { inputTokens: 300, outputTokens: 173 } });
+        if (boundary === "queue-write-failure" || boundary === "after-receipt-commit") await expect(complete).rejects.toThrow("Synthetic");
+        else await complete;
+        expect((await runtime.receipts.get(coworker.workspaceId, accepted.runId))?.status).toBe("success");
+        runtime.close();
+        state = new MatterhornGuardedRuntimeStateStore(path);
+        runtime = new MatterhornGuardedAgentRuntime(state);
+        const finalized: Array<{ runId: string; ownerId: string }> = [];
+        runtime.setFinalizedRunHandler(async ({ receipt, coworker: identity }) => {
+          expect(runtime.capabilities.coworkerForRun(receipt.runId)).toBeNull();
+          expect(receipt.usage).toMatchObject({ inputTokens: 300, outputTokens: 173 });
+          finalized.push({ runId: receipt.runId, ownerId: identity.ownerId });
+        });
+        expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 1, sealed: 1, failed: 0 });
+        expect(finalized).toEqual([{ runId: accepted.runId, ownerId: coworker.ownerId }]);
+        expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 0, sealed: 0, failed: 0 });
+      } finally { runtime.close(); setSystemTime(); }
+    });
+  }
+
+  for (const mutation of ["unsealed", "tenant", "session", "expiry", "purged", "deleted", "expired"]) {
+    test(`retained coworker audit identity rejects ${mutation} before retry`, async () => {
+      const fixture = await finalizationFixture(mutation);
+      let runtime = fixture.runtime;
+      const state = fixture.state;
+      try {
+        const identity = state.getRecord("crypto_evidence_finalization_binding", fixture.accepted.runId);
+        if (!identity) throw new Error("Missing retained audit identity");
+        const authority = testDurableStateAuthority(process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET);
+        try {
+          const { id, workspaceId, ownerId, revision, policyVersion } = fixture.coworker;
+          expect<unknown>(authority.open<unknown>(identity, "fixture_invalid_identity")).toEqual({
+            runId: fixture.accepted.runId, workspaceId, sessionId: `ses_boundary_${mutation}`,
+            coworker: { id, workspaceId, ownerId, revision, policyVersion },
+          });
+        } finally { authority.close(); }
+        // Preserve an authentic terminal receipt with no finalization queue,
+        // as after a process exit between those two durable writes.
+        await runtime.receipts.complete({ runId: fixture.accepted.runId, status: "success" });
+        if (mutation === "purged") runtime.purgeWorkspace(fixture.coworker.workspaceId);
+        else if (mutation === "deleted") runtime.beginWorkspaceDeletion(fixture.coworker.workspaceId);
+        else if (mutation === "expired") setSystemTime(new Date(Date.now() + 366 * 24 * 60 * 60 * 1000));
+        else state.put({ kind: identity.kind, key: identity.key,
+          workspaceId: mutation === "tenant" ? "ws_other" : identity.workspaceId,
+          sessionId: mutation === "session" ? "ses_other" : identity.sessionId,
+          value: mutation === "unsealed" ? { runId: fixture.accepted.runId } : identity.value,
+          expiresAtMs: mutation === "expiry" ? (identity.expiresAtMs ?? 0) + 1 : identity.expiresAtMs,
+          nowMs: identity.updatedAtMs });
+        runtime.close();
+        runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(fixture.path));
+        let calls = 0;
+        runtime.setFinalizedRunHandler(async () => { calls += 1; });
+        if (["purged", "deleted", "expired"].includes(mutation)) {
+          expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 0, sealed: 0, failed: 0 });
+        } else await expect(runtime.retryPendingFinalizedRuns()).rejects.toMatchObject({ code: "crypto_evidence_finalization_state_invalid" });
+        expect(calls).toBe(0);
+      } finally { runtime.close(); setSystemTime(); }
+    });
+  }
+
+  test("a delayed evidence acknowledgement cannot discard a newer receipt snapshot", async () => {
+    const { runtime, state, accepted, coworker } = await finalizationFixture("ack_race");
+    let release = () => {};
+    let reached = () => {};
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const started = new Promise<void>(resolve => { reached = resolve; });
+    let first: Promise<void> | undefined;
+    try {
+      runtime.setFinalizedRunHandler(async () => { reached(); await gate; });
+      const report = { runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!, runId: accepted.runId };
+      first = runtime.completeRun({ ...report, status: "success", usage: { inputTokens: 100, outputTokens: 23 } });
+      await started;
+      runtime.setFinalizedRunHandler(async () => { throw new Error("Synthetic unavailable sealer"); });
+      await runtime.completeRun({ ...report, status: "success", usage: { inputTokens: 400, outputTokens: 196 } });
+      const newer = state.getRecord("crypto_evidence_finalization", accepted.runId);
+      expect(newer).not.toBeNull();
+      release();
+      await first;
+      expect(state.getRecord("crypto_evidence_finalization", accepted.runId)).toEqual(newer);
+      expect(state.getRecord("crypto_evidence_finalization_binding", accepted.runId)).not.toBeNull();
+      runtime.setFinalizedRunHandler(async finalized => {
+        expect(finalized.coworker.ownerId).toBe(coworker.ownerId);
+        expect(finalized.receipt.usage).toMatchObject({ inputTokens: 400, outputTokens: 196 });
+      });
+      expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 1, sealed: 1, failed: 0 });
+      expect(state.getRecord("crypto_evidence_finalization", accepted.runId)).toBeNull();
+      expect(state.getRecord("crypto_evidence_finalization_binding", accepted.runId)).toBeNull();
+    } finally { release(); await first?.catch(() => undefined); runtime.close(); }
+  });
+
+  test("workspace purge during finalization receipt read cannot recreate evidence", async () => {
+    const { runtime, state, accepted, coworker } = await finalizationFixture("purge_during_read");
+    try {
+      await runtime.receipts.complete({ runId: accepted.runId, status: "success" });
+      const get = runtime.receipts.get.bind(runtime.receipts);
+      runtime.receipts.get = async (...args) => {
+        const receipt = await get(...args);
+        runtime.purgeWorkspace(coworker.workspaceId);
+        return receipt;
+      };
+      let delivered = 0;
+      runtime.setFinalizedRunHandler(async () => { delivered += 1; });
+      expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 0, sealed: 0, failed: 0 });
+      expect(delivered).toBe(0);
+      expect(state.getRecord("crypto_evidence_finalization", accepted.runId)).toBeNull();
+      expect(state.getRecord("crypto_evidence_finalization_binding", accepted.runId)).toBeNull();
+    } finally { runtime.close(); }
+  });
+
+  test("failed acknowledgement transaction retains both records for retry after reopen", async () => {
+    const fixture = await finalizationFixture("ack_write_failure");
+    let runtime = fixture.runtime;
+    try {
+      await runtime.completeRun({ runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+        runId: fixture.accepted.runId, status: "success" });
+      const remove = fixture.state.delete.bind(fixture.state);
+      fixture.state.delete = (kind, key) => {
+        if (kind === "crypto_evidence_finalization_binding") throw new Error("Synthetic acknowledgement failure");
+        return remove(kind, key);
+      };
+      let delivered = 0;
+      runtime.setFinalizedRunHandler(async () => { delivered += 1; });
+      expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 1, sealed: 0, failed: 1 });
+      expect(fixture.state.getRecord("crypto_evidence_finalization", fixture.accepted.runId)).not.toBeNull();
+      expect(fixture.state.getRecord("crypto_evidence_finalization_binding", fixture.accepted.runId)).not.toBeNull();
+      runtime.close();
+      runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(fixture.path));
+      runtime.setFinalizedRunHandler(async () => { delivered += 1; });
+      expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 1, sealed: 1, failed: 0 });
+      expect(delivered).toBe(2); // At-least-once delivery; the sealer must remain idempotent.
+      expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 0, sealed: 0, failed: 0 });
+    } finally { runtime.close(); }
+  });
+
+  test("finalization identity persistence fails admission atomically", async () => {
+    const state = new MatterhornGuardedRuntimeStateStore(join(dataDir, "finalization-admission.db"));
+    const runtime = new MatterhornGuardedAgentRuntime(state);
+    const coworker = finalizedRunCoworker("cw_atomic_audit", "ws_atomic_audit");
+    const put = state.put.bind(state);
+    state.put = input => {
+      if (input.kind === "crypto_evidence_finalization_binding") throw new Error("Synthetic audit storage failure");
+      return put(input);
+    };
+    runtime.setCoworkerResolver(() => true);
+    try {
+      await expect(runtime.acceptPrompt({ workspaceId: coworker.workspaceId, sessionId: "ses_atomic_audit", coworker,
+        parts: [{ type: "text", text: "Synthetic public state" }], providerId: "cudos", modelId: "asi1-mini",
+        agentId: "matterhorn-sui", executionMode: "work" })).rejects.toThrow("Synthetic audit storage failure");
+      expect(runtime.capabilities.activeRun("ses_atomic_audit")).toBeNull();
+      for (const kind of ["active_agent_run", "agent_run_scope", "run_grant", "receipt_index"] as const) {
+        expect(state.listRecords(kind, { workspaceId: coworker.workspaceId })).toEqual([]);
+      }
+    } finally { runtime.close(); }
+  });
+
+  test("expired execution still recovers one decryptable local coworker evidence record", async () => {
+    const fixture = await finalizationFixture("encrypted_recovery");
+    let runtime = fixture.runtime;
+    let keyLeases = 0;
+    const keyManager: MatterhornEvidenceKeyManager = {
+      createDataKey: async ({ recipientKeyIds }) => {
+        keyLeases += 1;
+        return { plaintextKey: Buffer.alloc(32, 37), keyReference: "kms://synthetic-recovery",
+          wrappedKey: "synthetic-wrapped-key", keyContext: "c".repeat(64), recipientKeyIds };
+      },
+      decryptDataKey: async () => Buffer.alloc(32, 37),
+      destroyKey: async () => undefined,
+    };
+    try {
+      await runtime.receipts.complete({ runId: fixture.accepted.runId, status: "success",
+        usage: { inputTokens: 300, outputTokens: 173 } });
+      runtime.close();
+      setSystemTime(new Date(Date.now() + 6 * 60 * 60 * 1000 + 1));
+      runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(fixture.path));
+      const store = runtime.createCryptoEvidenceStore(keyManager);
+      runtime.setFinalizedRunHandler(async finalizedRun => {
+        await sealFinalizedCoworkerRunEvidence({ finalizedRun, store, keyManager });
+      });
+      expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 1, sealed: 1, failed: 0 });
+      const identity = { workspaceId: fixture.coworker.workspaceId, ownerId: fixture.coworker.ownerId,
+        coworkerId: fixture.coworker.id, runId: fixture.accepted.runId };
+      const evidence = store.findByRun(identity);
+      if (!evidence) throw new Error("Missing encrypted recovery evidence");
+      const decrypted = await store.decrypt({ ...identity, evidenceId: evidence.id });
+      expect(decrypted.receipt).toMatchObject({ status: "success", inputTokens: 300, outputTokens: 173 });
+      expect(evidence.walrusProof).toBeNull();
+      expect(await runtime.retryPendingFinalizedRuns()).toEqual({ checked: 0, sealed: 0, failed: 0 });
+      expect(keyLeases).toBe(1);
+      expect(runtime.capabilities.coworkerForRun(fixture.accepted.runId)).toBeNull();
+    } finally { runtime.close(); setSystemTime(); }
   });
 
   test("rejects tenant, receipt, and SQLite metadata mutation in a pending evidence finalization", async () => {
@@ -2229,6 +2665,189 @@ describe("guarded agent runtime transport", () => {
     }
   });
 
+  for (const purpose of ["message", "compaction"] satisfies Array<"message" | "compaction">) {
+    test(`stale ${purpose} system release cannot consume a replacement run's validation`, async () => {
+      const runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(join(dataDir, `stale-system-${purpose}.db`)));
+      try {
+        const system = "Summarize synthetic public information only.";
+        const input: GuardedPromptInput = {
+          workspaceId: `ws_system_replacement_${purpose}`, sessionId: "ses_system_replacement",
+          providerId: "ollama", modelId: "fixture", executionMode: "work",
+          parts: [
+            { type: "system_context", text: system, source: "system", label: "public", contentHash: sha256(system) },
+            { type: "provider_system_manifest", source: "system", label: "public", contentHash: sha256(system),
+              version: `matterhorn.provider-system.${purpose}.v1` },
+          ],
+        };
+        const start = () => runtime.startAuthorizedPrompt(input, runtime.authorizePrompt(input), { purpose, sections: [system] });
+        const first = await start();
+        const second = await start();
+        runtime.bindUserMessage({ runId: second.runId, sessionId: input.sessionId, messageId: "msg_system_replacement" });
+        const scope = { runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!, workspaceId: input.workspaceId,
+          sessionId: input.sessionId, providerId: input.providerId, modelId: input.modelId, purpose, messageId: "msg_system_replacement" };
+        runtime.validateRuntimeProviderMessages({ ...scope, expectedRunId: second.runId, messages: [{
+          info: { role: "user", sessionID: input.sessionId, id: "msg_system_replacement" },
+          parts: [{ type: "text", text: "Read public data" }],
+        }] });
+        const stale = { ...scope, expectedRunId: first.runId };
+        expect(() => runtime.resolveRuntimeProviderSystem(stale)).toThrow("Provider system context is not bound");
+        for (const expectedRunId of [undefined, null, "", " ", 7, {}, []]) {
+          expect(() => Reflect.apply(runtime.resolveRuntimeProviderSystem, runtime, [{ ...scope, expectedRunId }]))
+            .toThrow("Provider system context is not bound");
+        }
+        for (const mutation of [{ runtimeSecret: "wrong-secret" }, { workspaceId: "ws_other" },
+          { sessionId: "ses_other" }, { providerId: "other" }, { modelId: "other" }]) {
+          expect(() => runtime.resolveRuntimeProviderSystem({ ...scope, expectedRunId: second.runId, ...mutation })).toThrow();
+        }
+        const fresh = { ...scope, expectedRunId: second.runId };
+        expect(runtime.resolveRuntimeProviderSystem(fresh)).toEqual({ runId: second.runId, system: [system], systemHash: sha256(system) });
+        expect(() => runtime.resolveRuntimeProviderSystem(fresh)).toThrow("Provider system context is not bound");
+      } finally { runtime.close(); }
+    });
+  }
+
+  for (const released of [false, true]) {
+    test(`unused-dispatch evidence requires revocation and survives no provider release (released=${released})`, async () => {
+      const path = join(dataDir, `unused-provider-${released}.db`);
+      const runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+      const system = "Summarize synthetic public data.";
+      const input: GuardedPromptInput = {
+        workspaceId: `ws_unused_${released}`, sessionId: `ses_unused_${released}`,
+        providerId: "ollama", modelId: "fixture", executionMode: "work",
+        parts: [
+          { type: "system_context", text: system, source: "system", label: "public", contentHash: sha256(system) },
+          { type: "provider_system_manifest", source: "system", label: "public", contentHash: sha256(system),
+            version: "matterhorn.provider-system.compaction.v1" },
+        ],
+      };
+      try {
+        const accepted = await runtime.startAuthorizedPrompt(input, runtime.authorizePrompt(input), { purpose: "compaction", sections: [system] });
+        const scope = { runId: accepted.runId, workspaceId: input.workspaceId,
+          sessionId: input.sessionId, messageId: `msg_unused_${released}` };
+        runtime.bindUserMessage(scope);
+        expect(runtime.hasRevokedUnusedProviderDispatch(scope)).toBe(false);
+        expect(runtime.revokedUnusedProviderMessages(scope)).toEqual([]);
+        const provider: Parameters<typeof runtime.resolveRuntimeProviderSystem>[0] & typeof scope = {
+          ...scope, runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
+          expectedRunId: accepted.runId, providerId: input.providerId, modelId: input.modelId, purpose: "compaction" };
+        const messages = [{ info: { role: "user", sessionID: input.sessionId, id: scope.messageId },
+          parts: [{ type: "text", text: "Synthetic history" }] }];
+        for (const mutation of [{ messageId: "msg_unknown" }, { messageId: "" },
+          { workspaceId: "ws_other" }, { sessionId: "ses_other" }, { expectedRunId: "run_other" }]) {
+          expect(() => runtime.validateRuntimeProviderMessages({ ...provider, ...mutation, messages })).toThrow();
+        }
+        runtime.validateRuntimeProviderMessages({ ...provider, messages });
+        if (released) runtime.resolveRuntimeProviderSystem(provider);
+        // A validated message is not a provider attempt; a released system is,
+        // even when the server never observes the provider's acknowledgement.
+        expect(runtime.revokeUnusedProviderDispatch({ ...scope, messageId: "msg_other" })).toBe(false);
+        expect(runtime.revokeUnusedProviderDispatch(scope)).toBe(!released);
+        await runtime.failRun(accepted.runId, "cancelled");
+        expect(runtime.hasRevokedUnusedProviderDispatch(scope)).toBe(!released);
+        expect(runtime.revokedUnusedProviderMessages(scope)).toEqual(released ? [] : [scope.messageId]);
+        expect(runtime.revokedUnusedProviderMessages({ ...scope, workspaceId: "ws_other" })).toEqual([]);
+        expect(runtime.revokedUnusedProviderMessages({ ...scope, sessionId: "ses_other" })).toEqual([]);
+        for (const mutation of [{ runId: "run_unknown" }, { workspaceId: "ws_other" },
+          { sessionId: "ses_other" }, { messageId: "msg_other" }]) {
+          expect(runtime.hasRevokedUnusedProviderDispatch({ ...scope, ...mutation })).toBe(false);
+        }
+        expect(() => runtime.validateRuntimeProviderMessages({ ...provider, messages })).toThrow();
+        expect(() => runtime.resolveRuntimeProviderSystem(provider)).toThrow();
+        await runtime.failRun(accepted.runId);
+        expect(runtime.hasRevokedUnusedProviderDispatch(scope)).toBe(!released);
+        try {
+          setSystemTime(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
+          expect(runtime.hasRevokedUnusedProviderDispatch(scope)).toBe(false);
+          expect(runtime.revokedUnusedProviderMessages(scope)).toEqual([]);
+        } finally { setSystemTime(); }
+        // A reused parent cannot borrow an old run's unused-dispatch proof.
+        const second = await runtime.startAuthorizedPrompt(input, runtime.authorizePrompt(input), { purpose: "compaction", sections: [system] });
+        runtime.bindUserMessage({ ...scope, runId: second.runId });
+        expect(runtime.revokedUnusedProviderMessages(scope)).toEqual([]);
+        await runtime.failRun(second.runId, "cancelled");
+        expect(runtime.revokedUnusedProviderMessages(scope)).toEqual(released ? [] : [scope.messageId]);
+        runtime.close();
+        expect(runtime.hasRevokedUnusedProviderDispatch(scope)).toBe(false);
+        const restored = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
+        try {
+          expect(restored.hasRevokedUnusedProviderDispatch(scope)).toBe(false);
+          expect(restored.revokedUnusedProviderMessages(scope)).toEqual([]);
+        }
+        finally { restored.close(); }
+      } finally { runtime.close(); }
+    });
+  }
+
+  test("Stop permits an idle unconfigured runtime but never trusts unsigned active state", async () => {
+    const previous = process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
+    delete process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET;
+    const store = new MatterhornGuardedRuntimeStateStore(join(dataDir, "stop-unconfigured.db"));
+    const runtime = new MatterhornGuardedAgentRuntime(store);
+    if (previous !== undefined) process.env.MATTERHORN_CAPABILITY_SIGNING_SECRET = previous;
+    try {
+      const scope = { workspaceId: "ws_stop_unconfigured", sessionId: "ses_stop_unconfigured" };
+      await expect(runtime.cancelSessionRun(scope)).resolves.toBeUndefined();
+      store.put({ kind: "active_agent_run", key: scope.sessionId, ...scope,
+        value: { runId: "run_unsigned", ...scope }, expiresAtMs: Date.now() + 60000 });
+      await expect(runtime.cancelSessionRun(scope)).rejects.toThrow("cannot safely restore");
+      expect(store.getRecord("active_agent_run", scope.sessionId)).not.toBeNull();
+    } finally { runtime.close(); }
+  });
+
+  for (const receiptFailure of [false, true]) {
+    test(`Stop revokes exact session authority before receipt IO (failure=${receiptFailure})`, async () => {
+      const runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(join(dataDir, `stop-before-io-${receiptFailure}.db`)));
+      const system = "Answer a synthetic public question.";
+      const input: GuardedPromptInput = {
+        workspaceId: `ws_stop_${receiptFailure}`, sessionId: `ses_stop_${receiptFailure}`,
+        providerId: "ollama", modelId: "fixture", executionMode: "work",
+        parts: [
+          { type: "system_context", text: system, source: "system", label: "public", contentHash: sha256(system) },
+          { type: "provider_system_manifest", source: "system", label: "public", contentHash: sha256(system),
+            version: "matterhorn.provider-system.message.v1" },
+        ],
+      };
+      let release = () => {};
+      const gate = new Promise<void>(resolve => { release = resolve; });
+      const originalGet = runtime.receipts.get.bind(runtime.receipts);
+      let stopping: Promise<unknown> | undefined;
+      try {
+        const accepted = await runtime.startAuthorizedPrompt(input, runtime.authorizePrompt(input), { purpose: "message", sections: [system] });
+        const scope = { workspaceId: input.workspaceId, sessionId: input.sessionId };
+        const binding = { ...scope, runId: accepted.runId, messageId: "msg_stop_before_io" };
+        runtime.bindUserMessage(binding);
+        await runtime.cancelSessionRun({ ...scope, workspaceId: "ws_other" });
+        await runtime.cancelSessionRun({ ...scope, sessionId: "ses_other" });
+        const provider: Parameters<typeof runtime.resolveRuntimeProviderSystem>[0] & typeof binding = {
+          ...binding, runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!, expectedRunId: accepted.runId,
+          providerId: "ollama", modelId: "fixture", purpose: "message",
+        };
+        const messages = [{ info: { role: "user", sessionID: input.sessionId, id: binding.messageId },
+          parts: [{ type: "text", text: "Synthetic public question" }] }];
+        expect(runtime.validateRuntimeProviderMessages({ ...provider, messages }).accepted).toBe(true);
+        runtime.receipts.get = async (...args) => {
+          await gate;
+          if (receiptFailure) throw new Error("Synthetic receipt IO failure");
+          return originalGet(...args);
+        };
+        stopping = runtime.cancelSessionRun(scope).catch(error => error);
+        expect(() => runtime.validateRuntimeProviderMessages({ ...provider, messages })).toThrow();
+        expect(() => runtime.resolveRuntimeProviderSystem(provider)).toThrow();
+        expect(runtime.hasRevokedUnusedProviderDispatch(binding)).toBe(true);
+        release();
+        const result = await stopping;
+        if (receiptFailure) expect(result).toBeInstanceOf(Error);
+        else expect(result).toBeUndefined();
+        expect(() => runtime.resolveRuntimeProviderSystem(provider)).toThrow();
+      } finally {
+        release();
+        await stopping;
+        runtime.receipts.get = originalGet;
+        runtime.close();
+      }
+    });
+  }
+
   test("releases provider system context only for the exact active run scope", async () => {
     const path = join(dataDir, "provider-system-exact-scope.db");
     const runtime = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
@@ -2260,6 +2879,7 @@ describe("guarded agent runtime transport", () => {
       purpose: "message",
     });
     expect(() => runtime.resolveRuntimeProviderSystem({
+      expectedRunId: accepted.runId,
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
@@ -2271,13 +2891,16 @@ describe("guarded agent runtime transport", () => {
       info: { id: "msg_provider_system", role: "user", sessionID: input.sessionId },
       parts: [{ type: "text", text: "Compare public Bittensor validators" }],
     }];
+    runtime.bindUserMessage({ runId: accepted.runId, sessionId: input.sessionId, messageId: "msg_provider_system" });
     expect(() => runtime.validateRuntimeProviderMessages({
+      messageId: "msg_provider_system",
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
       workspaceId: "ws_other",
       sessionId: input.sessionId,
       messages,
     })).toThrow("not bound to this active Matterhorn run");
     const validated = runtime.validateRuntimeProviderMessages({
+      messageId: "msg_provider_system",
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
@@ -2289,11 +2912,13 @@ describe("guarded agent runtime transport", () => {
       messagesHash: sha256(JSON.stringify(messages)),
     });
     expect(() => runtime.validateRuntimeProviderMessages({
+      messageId: "msg_provider_system",
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
       workspaceId: input.workspaceId, sessionId: input.sessionId,
       expectedRunId: "replaced_run", messages,
     })).toThrow("not bound to this active Matterhorn run");
     const exact = runtime.resolveRuntimeProviderSystem({
+      expectedRunId: accepted.runId,
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
@@ -2303,6 +2928,7 @@ describe("guarded agent runtime transport", () => {
     });
     expect(exact).toEqual({ runId: accepted.runId, system: [system], systemHash: sha256(system) });
     expect(() => runtime.resolveRuntimeProviderSystem({
+      expectedRunId: accepted.runId,
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
@@ -2319,6 +2945,7 @@ describe("guarded agent runtime transport", () => {
       { purpose: "compaction" as const },
     ]) {
       expect(() => runtime.resolveRuntimeProviderSystem({
+        expectedRunId: accepted.runId,
         runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
         workspaceId: input.workspaceId,
         sessionId: input.sessionId,
@@ -2333,6 +2960,7 @@ describe("guarded agent runtime transport", () => {
 
     const restored = new MatterhornGuardedAgentRuntime(new MatterhornGuardedRuntimeStateStore(path));
     expect(() => restored.resolveRuntimeProviderSystem({
+      expectedRunId: accepted.runId,
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
@@ -2367,9 +2995,10 @@ describe("guarded agent runtime transport", () => {
       executionMode: "work" as const,
     };
     const authorization = runtime.authorizePrompt(input);
-    await runtime.startAuthorizedPrompt(input, authorization, { sections: [system], purpose: "message" });
-
+    const accepted = await runtime.startAuthorizedPrompt(input, authorization, { sections: [system], purpose: "message" });
+    runtime.bindUserMessage({ runId: accepted.runId, sessionId: input.sessionId, messageId: "msg_sensitive" });
     expect(() => runtime.validateRuntimeProviderMessages({
+      messageId: "msg_sensitive",
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
@@ -2379,6 +3008,7 @@ describe("guarded agent runtime transport", () => {
       }],
     })).toThrow("blocked sensitive material");
     expect(() => runtime.resolveRuntimeProviderSystem({
+      expectedRunId: accepted.runId,
       runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
@@ -2420,9 +3050,10 @@ describe("guarded agent runtime transport", () => {
         executionMode: "work" as const,
       };
       const authorization = runtime.authorizePrompt(input);
-      await runtime.startAuthorizedPrompt(input, authorization, { sections: [system], purpose: "message" });
-
+      const accepted = await runtime.startAuthorizedPrompt(input, authorization, { sections: [system], purpose: "message" });
+      runtime.bindUserMessage({ runId: accepted.runId, sessionId: input.sessionId, messageId: `msg_sensitive_${suffix}` });
       expect(() => runtime.validateRuntimeProviderMessages({
+        messageId: `msg_sensitive_${suffix}`,
         runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
         workspaceId: input.workspaceId,
         sessionId: input.sessionId,
@@ -2432,6 +3063,7 @@ describe("guarded agent runtime transport", () => {
         }],
       })).toThrow("became more sensitive");
       expect(() => runtime.resolveRuntimeProviderSystem({
+        expectedRunId: accepted.runId,
         runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
         workspaceId: input.workspaceId,
         sessionId: input.sessionId,
@@ -2480,10 +3112,12 @@ describe("guarded agent runtime transport", () => {
         executionMode: "work" as const,
       };
       const authorization = runtime.authorizePrompt(input);
-      await runtime.startAuthorizedPrompt(input, authorization, { sections: [system], purpose: "message" });
+      const accepted = await runtime.startAuthorizedPrompt(input, authorization, { sections: [system], purpose: "message" });
+      runtime.bindUserMessage({ runId: accepted.runId, sessionId: input.sessionId, messageId: "msg_policy_change" });
 
       delete process.env.MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS;
       expect(() => runtime.validateRuntimeProviderMessages({
+        messageId: "msg_policy_change",
         runtimeSecret: process.env.MATTERHORN_AGENT_RUNTIME_SECRET!,
         workspaceId: input.workspaceId,
         sessionId: input.sessionId,

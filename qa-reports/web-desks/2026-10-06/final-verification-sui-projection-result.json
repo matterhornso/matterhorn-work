@@ -1,0 +1,52 @@
+{
+  "version": "matterhorn.final-source-verification.v1",
+  "startedAt": "2026-10-05T23:32:21.308Z",
+  "completedAt": "2026-10-05T23:32:29.959Z",
+  "environment": {
+    "inheritedVariables": false,
+    "bunEnvAutoload": false,
+    "credentials": "none supplied"
+  },
+  "existingPreviewOutputsModified": false,
+  "buildOutput": null,
+  "results": [
+    {
+      "id": "sui-mcp-safety",
+      "command": [
+        "bun",
+        "test",
+        "apps/server/src/managed-opencode-mcp.test.ts",
+        "apps/server/src/tools/sui.test.ts",
+        "apps/server/src/agent-token-budget.test.ts",
+        "apps/server/src/agent-capability.test.ts",
+        "apps/server/src/guarded-agent-runtime.test.ts"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 1544,
+      "log": "final-sui-mcp-safety-sui-projection.log",
+      "retainedBytes": 78,
+      "omittedLines": 188
+    },
+    {
+      "id": "server-typecheck",
+      "command": [
+        "pnpm",
+        "--dir",
+        "apps/server",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.json",
+        "--noEmit"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 8643,
+      "log": "final-server-typecheck-sui-projection.log",
+      "retainedBytes": 0,
+      "omittedLines": 0
+    }
+  ],
+  "passed": true
+}

@@ -8,6 +8,7 @@ import {
   type UiWallet,
 } from "@mysten/dapp-kit-react";
 import { Transaction } from "@mysten/sui/transactions";
+import { normalizeSuiAddress } from "@mysten/sui/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Cloud,
@@ -33,6 +34,10 @@ import { cn } from "@/lib/utils";
 import { ConfirmModal } from "../../design-system/modals/confirm-modal";
 import { suiDAppKit } from "../../infra/sui-dapp-kit";
 import { useStatusToasts } from "../shell-feedback/status-toasts";
+import { captureAccountGeneration } from "../../../app/lib/account-client-state";
+import { WalletConfirmationRecoveryError } from "../../../app/lib/wallet-confirmation-recovery";
+import { useWalletConfirmationRecovery } from "../wallet/use-wallet-confirmation-recovery";
+import { WalletConfirmationNotice } from "../wallet/wallet-confirmation-notice";
 import {
   useMatterhornSessionAgentFileContextStore,
   type MatterhornSessionAgentFileContext,
@@ -103,8 +108,10 @@ export function agentFileSelectionSummary(count: number): string {
   return `${count} ${count === 1 ? "file" : "files"} selected · 8 maximum`;
 }
 
-function agentFileErrorMessage(error: unknown): string {
+export function agentFileErrorMessage(error: unknown): string {
   if (error instanceof MatterhornServerError) {
+    if (error.code === "agent_file_workspace_deleted") return "This workspace is being deleted. This action cannot continue. If you submitted a transaction, check its status in your wallet.";
+    if (error.code === "agent_file_wallet_review_unavailable") return "Wallet review is temporarily unavailable. If you submitted a transaction, check its status in your wallet before trying again.";
     if (error.code === "agent_file_blocked") {
       return "Matterhorn blocked this file because it may contain a secret, executable content, or invalid data.";
     }
@@ -114,17 +121,17 @@ function agentFileErrorMessage(error: unknown): string {
     if (error.code === "agent_file_walrus_publication_in_progress") return "This file is already being backed up.";
     if (error.code === "agent_file_operation_in_progress") return "This file is being updated. Try again shortly.";
     if (error.code === "agent_file_walrus_publication_claim_invalid") return "This backup request expired or changed. Start it again.";
-    if (error.code === "agent_file_walrus_unavailable") return "Encrypted cloud backup is temporarily unavailable.";
+    if (error.code === "agent_file_walrus_unavailable") return "Encrypted cloud backup is temporarily unavailable. If you submitted a transaction, check its status in your wallet before trying again.";
     if (error.code === "agent_file_walrus_certification_expired") {
       return "This backup has expired. Your workspace file is still available, but its public encrypted copy cannot be used.";
     }
     if (error.code === "agent_file_walrus_renewal_not_due") return "This cloud copy does not need renewal yet.";
     if (error.code === "agent_file_walrus_renewal_in_progress") return "A renewal is already waiting for wallet review.";
     if (error.code === "agent_file_walrus_renewal_expired_or_replayed") {
-      return "This renewal expired or was already used. Check the backup and prepare it again.";
+      return "This renewal expired or was already used. Check its transaction status in your wallet before trying again.";
     }
     if (error.code === "agent_file_walrus_renewal_intent_mismatch") {
-      return "The renewal changed after review. Nothing was recorded; prepare it again.";
+      return "Matterhorn could not verify this renewal. Check its transaction status in your wallet before trying again.";
     }
     if (error.code === "agent_file_walrus_renewal_transaction_failed") {
       return "The Sui wallet transaction failed. The cloud copy was not renewed.";
@@ -330,6 +337,11 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
   const account = useCurrentAccount();
   const inputRef = useRef<HTMLInputElement>(null);
   const workspaceId = props.workspaceId?.trim() ?? "";
+  const recovery = useWalletConfirmationRecovery(props.client, workspaceId);
+  const walletAccount = useRef(account);
+  walletAccount.current = account;
+  const activeWorkspace = useRef(workspaceId);
+  activeWorkspace.current = workspaceId;
   const queryKey = [QUERY_PREFIX, workspaceId];
   const [coworkerChoice, setCoworkerChoice] = useState("");
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
@@ -505,56 +517,54 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
       setError("Connect the Sui wallet that will review and pay for this renewal.");
       return;
     }
+    const client = props.client;
+    const accountCurrent = captureAccountGeneration();
+    const current = () => accountCurrent() && activeWorkspace.current === workspaceId;
     setBusyFileId(item.id);
     setError(null);
     try {
-      const prepared = await props.client.renewAgentFile(workspaceId, item.id, {
-        expectedRevision: item.revision,
-        signer: account.address,
+      await recovery.execute("file-renewal", item.id, async () => {
+        const prepared = await client.renewAgentFile(workspaceId, item.id, {
+          expectedRevision: item.revision, signer: account.address,
+        });
+        if (normalizeSuiAddress(prepared.preview.signer) !== normalizeSuiAddress(account.address)) {
+          throw new WalletConfirmationRecoveryError("The connected wallet does not match the reviewed signer. No wallet request was opened.");
+        }
+        const transaction = Transaction.from(prepared.preview.transactionBytesBase64);
+        if (await transaction.getDigest() !== prepared.preview.transactionDigest) {
+          throw new WalletConfirmationRecoveryError("The renewal transaction changed before wallet review. No wallet request was opened.");
+        }
+        return {
+          pending: {
+            action: "file-renewal", resourceId: item.id, revision: item.revision, network: "testnet",
+            signer: normalizeSuiAddress(prepared.preview.signer), intentId: prepared.preview.intentId,
+            intentHash: prepared.preview.intentHash, transactionDigest: prepared.preview.transactionDigest,
+            expiresAt: prepared.preview.expiresAt,
+          },
+          submit: async () => {
+            if (!current() || walletAccount.current?.address !== account.address) throw new Error("wallet_scope_changed");
+            const result = await suiDAppKit.signAndExecuteTransaction({ transaction, account, network: "testnet" });
+            if (!("Transaction" in result) || result.Transaction?.digest !== prepared.preview.transactionDigest) {
+              throw new Error("wallet_result_unconfirmed");
+            }
+          },
+        };
       });
-      if (prepared.preview.signer.toLowerCase() !== account.address.toLowerCase()) {
-        throw new Error("The connected Sui wallet does not match the renewal signer.");
-      }
-      const transaction = Transaction.from(prepared.preview.transactionBytesBase64);
-      const localDigest = await transaction.getDigest();
-      if (localDigest !== prepared.preview.transactionDigest) {
-        throw new Error("The renewal transaction changed before wallet review.");
-      }
-      const result = await suiDAppKit.signAndExecuteTransaction({
-        transaction,
-        account,
-        network: "testnet",
+      if (!current()) return;
+      setFileVerifications((previous) => {
+        const next = { ...previous };
+        delete next[item.id];
+        return next;
       });
-      const executed = "Transaction" in result ? result.Transaction : result.FailedTransaction;
-      if (!executed?.digest || executed.digest !== prepared.preview.transactionDigest) {
-        throw new Error("The wallet returned a different transaction. The renewal was not recorded.");
-      }
-      if (!("Transaction" in result)) {
-        throw new Error(executed.status?.error?.message ?? "The Sui wallet returned a failed renewal transaction.");
-      }
-      const confirmed = await props.client.confirmAgentFileRenewal(workspaceId, item.id, {
-        intentId: prepared.preview.intentId,
-        intentHash: prepared.preview.intentHash,
-        transactionDigest: executed.digest,
-      });
-      setFileVerifications((current) => ({ ...current, [item.id]: confirmed.verification }));
       setRenewingBackupId(null);
       await refresh();
-      showToast({
-        title: "Cloud copy renewed",
-        description: "Sui confirmed the renewed encrypted backup.",
-        tone: "success",
-      });
+      showToast({ title: "Cloud copy renewed", description: "The matching transaction is recorded.", tone: "success" });
     } catch (cause) {
-      const message = agentFileErrorMessage(cause);
-      setError(message === "Matterhorn could not complete this file action. Try again."
-        && cause instanceof Error
-        ? cause.message
-        : message);
+      if (current()) setError(cause instanceof WalletConfirmationRecoveryError ? cause.message : agentFileErrorMessage(cause));
     } finally {
-      setBusyFileId(null);
+      if (current()) setBusyFileId(null);
     }
-  }, [account, props.client, refresh, showToast, workspaceId]);
+  }, [account, props.client, recovery.execute, refresh, showToast, workspaceId]);
 
   const remove = useCallback(async () => {
     if (!props.client || !workspaceId || !deleteTarget) return;
@@ -654,6 +664,11 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-5">
+        <WalletConfirmationNotice recovery={recovery} kind="file" onConfirmed={async () => {
+          setFileVerifications({});
+          setRenewingBackupId(null);
+          await refresh();
+        }} />
         {query.isLoading ? (
           <div className="space-y-3 py-5" role="status" aria-label="Loading coworker files">
             <Skeleton className="h-9 w-full rounded-md" />
@@ -776,11 +791,11 @@ export function AgentFilesPanel(props: AgentFilesPanelProps) {
                     item={item}
                     selected={selectedFileIds.includes(item.id)}
                     backupAvailable={query.data.files.cloudBackup.available}
-                    renewalAvailable={query.data.files.cloudBackup.renewalAvailable}
-                    busy={busyFileId === item.id || walletConnection.isConnecting}
+                    renewalAvailable={query.data.files.cloudBackup.renewalAvailable && recovery.ready}
+                    busy={busyFileId === item.id || walletConnection.isConnecting || recovery.pending.some((pending) => pending.action === "file-renewal" && pending.resourceId === item.id)}
                     verification={fileVerifications[item.id] ?? null}
                     confirmingBackup={confirmingBackupId === item.id}
-                    renewingBackup={renewingBackupId === item.id}
+                    renewingBackup={renewingBackupId === item.id && !recovery.pending.some((pending) => pending.action === "file-renewal" && pending.resourceId === item.id)}
                     connectedWalletAddress={account?.address ?? null}
                     wallets={wallets}
                     onSelect={() => setSelectedFileIds((current) => (

@@ -108,6 +108,11 @@ user failure.
    for that user and template as `challenge_superseded`, clearing their code/link.
    This status is not a provider outage. Already claimed or accepted messages
    cannot be recalled by this queue cleanup; old challenges remain invalid.
+   A successful password change or reset invalidates outstanding reset links
+   and retires that account's pending/retrying/sending reset emails as
+   `password_changed`, clearing their stored link payloads in the same transaction.
+   This terminal status is expected cleanup, not a provider outage. An email
+   already in transit cannot be recalled, but its link no longer authorizes a reset.
    Configure the Turnstile site key and secret, and set
    `TURNSTILE_HOSTNAMES` to the exact public app hostname without localhost.
    Set the approved Terms and Privacy versions and enable legal acceptance.

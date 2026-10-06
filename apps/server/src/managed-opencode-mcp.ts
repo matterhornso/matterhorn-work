@@ -121,11 +121,11 @@ const MANAGED_MCP_TRANSPORTS: ManagedMcpTool[] = [
   {
     name: "matterhorn_bittensor_chat",
     title: "Bittensor desk read",
-    description: "Read public Bittensor data using readOperation and netuid/ss58Address. Never executes actions.",
+    description: "Read-only. subnet: omit netuid to list, set it for detail. validators: netuid required; wallet: ss58Address required.",
     inputSchema: objectSchema({
-      message: { type: "string", description: "Discovery text." },
+      message: { type: "string" },
       readOperation: { type: "string", enum: ["subnet", "wallet", "validators", "discovery"] },
-      ss58Address: { type: "string", description: "Optional public SS58 address." },
+      ss58Address: { type: "string" },
       netuid: { type: "number" },
       limit: { type: "number" },
       strategy: { type: "string", enum: ["balanced", "yield", "safety"] },
@@ -351,6 +351,18 @@ const MANAGED_MCP_TRANSPORTS: ManagedMcpTool[] = [
     }),
   },
   {
+    name: "matterhorn_sui_get_object",
+    title: "Sui public object",
+    description: "Read one public Sui object's bounded metadata. Never signs or submits.",
+    inputSchema: objectSchema({
+      objectId: { type: "string", maxLength: 66 },
+      network: { type: "string", enum: ["mainnet", "testnet"] },
+    }, ["objectId", "network"]),
+    request: (args) => ({
+      path: queryPath(`/api/sui/object/${encodeURIComponent(stringArg(args, "objectId"))}`, args, ["network"]),
+    }),
+  },
+  {
     name: "matterhorn_sui_preview_transfer",
     title: "Sui transfer preview",
     description: "Prepare a non-custodial Sui transfer preview for review in the user's wallet. Never signs or broadcasts.",
@@ -421,6 +433,7 @@ const LEGACY_MODEL_RESULT_KEYS: Readonly<Record<string, readonly string[]>> = {
   matterhorn_polymarket_preview_order: ["success", "preview"],
   matterhorn_polymarket_prepare_handoff: ["success", "preview"],
   matterhorn_sui_get_balance: ["success", "balance"],
+  matterhorn_sui_get_object: ["success", "object"],
   matterhorn_sui_preview_transfer: ["success", "preview"],
 };
 
@@ -477,6 +490,10 @@ const MODEL_SAFE_MCP_ERROR_CODES = new Set([
   "polymarket_token_id_invalid",
   "polymarket_market_id_invalid",
   "sui_network_required",
+  "invalid_sui_object_id",
+  "invalid_sui_network",
+  "sui_object_not_found",
+  "sui_provider_unavailable",
   "reviewed_action_receipt_unavailable",
   "transaction_capability_proof_missing",
   "transaction_context_invalid",
@@ -577,11 +594,18 @@ function containsForbiddenToolResultSecret(value: unknown): boolean {
 
 function projectBittensorDiscovery(result: JsonObject): JsonObject {
   const data = result.data;
-  if (!isJsonObject(data) || !isJsonObject(data.discovery)) return result;
+  if (!isJsonObject(data)) return result;
+  const subnetKeys = ["netuid", "name", "source", "block", "updatedAt", "freshness", "warnings", "priceTao", "emission", "tempo"];
+  const projectSubnet = (subnet: JsonObject) => Object.fromEntries(subnetKeys
+    .filter(key => subnet[key] !== undefined).map(key => [key, subnet[key]]));
+  if (Array.isArray(data.subnets)) return { ...result, data: {
+    subnets: data.subnets.filter(isJsonObject).map(projectSubnet),
+    omittedSubnets: data.omittedSubnets, configuredNetwork: data.configuredNetwork,
+  } };
+  if (!isJsonObject(data.discovery)) return result;
   const discovery = data.discovery;
   const matches = discovery.matches;
   if (!Array.isArray(matches)) return result;
-  const subnetKeys = ["netuid", "name", "source", "block", "updatedAt", "freshness", "warnings", "priceTao", "emission", "tempo"];
   // Discovery also carries duplicate UI cards, capability catalog entries and
   // suggested workflows. Spend model context on the requested chain evidence.
   const { plan: _plan, data: _data, ...answer } = result;
@@ -592,15 +616,188 @@ function projectBittensorDiscovery(result: JsonObject): JsonObject {
         matches: matches.filter(isJsonObject).map((match) => {
           const subnet = match.subnet;
           if (!isJsonObject(subnet)) return {};
-          return { subnet: Object.fromEntries(subnetKeys
-            .filter(key => subnet[key] !== undefined)
-            .map(key => [key, subnet[key]])) };
+          return { subnet: projectSubnet(subnet) };
         }),
         source: discovery.source,
         warnings: discovery.warnings,
       },
     },
   };
+}
+
+function shortSuiPublicId(value: unknown): string {
+  if (typeof value !== "string" || !/^0x[0-9a-f]{1,64}$/i.test(value)) {
+    throw new Error("matterhorn_tool_result_rejected");
+  }
+  return `0x${value.slice(2).toLowerCase().replace(/^0+/, "") || "0"}`;
+}
+
+function projectSuiObjectRead(result: JsonObject): JsonObject {
+  const object = result.object;
+  if (!isJsonObject(object) || !isJsonObject(object.owner)) throw new Error("matterhorn_tool_result_rejected");
+  // These describe the read tool, not whether the on-chain object can be used
+  // by a transaction. Preserve them in the backend API, not model object facts.
+  const { custody: _custody, canSubmit: _canSubmit, ...metadata } = object;
+  const owner = { ...object.owner };
+  if (owner.address !== undefined) owner.address = shortSuiPublicId(owner.address);
+  if (owner.objectId !== undefined) owner.objectId = shortSuiPublicId(owner.objectId);
+  let type = object.type;
+  if (type !== "package") {
+    if (!isJsonObject(type)) throw new Error("matterhorn_tool_result_rejected");
+    type = { ...type, packageAddress: shortSuiPublicId(type.packageAddress) };
+  }
+  // Short hex is losslessly equivalent, not an ellipsis or truncated identity.
+  // Only these schema-known public identifiers change; digest/version do not.
+  return { ...result, object: { ...metadata, objectId: shortSuiPublicId(object.objectId), owner, type } };
+}
+
+function projectPolymarketMarket(value: JsonObject, detail: boolean): JsonObject {
+  const projected: JsonObject = {};
+  const textLimits: Record<string, number> = { id: 128, question: 180, endDate: 40 };
+  if (detail) textLimits.description = 400;
+  for (const [key, limit] of Object.entries(textLimits)) {
+    const text = value[key];
+    if (typeof text !== "string") continue;
+    // Identifiers must remain exact; never fabricate a shortened lookup key.
+    if (key === "id" && text.length > limit) continue;
+    projected[key] = text.length <= limit ? text : `${text.slice(0, limit)}… [truncated]`;
+  }
+  for (const key of ["active", "closed"]) {
+    if (typeof value[key] === "boolean") projected[key] = value[key];
+  }
+  for (const key of ["volume", "liquidity"]) {
+    if (typeof value[key] === "number" && Number.isFinite(value[key])) projected[key] = value[key];
+  }
+  if (isJsonObject(value.outcomePrices)) {
+    const prices = Object.fromEntries(Object.entries(value.outcomePrices)
+      .filter(([label, price]) => label.length <= 80 && typeof price === "number" && Number.isFinite(price))
+      .slice(0, 4));
+    projected.outcomePrices = prices;
+    projected.omittedOutcomes = Object.keys(value.outcomePrices).length - Object.keys(prices).length;
+  }
+  if (detail && Array.isArray(value.outcomes)) {
+    projected.outcomes = value.outcomes.slice(0, 4).map((outcome) => typeof outcome === "string"
+      ? outcome.slice(0, 80)
+      : isJsonObject(outcome) ? {
+          outcome: typeof outcome.outcome === "string" ? outcome.outcome.slice(0, 80) : null,
+          price: typeof outcome.price === "number" && Number.isFinite(outcome.price) ? outcome.price : null,
+        } : null);
+  }
+  if (detail && isJsonObject(value.tokenIds)) {
+    projected.tokenIds = Object.fromEntries(Object.entries(value.tokenIds)
+      .filter(([label, token]) => label.length <= 80 && typeof token === "string" && /^\d{1,78}$/.test(token)).slice(0, 4));
+  }
+  if (isJsonObject(value.source)) {
+    const source: JsonObject = {};
+    for (const [key, limit] of Object.entries({ source: 180, fetchedAt: 40, freshness: 16 })) {
+      const text = value.source[key];
+      if (typeof text === "string" && text.length <= limit) source[key] = text;
+    }
+    if (Array.isArray(value.source.warnings)) source.warnings = value.source.warnings.filter((warning): warning is string => typeof warning === "string").slice(0, 2).map(warning => warning.slice(0, 120));
+    projected.source = source;
+  }
+  return projected;
+}
+
+function projectPolymarketMarketRead(result: JsonObject): JsonObject {
+  if (Array.isArray(result.markets)) return { ...result, markets: result.markets.filter(isJsonObject).map(market => projectPolymarketMarket(market, false)) };
+  if (isJsonObject(result.market)) return { ...result, market: projectPolymarketMarket(result.market, true) };
+  return result;
+}
+
+/** Keep useful public records, not an all-or-nothing context-limit notice. */
+function boundPolymarketMarketRead(result: unknown, maxChars: number): unknown {
+  if (!isJsonObject(result)) return result;
+  const note = "Public research summaries; resolution details and extended metadata may be omitted. Use marketId for exact detail.";
+  if (Array.isArray(result.markets)) {
+    const markets: unknown[] = [];
+    const bounded = { success: result.success, markets, receivedMarkets: result.markets.length, omittedMarkets: result.markets.length, _matterhornContext: note };
+    for (const candidate of result.markets) {
+      if (!isJsonObject(candidate)) continue;
+      const market = { ...candidate };
+      // Even a single unusually verbose record must leave useful evidence.
+      const fitsAlone = () => JSON.stringify({ ...bounded, markets: [market] }).length <= maxChars;
+      for (const optional of ["liquidity", "volume", "outcomePrices"]) {
+        if (fitsAlone()) break;
+        if (optional === "outcomePrices" && isJsonObject(market.outcomePrices)) market.omittedOutcomes = Object.keys(market.outcomePrices).length + Number(market.omittedOutcomes ?? 0);
+        delete market[optional];
+      }
+      markets.push(market);
+      bounded.omittedMarkets = result.markets.length - markets.length;
+      if (JSON.stringify(bounded).length > maxChars) { markets.pop(); bounded.omittedMarkets += 1; break; }
+    }
+    return bounded;
+  }
+  if (isJsonObject(result.market)) {
+    const market = { ...result.market };
+    const bounded = { success: result.success, market, _matterhornContext: "Public market detail; long resolution rules or extended metadata may be truncated or omitted." };
+    for (const optional of ["description", "outcomes", "tokenIds", "liquidity", "volume"]) {
+      if (JSON.stringify(bounded).length <= maxChars) break;
+      delete market[optional];
+    }
+    return bounded;
+  }
+  return result;
+}
+
+function projectPredictionMarketSearch(result: JsonObject): JsonObject {
+  const markets = Array.isArray(result.markets) ? result.markets : [];
+  const safety = result.safety;
+  const marketTypes: Record<string, string> = { polymarket: "real_money", kalshi: "real_money", manifold: "play_money" };
+  return {
+    version: result.version,
+    query: typeof result.query === "string" ? result.query.slice(0, 160) : "",
+    fetchedAt: result.fetchedAt,
+    safety: isJsonObject(safety) ? Object.fromEntries(
+      ["researchOnlyOutsideReviewedPolymarket", "eligibilityCheckedBeforeExecution", "unattendedTrading"]
+        .filter(key => typeof safety[key] === "boolean").map(key => [key, safety[key]]),
+    ) : {},
+    venues: Array.isArray(result.venues) ? result.venues.filter(isJsonObject).map(venue => Object.fromEntries(
+      ["venueId", "status", "resultCount"].filter(key => venue[key] !== undefined).map(key => [key, venue[key]]),
+    )) : [],
+    markets: markets.filter(isJsonObject).map((market) => {
+      const projected: JsonObject = {};
+      for (const [key, limit] of Object.entries({ venueId: 16, id: 128, title: 120, url: 180, status: 16,
+        probabilityLabel: 40, unit: 12, sourceFetchedAt: 40 })) {
+        const value = market[key];
+        if (typeof value !== "string") continue;
+        if (value.length <= limit) projected[key] = value;
+        else if (key === "title") projected[key] = `${value.slice(0, limit)}… [truncated]`;
+      }
+      for (const key of ["probability", "liquidity"]) {
+        if (market[key] === null || (typeof market[key] === "number" && Number.isFinite(market[key]))) projected[key] = market[key];
+      }
+      // These are the fixed classifications of the three supported providers;
+      // play-money probabilities must never become real-money order evidence.
+      if (typeof market.venueId === "string" && Object.hasOwn(marketTypes, market.venueId)) projected.marketType = marketTypes[market.venueId];
+      return projected;
+    }),
+  };
+}
+
+function boundPredictionMarketSearch(result: unknown, maxChars: number): unknown {
+  if (!isJsonObject(result) || !Array.isArray(result.markets)) return result;
+  const received = result.markets;
+  const markets: JsonObject[] = [];
+  const bounded = { ...result, markets, receivedMarkets: result.markets.length, omittedMarkets: result.markets.length,
+    _matterhornContext: "Market summaries; extended metadata omitted. Kalshi and Manifold are research-only." };
+  // Round-robin preserves cross-venue evidence before adding a second result
+  // from one venue. Keep provider status/counts even when records are omitted.
+  const queues = ["polymarket", "kalshi", "manifold"].map(venueId => received
+    .filter(isJsonObject).filter(market => market.venueId === venueId));
+  while (queues.some(queue => queue.length > 0)) {
+    for (const queue of queues) {
+      const market = queue.shift();
+      if (!market) continue;
+      markets.push(market);
+      bounded.omittedMarkets = result.markets.length - markets.length;
+      if (JSON.stringify(bounded).length > maxChars) {
+        markets.pop();
+        bounded.omittedMarkets += 1;
+      }
+    }
+  }
+  return bounded;
 }
 
 function stripPrivateModelResultFields(value: unknown, depth = 0): unknown {
@@ -710,6 +907,9 @@ function projectManagedMcpResult(input: {
       .filter((key) => rawResult[key] !== undefined)
       .map((key) => [key, rawResult[key]]));
     if (input.tool.name === "matterhorn_bittensor_chat") closed = projectBittensorDiscovery(closed);
+    if (input.tool.name === "matterhorn_polymarket_search_markets") closed = projectPolymarketMarketRead(closed);
+    if (input.tool.name === "matterhorn_prediction_markets_search") closed = projectPredictionMarketSearch(closed);
+    if (input.tool.name === "matterhorn_sui_get_object") closed = projectSuiObjectRead(closed);
   }
   if (Object.keys(closed).length === 0) {
     throw new Error("matterhorn_tool_result_rejected");
@@ -723,7 +923,10 @@ function projectManagedMcpResult(input: {
     ? MANAGED_MCP_MODEL_PREPARE_CONTENT_MAX_CHARS
     : MANAGED_MCP_MODEL_READ_CONTENT_MAX_CHARS;
   return {
-    result: compactStructuredModelResult(quarantined, maxChars),
+    result: compactStructuredModelResult(input.origin === "legacy" && input.tool.name === "matterhorn_polymarket_search_markets"
+      ? boundPolymarketMarketRead(quarantined, maxChars)
+      : input.origin === "legacy" && input.tool.name === "matterhorn_prediction_markets_search"
+        ? boundPredictionMarketSearch(quarantined, maxChars) : quarantined, maxChars),
     sanitization: untrustedContentChanged(stripped, quarantined) ? "quarantined" : "typed_projection",
   };
 }
@@ -1030,7 +1233,7 @@ async function callBackendTool(input: {
   let source: string | undefined;
   let freshness: string | undefined;
   try {
-    if (input.tool.name === "matterhorn_sui_get_balance"
+    if ((input.tool.name === "matterhorn_sui_get_balance" || input.tool.name === "matterhorn_sui_get_object")
       && input.args.network !== "mainnet" && input.args.network !== "testnet") {
       throw new Error("sui_network_required");
     }

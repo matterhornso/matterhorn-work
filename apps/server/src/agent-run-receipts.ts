@@ -1,4 +1,6 @@
-import { appendFile, mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
+import { closeSync, constants, fsyncSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, writeSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -13,7 +15,8 @@ import { canonicalJson, sha256 } from "./guarded-runtime-crypto.js";
 import type { MatterhornGuardedRuntimeStateStore } from "./guarded-runtime-state-store.js";
 
 const RETENTION_DAYS = 365;
-const RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1_000;
+const DAY_MS = 24 * 60 * 60 * 1_000;
+const RETENTION_MS = RETENTION_DAYS * DAY_MS;
 
 function dataRoot(): string {
   const override = process.env.MATTERHORN_WORK_DATA_DIR?.trim() || process.env.OPENWORK_DATA_DIR?.trim();
@@ -42,6 +45,32 @@ function recordHash(receipt: MatterhornAgentRunReceipt): string {
     ...receipt,
     integrity: { previousHash: receipt.integrity.previousHash, recordHash: "" },
   });
+}
+
+function fileBytes(path: string): Buffer {
+  try { return readFileSync(path); }
+  catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return Buffer.alloc(0);
+    throw error;
+  }
+}
+
+function bytesHash(value: Buffer): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+type ReceiptAppendIntent = {
+  version: 1;
+  writtenAt: string;
+  prefixBytes: number;
+  prefixHash: string;
+  previousIndexHash: string;
+  receipt: MatterhornAgentRunReceipt;
+};
+
+function receiptIndexValue(receipt: MatterhornAgentRunReceipt) {
+  return { runId: receipt.runId, workspaceId: receipt.workspaceId, sessionId: receipt.sessionId,
+    receiptId: receipt.id, status: receipt.status, recordHash: receipt.integrity.recordHash, completedAt: receipt.completedAt };
 }
 
 export type StartAgentRunReceiptInput = {
@@ -132,6 +161,7 @@ export class MatterhornAgentRunReceiptStore {
   private readonly previousHashes = new Map<string, string>();
   private readonly writeQueues = new Map<string, Promise<void>>();
   private readonly receiptIndexState: MatterhornDurableAuthorizedState | null;
+  private readonly appendIntentState: MatterhornDurableAuthorizedState | null;
 
   constructor(
     private readonly stateStore?: MatterhornGuardedRuntimeStateStore,
@@ -145,11 +175,13 @@ export class MatterhornAgentRunReceiptStore {
         "agent_run_receipt_index_invalid",
       )
       : null;
+    this.appendIntentState = stateStore && authority
+      ? new MatterhornDurableAuthorizedState(stateStore, authority, "receipt_append_intent", "agent_run_receipt_intent_invalid")
+      : null;
   }
 
   async start(input: StartAgentRunReceiptInput): Promise<MatterhornAgentRunReceipt> {
     const now = input.now ?? new Date();
-    await this.load(input.workspaceId, now);
     const receipt: MatterhornAgentRunReceipt = {
       version: "matterhorn.agent-run-receipt.v1",
       id: `run_receipt_${input.runId.replace(/[^a-zA-Z0-9_-]/g, "_")}`,
@@ -204,10 +236,11 @@ export class MatterhornAgentRunReceiptStore {
       reviewedActions: [],
       integrity: { previousHash: this.previousHashes.get(input.workspaceId) ?? null, recordHash: "" },
     };
-    receipt.integrity.recordHash = recordHash(receipt);
-    this.latest.set(receipt.runId, receipt);
-    await this.append(receipt, now);
-    return receipt;
+    await this.write(input.workspaceId, () => {
+      if (this.latest.has(receipt.runId)) throw new Error("agent_run_receipt_already_exists");
+      return receipt;
+    }, now);
+    return structuredClone(receipt);
   }
 
   async recordTool(input: {
@@ -216,11 +249,10 @@ export class MatterhornAgentRunReceiptStore {
     capabilityDecisions?: MatterhornAgentCapabilityDecision[];
     now?: Date;
   }): Promise<void> {
-    const receipt = this.latest.get(input.runId);
-    if (!receipt) return;
-    receipt.tools = [...receipt.tools, input.tool].slice(-100);
-    if (input.capabilityDecisions) receipt.capabilities = input.capabilityDecisions.slice(-100);
-    await this.rehashAndAppend(receipt, input.now ?? new Date());
+    await this.mutate(input.runId, (receipt) => {
+      receipt.tools = [...receipt.tools, input.tool].slice(-100);
+      if (input.capabilityDecisions) receipt.capabilities = input.capabilityDecisions.slice(-100);
+    }, input.now ?? new Date());
   }
 
   async addReviewedAction(input: {
@@ -231,22 +263,20 @@ export class MatterhornAgentRunReceiptStore {
     publicReceipt?: string | null;
     now?: Date;
   }): Promise<void> {
-    const receipt = this.latest.get(input.runId);
-    if (!receipt) return;
-    receipt.reviewedActions = [...receipt.reviewedActions.filter((item) => item.intentHash !== input.intentHash), {
-      intentHash: input.intentHash,
-      policyHash: input.policyHash,
-      simulationReference: input.simulationReference,
-      publicReceipt: input.publicReceipt ?? null,
-    }].slice(-20);
-    await this.rehashAndAppend(receipt, input.now ?? new Date());
+    await this.mutate(input.runId, (receipt) => {
+      receipt.reviewedActions = [...receipt.reviewedActions.filter((item) => item.intentHash !== input.intentHash), {
+        intentHash: input.intentHash,
+        policyHash: input.policyHash,
+        simulationReference: input.simulationReference,
+        publicReceipt: input.publicReceipt ?? null,
+      }].slice(-20);
+    }, input.now ?? new Date());
   }
 
   async recordMemoryWrite(input: { runId: string; memoryId: string; now?: Date }): Promise<void> {
-    const receipt = this.latest.get(input.runId);
-    if (!receipt) return;
-    receipt.memory.writtenIds = [...new Set([...receipt.memory.writtenIds, input.memoryId])].sort();
-    await this.rehashAndAppend(receipt, input.now ?? new Date());
+    await this.mutate(input.runId, (receipt) => {
+      receipt.memory.writtenIds = [...new Set([...receipt.memory.writtenIds, input.memoryId])].sort();
+    }, input.now ?? new Date());
   }
 
   async complete(input: {
@@ -256,27 +286,35 @@ export class MatterhornAgentRunReceiptStore {
     memoryWrittenIds?: string[];
     capabilityDecisions?: MatterhornAgentCapabilityDecision[];
     now?: Date;
+    /** Synchronous completion authorization check under the receipt writer lock. */
+    assertCurrent?: () => void;
   }): Promise<void> {
-    const receipt = this.latest.get(input.runId);
-    if (!receipt) return;
     const now = input.now ?? new Date();
-    receipt.status = input.status;
-    receipt.completedAt = now.toISOString();
-    receipt.responseDurationMs = Math.max(0, now.getTime() - Date.parse(receipt.startedAt));
-    if (input.usage) {
-      receipt.usage = {
-        ...receipt.usage,
-        inputTokens: Math.max(0, input.usage.inputTokens ?? receipt.usage.inputTokens),
-        outputTokens: Math.max(0, input.usage.outputTokens ?? receipt.usage.outputTokens),
-        reasoningTokens: Math.max(0, input.usage.reasoningTokens ?? receipt.usage.reasoningTokens),
-        cacheReadTokens: Math.max(0, input.usage.cacheReadTokens ?? receipt.usage.cacheReadTokens),
-        cacheWriteTokens: Math.max(0, input.usage.cacheWriteTokens ?? receipt.usage.cacheWriteTokens),
-        estimatedCostUsd: Math.max(0, input.usage.estimatedCostUsd ?? receipt.usage.estimatedCostUsd),
-      };
-    }
-    if (input.memoryWrittenIds) receipt.memory.writtenIds = [...new Set(input.memoryWrittenIds)].sort();
-    if (input.capabilityDecisions) receipt.capabilities = input.capabilityDecisions.slice(-100);
-    await this.rehashAndAppend(receipt, now);
+    await this.mutate(input.runId, (receipt) => {
+      input.assertCurrent?.();
+      // The first terminal outcome closes execution. A delayed usage report is
+      // not a new run or permission to turn a cancelled/error run into success.
+      if (receipt.status === "pending") {
+        receipt.status = input.status;
+        receipt.completedAt = now.toISOString();
+        receipt.responseDurationMs = Math.max(0, now.getTime() - Date.parse(receipt.startedAt));
+      }
+      if (input.usage) {
+        // Runtime reports are cumulative snapshots without revision ordering.
+        // Accept later observed usage, but never subtract on an older replay.
+        receipt.usage = {
+          ...receipt.usage,
+          inputTokens: Math.max(receipt.usage.inputTokens, input.usage.inputTokens ?? 0),
+          outputTokens: Math.max(receipt.usage.outputTokens, input.usage.outputTokens ?? 0),
+          reasoningTokens: Math.max(receipt.usage.reasoningTokens, input.usage.reasoningTokens ?? 0),
+          cacheReadTokens: Math.max(receipt.usage.cacheReadTokens, input.usage.cacheReadTokens ?? 0),
+          cacheWriteTokens: Math.max(receipt.usage.cacheWriteTokens, input.usage.cacheWriteTokens ?? 0),
+          estimatedCostUsd: Math.max(receipt.usage.estimatedCostUsd, input.usage.estimatedCostUsd ?? 0),
+        };
+      }
+      if (input.memoryWrittenIds) receipt.memory.writtenIds = [...new Set(input.memoryWrittenIds)].sort();
+      if (input.capabilityDecisions) receipt.capabilities = input.capabilityDecisions.slice(-100);
+    }, now);
   }
 
   async get(workspaceId: string, runId: string): Promise<MatterhornAgentRunReceipt | null> {
@@ -296,50 +334,64 @@ export class MatterhornAgentRunReceiptStore {
   }
 
   async purgeExpired(workspaceId: string, now = new Date()): Promise<number> {
-    this.stateStore?.deleteExpired(now.getTime());
-    const directory = agentSecurityReceiptDirectory(workspaceId);
-    let files: string[];
-    try {
-      files = await readdir(directory);
-    } catch {
-      return 0;
-    }
-    let removed = 0;
-    for (const file of files) {
-      const match = /^(\d{4}-\d{2}-\d{2})\.jsonl$/.exec(file);
-      if (!match) continue;
-      const timestamp = Date.parse(`${match[1]}T00:00:00.000Z`);
-      if (!Number.isFinite(timestamp) || now.getTime() - timestamp <= RETENTION_MS) continue;
-      await rm(join(directory, file), { force: true });
-      removed += 1;
-    }
-    for (const [runId, receipt] of this.latest) {
-      if (receipt.workspaceId !== workspaceId) continue;
-      const timestamp = Date.parse(receipt.completedAt ?? receipt.startedAt);
-      if (Number.isFinite(timestamp) && now.getTime() - timestamp > RETENTION_MS) {
-        this.latest.delete(runId);
-        if (this.receiptIndexState) this.receiptIndexState.delete(runId);
-        else this.stateStore?.delete("receipt_index", runId);
+    return this.transaction(() => {
+      // Finish a committed append before removing any of its recovery evidence.
+      // Keep file cleanup in the same writer lock; no async filesystem gap.
+      this.recoverAppend(workspaceId, now);
+      this.stateStore?.deleteExpired(now.getTime());
+      const directory = agentSecurityReceiptDirectory(workspaceId);
+      let files: string[];
+      try { files = readdirSync(directory); }
+      catch (error) {
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+        files = [];
       }
-    }
-    return removed;
+      let removed = 0;
+      for (const file of files) {
+        const match = /^(\d{4}-\d{2}-\d{2})\.jsonl$/.exec(file);
+        if (!match) continue;
+        const timestamp = Date.parse(`${match[1]}T00:00:00.000Z`);
+        if (!Number.isFinite(timestamp) || now.getTime() - (timestamp + DAY_MS) < RETENTION_MS) continue;
+        rmSync(join(directory, file), { force: true });
+        removed += 1;
+      }
+      for (const [runId, receipt] of this.latest) {
+        if (receipt.workspaceId !== workspaceId) continue;
+        const timestamp = Date.parse(receipt.completedAt ?? receipt.startedAt);
+        if (Number.isFinite(timestamp) && now.getTime() - timestamp >= RETENTION_MS) {
+          // Another store may have committed a newer completion since this cache
+          // was read. Durable expiry above uses the current row, never this copy.
+          this.latest.delete(runId);
+        }
+      }
+      return removed;
+    });
   }
 
   private async load(workspaceId: string, now = new Date()): Promise<void> {
-    if ([...this.latest.values()].some((receipt) => receipt.workspaceId === workspaceId)) return;
+    await this.writeQueues.get(workspaceId);
+    this.transaction(() => {
+      this.recoverAppend(workspaceId, now);
+      this.loadFiles(workspaceId, now);
+    });
+  }
+
+  private loadFiles(workspaceId: string, now: Date): void {
     const directory = agentSecurityReceiptDirectory(workspaceId);
     let files: string[];
     try {
-      files = (await readdir(directory)).filter((file) => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(file)).sort();
-    } catch {
-      return;
+      files = readdirSync(directory).filter((file) => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(file)).sort();
+    } catch (error) {
+      if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+      files = [];
     }
+    const loaded = new Map<string, MatterhornAgentRunReceipt>();
     const nowMs = now.getTime();
     let expectedPreviousHash: string | null | undefined;
     for (const file of files) {
       const day = Date.parse(`${file.slice(0, 10)}T00:00:00.000Z`);
-      if (Number.isFinite(day) && nowMs - day > RETENTION_MS) continue;
-      const text = await readFile(join(directory, file), "utf8").catch(() => "");
+      if (Number.isFinite(day) && nowMs - (day + DAY_MS) >= RETENTION_MS) continue;
+      const text = readFileSync(join(directory, file), "utf8");
       for (const line of text.split("\n")) {
         if (!line.trim()) continue;
         try {
@@ -359,63 +411,151 @@ export class MatterhornAgentRunReceiptStore {
           }
           // The oldest retained segment can legitimately point at an expired segment.
           expectedPreviousHash = receipt.integrity.recordHash;
-          const current = this.latest.get(receipt.runId);
+          const current = loaded.get(receipt.runId);
           if (!current || Date.parse(receipt.completedAt ?? receipt.startedAt) >= Date.parse(current.completedAt ?? current.startedAt)) {
-            this.latest.set(receipt.runId, receipt);
+            loaded.set(receipt.runId, receipt);
           }
-          this.previousHashes.set(workspaceId, receipt.integrity.recordHash);
         } catch (error) {
           if (error instanceof AgentRunReceiptIntegrityError) throw error;
           throw new AgentRunReceiptIntegrityError(workspaceId, file);
         }
       }
     }
+    for (const [runId, receipt] of loaded) {
+      if (nowMs - Date.parse(receipt.completedAt ?? receipt.startedAt) >= RETENTION_MS) {
+        loaded.delete(runId);
+        continue;
+      }
+      const index = this.receiptIndexState?.getRecord<unknown>(runId, nowMs);
+      if (this.receiptIndexState && (!index || index.workspaceId !== workspaceId || index.sessionId !== receipt.sessionId
+        || canonicalJson(index.value) !== canonicalJson(receiptIndexValue(receipt)))) {
+        throw new Error("agent_run_receipt_index_invalid");
+      }
+    }
+    if (this.receiptIndexState) {
+      for (const record of this.receiptIndexState.listRecords({ workspaceId, nowMs })) {
+        if (!loaded.has(record.key)) throw new Error("agent_run_receipt_index_invalid");
+      }
+    }
+    for (const [runId, receipt] of this.latest) {
+      if (receipt.workspaceId === workspaceId) this.latest.delete(runId);
+    }
+    for (const [runId, receipt] of loaded) this.latest.set(runId, receipt);
+    if (expectedPreviousHash) this.previousHashes.set(workspaceId, expectedPreviousHash);
+    else this.previousHashes.delete(workspaceId);
   }
 
-  private async rehashAndAppend(receipt: MatterhornAgentRunReceipt, now: Date): Promise<void> {
-    await this.append(receipt, now);
+  private transaction<T>(callback: () => T): T {
+    return this.stateStore ? this.stateStore.transaction(callback) : callback();
   }
 
-  private async append(receipt: MatterhornAgentRunReceipt, now: Date): Promise<void> {
-    const workspaceId = receipt.workspaceId;
-    // Capture content synchronously, then assign the chain link and hash inside
-    // the serialized workspace writer. This prevents concurrent tool/session
-    // completion events from calculating the same previous hash or persisting
-    // a later mutation in an earlier queued record.
-    const snapshot = structuredClone(receipt);
+  private async mutate(runId: string, update: (receipt: MatterhornAgentRunReceipt) => void, now: Date): Promise<void> {
+    const workspaceId = this.latest.get(runId)?.workspaceId;
+    if (!workspaceId) return;
+    await this.write(workspaceId, () => {
+      const current = this.latest.get(runId);
+      if (!current || current.workspaceId !== workspaceId) throw new Error("agent_run_receipt_unavailable");
+      const receipt = structuredClone(current);
+      update(receipt);
+      return receipt;
+    }, now);
+  }
+
+  private async write(workspaceId: string, prepare: () => MatterhornAgentRunReceipt, now: Date): Promise<void> {
     const previous = this.writeQueues.get(workspaceId) ?? Promise.resolve();
     const next = previous.then(async () => {
-      snapshot.integrity = {
-        previousHash: this.previousHashes.get(workspaceId) ?? null,
-        recordHash: "",
-      };
-      snapshot.integrity.recordHash = recordHash(snapshot);
-      await mkdir(agentSecurityReceiptDirectory(workspaceId), { recursive: true, mode: 0o700 });
-      await appendFile(receiptPath(workspaceId, now), `${canonicalJson(snapshot)}\n`, { encoding: "utf8", mode: 0o600 });
-      this.previousHashes.set(workspaceId, snapshot.integrity.recordHash);
-      receipt.integrity = structuredClone(snapshot.integrity);
-      const receiptExpiryBase = Date.parse(snapshot.completedAt ?? snapshot.startedAt);
-      const index = {
-        key: snapshot.runId,
-        workspaceId: snapshot.workspaceId,
-        sessionId: snapshot.sessionId,
-        value: {
-          runId: snapshot.runId,
-          workspaceId: snapshot.workspaceId,
-          sessionId: snapshot.sessionId,
-          receiptId: snapshot.id,
-          status: snapshot.status,
-          recordHash: snapshot.integrity.recordHash,
-          completedAt: snapshot.completedAt,
-        },
-        expiresAtMs: (Number.isFinite(receiptExpiryBase) ? receiptExpiryBase : now.getTime()) + RETENTION_MS,
-        nowMs: now.getTime(),
-      };
-      if (this.receiptIndexState) this.receiptIndexState.put(index);
-      else this.stateStore?.put({ kind: "receipt_index", ...index });
+      // The journal commits before file IO. SQLite also serializes separate
+      // receipt-store instances sharing this database; never await inside it.
+      const snapshot = this.transaction(() => {
+        this.recoverAppend(workspaceId, now);
+        this.loadFiles(workspaceId, now);
+        const snapshot = prepare();
+        const prior = this.latest.get(snapshot.runId);
+        const index = this.receiptIndexState?.getRecord<{ recordHash: string }>(snapshot.runId, now.getTime()) ?? null;
+        if (this.receiptIndexState && (prior?.integrity.recordHash ?? null) !== (index?.value.recordHash ?? null)) {
+          throw new Error("agent_run_receipt_index_invalid");
+        }
+        snapshot.integrity = { previousHash: this.previousHashes.get(workspaceId) ?? null, recordHash: "" };
+        snapshot.integrity.recordHash = recordHash(snapshot);
+        const prefix = fileBytes(receiptPath(workspaceId, now));
+        if (prefix.length && prefix.at(-1) !== 10) throw new AgentRunReceiptIntegrityError(workspaceId, dayKey(now));
+        const intent: ReceiptAppendIntent = { version: 1, writtenAt: now.toISOString(), prefixBytes: prefix.length,
+          prefixHash: bytesHash(prefix), previousIndexHash: sha256(index), receipt: snapshot };
+        if (this.appendIntentState) {
+          this.appendIntentState.put({ key: workspaceId, workspaceId, sessionId: snapshot.sessionId,
+            value: intent, expiresAtMs: now.getTime() + RETENTION_MS, nowMs: now.getTime() });
+        } else {
+          this.finishAppend(intent);
+        }
+        return snapshot;
+      });
+      // Retain only the identity needed for a caller's error-finalization path.
+      // Every mutation/read reloads authenticated disk state before using it.
+      this.latest.set(snapshot.runId, snapshot);
+      this.transaction(() => this.recoverAppend(workspaceId, now));
+      this.loadFiles(workspaceId, now);
       await this.purgeExpired(workspaceId, now);
     });
     this.writeQueues.set(workspaceId, next.catch(() => undefined));
     await next;
+  }
+
+  private recoverAppend(workspaceId: string, now: Date): void {
+    const record = this.appendIntentState?.getRecord<ReceiptAppendIntent>(workspaceId, now.getTime());
+    if (!record) return;
+    const intent = record.value;
+    const receipt = intent?.receipt;
+    if (!intent || intent.version !== 1 || Object.keys(intent).sort().join(",") !== "prefixBytes,prefixHash,previousIndexHash,receipt,version,writtenAt"
+      || typeof intent.writtenAt !== "string" || Date.parse(intent.writtenAt) !== record.updatedAtMs
+      || new Date(record.updatedAtMs).toISOString() !== intent.writtenAt
+      || record.workspaceId !== workspaceId || record.key !== workspaceId
+      || record.expiresAtMs !== record.updatedAtMs + RETENTION_MS
+      || !Number.isSafeInteger(intent.prefixBytes) || intent.prefixBytes < 0
+      || !/^[a-f0-9]{64}$/.test(intent.prefixHash) || !/^[a-f0-9]{64}$/.test(intent.previousIndexHash)
+      || !receipt || receipt.version !== "matterhorn.agent-run-receipt.v1"
+      || receipt.workspaceId !== workspaceId || receipt.sessionId !== record.sessionId
+      || typeof receipt.runId !== "string" || !receipt.runId
+      || receipt.id !== `run_receipt_${receipt.runId.replace(/[^a-zA-Z0-9_-]/g, "_")}`
+      || !receipt.integrity || receipt.integrity.recordHash !== recordHash(receipt)) {
+      throw new Error("agent_run_receipt_intent_invalid");
+    }
+    // A completion intent can outlive its prior pending index's retention date.
+    // Read that exact sealed predecessor for hash comparison only, not authority.
+    const index = this.receiptIndexState?.getRecord<unknown>(receipt.runId, 0) ?? null;
+    if (sha256(index) !== intent.previousIndexHash) throw new Error("agent_run_receipt_intent_invalid");
+    this.finishAppend(intent);
+    this.appendIntentState?.delete(workspaceId);
+  }
+
+  private finishAppend(intent: ReceiptAppendIntent): void {
+    const snapshot = intent.receipt;
+    const now = new Date(intent.writtenAt);
+    const directory = agentSecurityReceiptDirectory(snapshot.workspaceId);
+    const path = receiptPath(snapshot.workspaceId, now);
+    const bytes = fileBytes(path);
+    const line = Buffer.from(`${canonicalJson(snapshot)}\n`);
+    const suffix = bytes.subarray(intent.prefixBytes);
+    if (bytes.length < intent.prefixBytes || bytesHash(bytes.subarray(0, intent.prefixBytes)) !== intent.prefixHash
+      || suffix.length > line.length || !suffix.equals(line.subarray(0, suffix.length))) {
+      throw new AgentRunReceiptIntegrityError(snapshot.workspaceId, path);
+    }
+    mkdirSync(directory, { recursive: true, mode: 0o700 });
+    const fd = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND | constants.O_NOFOLLOW, 0o600);
+    try {
+      let offset = suffix.length;
+      while (offset < line.length) {
+        const written = writeSync(fd, line, offset, line.length - offset);
+        if (!written) throw new Error("agent_run_receipt_write_incomplete");
+        offset += written;
+      }
+      fsyncSync(fd);
+    } finally { closeSync(fd); }
+    const directoryFd = openSync(directory, constants.O_RDONLY);
+    try { fsyncSync(directoryFd); } finally { closeSync(directoryFd); }
+    const index = { key: snapshot.runId, workspaceId: snapshot.workspaceId, sessionId: snapshot.sessionId,
+      value: receiptIndexValue(snapshot),
+      expiresAtMs: Date.parse(snapshot.completedAt ?? snapshot.startedAt) + RETENTION_MS, nowMs: now.getTime() };
+    if (this.receiptIndexState) this.receiptIndexState.put(index);
+    else this.stateStore?.put({ kind: "receipt_index", ...index });
   }
 }

@@ -642,7 +642,7 @@ function expectedRuntime() {
     opencode: {
       version: `v${String(constants.opencodeVersion ?? "").replace(/^v/, "")}`,
       commit: upstream.opencode?.commit,
-      sdkVersion: String(constants.opencodeVersion ?? "").replace(/^v/, ""),
+      sdkVersion: upstream.opencode?.sdkVersion,
     },
   };
 }

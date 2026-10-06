@@ -1,0 +1,507 @@
+diff --git a/packages/core/src/util/effect-flock.ts b/packages/core/src/util/effect-flock.ts
+index b859001..702326b 100644
+--- a/packages/core/src/util/effect-flock.ts
++++ b/packages/core/src/util/effect-flock.ts
+@@ -8,6 +8,7 @@ import { FSUtil } from "../fs-util"
+ import { Global } from "../global"
+ import { makeGlobalNode } from "../effect/app-node"
+ import { Hash } from "./hash"
++import { deadOwner, processScope } from "./lock-owner"
+
+ export namespace EffectFlock {
+   // ---------------------------------------------------------------------------
+@@ -62,6 +63,7 @@ export namespace EffectFlock {
+       pid: Schema.Number,
+       hostname: Schema.String,
+       createdAt: Schema.String,
++      processScope: Schema.optional(Schema.String),
+     }),
+   )
+
+@@ -101,6 +103,7 @@ export namespace EffectFlock {
+       const fs = yield* FSUtil.Service
+       const lockRoot = path.join(global.state, "locks")
+       const hostname = os.hostname()
++      const ownerScope = yield* Effect.promise(processScope)
+       const ensuredDirs = new Set<string>()
+
+       // -- helpers (close over fs) --
+@@ -148,6 +151,12 @@ export namespace EffectFlock {
+       })
+
+       const isStale = Effect.fnUntraced(function* (lockDir: string, heartbeatPath: string, metaPath: string) {
++        const owner = yield* fs.readFileString(metaPath).pipe(
++          Effect.flatMap((raw) => Effect.try({ try: () => decodeMeta(raw), catch: (cause) => cause })),
++          Effect.map((meta) => deadOwner(meta, ownerScope)),
++          Effect.orElseSucceed(() => undefined),
++        )
++        if (owner !== undefined) return owner
+         const now = wall()
+
+         const hb = yield* safeStat(heartbeatPath)
+@@ -206,7 +215,13 @@ export namespace EffectFlock {
+           // We own the lock dir — write heartbeat + meta with exclusive create
+           yield* exclusiveWrite(heartbeatPath, "", lockDir, "heartbeat already existed")
+
+-          const metaJson = encodeMeta({ token, pid: process.pid, hostname, createdAt: new Date().toISOString() })
++          const metaJson = encodeMeta({
++            token,
++            pid: process.pid,
++            hostname,
++            createdAt: new Date().toISOString(),
++            processScope: ownerScope,
++          })
+           yield* exclusiveWrite(metaPath, metaJson, lockDir, "meta.json already existed")
+
+           return { token, metaPath, heartbeatPath, lockDir } satisfies Handle
+diff --git a/packages/core/src/util/flock.ts b/packages/core/src/util/flock.ts
+index 958bd9f..9ad39bd 100644
+--- a/packages/core/src/util/flock.ts
++++ b/packages/core/src/util/flock.ts
+@@ -4,6 +4,7 @@ import { randomBytes, randomUUID } from "crypto"
+ import { mkdir, readFile, rm, stat, utimes, writeFile } from "fs/promises"
+ import { Hash } from "./hash"
+ import { Effect } from "effect"
++import { deadOwner, processScope } from "./lock-owner"
+
+ export type FlockGlobal = {
+   state: string
+@@ -125,6 +126,13 @@ export namespace Flock {
+   }
+
+   async function stale(lockDir: string, heartbeatPath: string, metaPath: string, staleMs: number) {
++    const owner = deadOwner(
++      await readFile(metaPath, "utf8")
++        .then(JSON.parse)
++        .catch(() => undefined),
++      await processScope(),
++    )
++    if (owner !== undefined) return owner
+     // Stale detection allows automatic recovery after crashed owners.
+     const now = wall()
+     const heartbeat = await stats(heartbeatPath)
+@@ -146,6 +154,7 @@ export namespace Flock {
+   }
+
+   async function tryAcquireLockDir(lockDir: string, opts: Opts): Promise<Owned | { acquired: false }> {
++    const ownerScope = await processScope()
+     const token = randomUUID?.() ?? randomBytes(16).toString("hex")
+     const metaPath = path.join(lockDir, "meta.json")
+     const heartbeatPath = path.join(lockDir, "heartbeat")
+@@ -208,6 +217,7 @@ export namespace Flock {
+       pid: process.pid,
+       hostname: os.hostname(),
+       createdAt: new Date().toISOString(),
++      processScope: ownerScope,
+     }
+
+     await writeFile(heartbeatPath, "", { flag: "wx" }).catch(async () => {
+diff --git a/packages/core/test/fixture/effect-flock-worker.ts b/packages/core/test/fixture/effect-flock-worker.ts
+index 7e42e80..897d2a7 100644
+--- a/packages/core/test/fixture/effect-flock-worker.ts
++++ b/packages/core/test/fixture/effect-flock-worker.ts
+@@ -10,6 +10,7 @@ type Msg = {
+   dir: string
+   holdMs?: number
+   ready?: string
++  started?: string
+   active?: string
+   done?: string
+ }
+@@ -47,6 +48,8 @@ async function job() {
+ await Effect.runPromise(
+   Effect.gen(function* () {
+     const flock = yield* EffectFlock.Service
++    const started = msg.started
++    if (started) yield* Effect.promise(() => fs.writeFile(started, String(process.pid)))
+     yield* flock.withLock(
+       Effect.promise(() => job()),
+       msg.key,
+diff --git a/packages/core/test/util/effect-flock.test.ts b/packages/core/test/util/effect-flock.test.ts
+index a0f737a..cb9d535 100644
+--- a/packages/core/test/util/effect-flock.test.ts
++++ b/packages/core/test/util/effect-flock.test.ts
+@@ -39,6 +39,7 @@ type Msg = {
+   dir: string
+   holdMs?: number
+   ready?: string
++  started?: string
+   active?: string
+   done?: string
+ }
+@@ -66,13 +67,13 @@ function spawnWorker(msg: Msg) {
+   })
+ }
+
+-async function stopWorker(proc: ReturnType<typeof spawnWorker>) {
++async function stopWorker(proc: ReturnType<typeof spawnWorker>, signal: NodeJS.Signals = "SIGTERM") {
+   if (proc.exitCode !== null || proc.signalCode !== null) return
+
+   const closed = new Promise<void>((resolve) => proc.once("close", () => resolve()))
+
+   if (process.platform !== "win32" || !proc.pid) {
+-    proc.kill()
++    proc.kill(signal)
+     await closed
+     return
+   }
+@@ -342,8 +343,8 @@ describe("util.effect-flock", () => {
+             Array.from({ length: n }, () => run({ key: "eflock:stress", dir, done, active, holdMs: 30 })),
+           )
+
+-          expect(out.map((x) => x.code)).toEqual(Array.from({ length: n }, () => 0))
+           expect(out.map((x) => x.stderr.toString()).filter(Boolean)).toEqual([])
++          expect(out.map((x) => x.code)).toEqual(Array.from({ length: n }, () => 0))
+
+           const lines = (await fs.readFile(done, "utf8"))
+             .split("\n")
+@@ -357,6 +358,141 @@ describe("util.effect-flock", () => {
+     60_000,
+   )
+
++  it.live(
++    "recovers a fresh lock after its owner exits without waiting for lease expiry",
++    () =>
++      Effect.promise(async () => {
++        const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "eflock-fresh-crash-"))
++        const dir = path.join(tmp, "locks")
++        const ready = path.join(tmp, "owner-ready")
++        const acquired = path.join(tmp, "contender-ready")
++        const owner = spawnWorker({ key: "eflock:fresh-crash", dir, ready, holdMs: 120_000 })
++        let contender: ReturnType<typeof spawnWorker> | undefined
++
++        try {
++          await waitForFile(ready, 5_000)
++          if (!owner.pid) throw new Error("Missing disposable owner PID")
++          await stopWorker(owner, "SIGKILL")
++          const lockDir = lock(dir, "eflock:fresh-crash")
++          const meta = await readJson<{ pid: number }>(path.join(lockDir, "meta.json"))
++          expect(meta.pid).toBe(owner.pid)
++          expect(Date.now() - (await fs.stat(path.join(lockDir, "heartbeat"))).mtimeMs).toBeLessThan(5_000)
++          contender = spawnWorker({ key: "eflock:fresh-crash", dir, ready: acquired, holdMs: 120_000 })
++          // Keep real timestamps: backdating the heartbeat hides the restart failure.
++          await waitForFile(acquired, 5_000)
++          expect((await fs.readFile(acquired, "utf8")).trim()).toBe(String(contender.pid))
++        } finally {
++          await stopWorker(owner)
++          if (contender) await stopWorker(contender)
++          await fs.rm(tmp, { recursive: true, force: true })
++        }
++      }),
++    15_000,
++  )
++
++  it.live(
++    "serializes competing recovery after a fresh owner crash",
++    () =>
++      Effect.promise(async () => {
++        const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "eflock-crash-contention-"))
++        const dir = path.join(tmp, "locks")
++        const ready = path.join(tmp, "owner-ready")
++        const done = path.join(tmp, "done")
++        const active = path.join(tmp, "active")
++        const owner = spawnWorker({ key: "eflock:crash-contention", dir, ready, holdMs: 120_000 })
++        try {
++          await waitForFile(ready, 5_000)
++          await stopWorker(owner, "SIGKILL")
++          const out = await Promise.all(
++            Array.from({ length: 16 }, () => run({ key: "eflock:crash-contention", dir, done, active, holdMs: 30 })),
++          )
++          expect(out.map((result) => result.stderr.toString()).filter(Boolean)).toEqual([])
++          expect(out.map((result) => result.code)).toEqual(Array.from({ length: 16 }, () => 0))
++          expect((await fs.readFile(done, "utf8")).trim().split("\n")).toHaveLength(16)
++        } finally {
++          await stopWorker(owner, "SIGKILL")
++          await fs.rm(tmp, { recursive: true, force: true })
++        }
++      }),
++    60_000,
++  )
++
++  it.live(
++    "preserves a live owner with an old heartbeat then recovers after its exit",
++    () =>
++      Effect.promise(async () => {
++        const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "eflock-live-owner-"))
++        const dir = path.join(tmp, "locks")
++        const ready = path.join(tmp, "owner-ready")
++        const acquired = path.join(tmp, "contender-ready")
++        const owner = spawnWorker({ key: "eflock:live-owner", dir, ready, holdMs: 120_000 })
++        const started = path.join(tmp, "contender-started")
++        let contender: ReturnType<typeof spawnWorker> | undefined
++        try {
++          await waitForFile(ready, 5_000)
++          owner.kill("SIGSTOP")
++          const lockDir = lock(dir, "eflock:live-owner")
++          const original = await fs.readFile(path.join(lockDir, "meta.json"), "utf8")
++          const old = new Date(Date.now() - 120_000)
++          await fs.utimes(path.join(lockDir, "heartbeat"), old, old)
++          contender = spawnWorker({ key: "eflock:live-owner", dir, ready: acquired, started, holdMs: 120_000 })
++          await waitForFile(started, 5_000)
++          await sleep(300)
++          expect(await exists(acquired)).toBe(false)
++          expect(await fs.readFile(path.join(lockDir, "meta.json"), "utf8")).toBe(original)
++          await stopWorker(owner, "SIGKILL")
++          await waitForFile(acquired, 5_000)
++          expect((await fs.readFile(acquired, "utf8")).trim()).toBe(String(contender.pid))
++        } finally {
++          await stopWorker(owner, "SIGKILL")
++          if (contender) await stopWorker(contender, "SIGKILL")
++          await fs.rm(tmp, { recursive: true, force: true })
++        }
++      }),
++    15_000,
++  )
++
++  for (const kind of ["legacy", "other-scope", "invalid-pid", "malformed"]) {
++    it.live(
++      `does not fast-reclaim ${kind} owner metadata`,
++      () =>
++        Effect.promise(async () => {
++          const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "eflock-unknown-owner-"))
++          const dir = path.join(tmp, "locks")
++          const ready = path.join(tmp, "owner-ready")
++          const acquired = path.join(tmp, "contender-ready")
++          const owner = spawnWorker({ key: "eflock:unknown-owner", dir, ready, holdMs: 120_000 })
++          const started = path.join(tmp, "contender-started")
++          let contender: ReturnType<typeof spawnWorker> | undefined
++          try {
++            await waitForFile(ready, 5_000)
++            await stopWorker(owner, "SIGKILL")
++            const file = path.join(lock(dir, "eflock:unknown-owner"), "meta.json")
++            const original = await fs.readFile(file, "utf8")
++            const meta: Record<string, unknown> = JSON.parse(original)
++            if (kind === "legacy") delete meta.processScope
++            if (kind === "other-scope") meta.processScope = "different-boot-and-namespace"
++            if (kind === "invalid-pid") meta.pid = -1
++            const modified = kind === "malformed" ? "{" : JSON.stringify(meta)
++            await fs.writeFile(file, modified)
++            contender = spawnWorker({ key: "eflock:unknown-owner", dir, ready: acquired, started, holdMs: 120_000 })
++            await waitForFile(started, 5_000)
++            await sleep(300)
++            expect(await exists(acquired)).toBe(false)
++            expect(await fs.readFile(file, "utf8")).toBe(modified)
++            await fs.writeFile(file, original)
++            await waitForFile(acquired, 5_000)
++            expect((await fs.readFile(acquired, "utf8")).trim()).toBe(String(contender.pid))
++          } finally {
++            await stopWorker(owner, "SIGKILL")
++            if (contender) await stopWorker(contender, "SIGKILL")
++            await fs.rm(tmp, { recursive: true, force: true })
++          }
++        }),
++      15_000,
++    )
++  }
++
+   it.live(
+     "recovers after a crashed lock owner",
+     () =>
+@@ -380,8 +516,8 @@ describe("util.effect-flock", () => {
+
+           const done = path.join(tmp, "done.log")
+           const result = await run({ key: "eflock:crash", dir, done, holdMs: 10 })
+-          expect(result.code).toBe(0)
+           expect(result.stderr.toString()).toBe("")
++          expect(result.code).toBe(0)
+         } finally {
+           await stopWorker(proc).catch(() => {})
+           await fs.rm(tmp, { recursive: true, force: true })
+diff --git a/packages/core/test/util/flock.test.ts b/packages/core/test/util/flock.test.ts
+index 53bfc18..26078da 100644
+--- a/packages/core/test/util/flock.test.ts
++++ b/packages/core/test/util/flock.test.ts
+@@ -359,7 +359,7 @@ describe("util.flock", () => {
+     expect(await exists(lockDir)).toBe(false)
+   })
+
+-  test("refuses token mismatch release and recovers from stale", async () => {
++  test("refuses token mismatch release and does not evict the live owner", async () => {
+     await using tmp = await tmpdir()
+     const dir = path.join(tmp.path, "locks")
+     const key = "flock:token"
+@@ -386,18 +386,20 @@ describe("util.flock", () => {
+     expect(await exists(lockDir)).toBe(true)
+
+     let hit = false
+-    await Flock.withLock(
++    const recovery = await Flock.withLock(
+       key,
+       async () => {
+         hit = true
+       },
+       {
+         dir,
+-        staleMs: 500,
+-        timeoutMs: 6_000,
++        staleMs: 10,
++        timeoutMs: 200,
+       },
+-    )
+-    expect(hit).toBe(true)
++    ).catch((error) => error)
++    expect(recovery).toBeInstanceOf(Error)
++    expect(hit).toBe(false)
++    expect((await readJson<{ token: string }>(meta)).token).toBe("tampered")
+   })
+
+   test("fails clearly on unwritable lock roots", async () => {
+diff --git a/packages/core/src/util/lock-owner.ts b/packages/core/src/util/lock-owner.ts
+new file mode 100644
+index 0000000..35f774f
+--- /dev/null
++++ b/packages/core/src/util/lock-owner.ts
+@@ -0,0 +1,70 @@
++import { execFile } from "node:child_process"
++import { readFile, readlink } from "node:fs/promises"
++
++let scope: Promise<string | undefined> | undefined
++
++// Hostnames are not unique, and a PID in another container is not our PID.
++// Unknown platforms or unavailable kernel identity retain lease-based recovery.
++export function processScope() {
++  return (scope ??= readScope().catch(() => undefined))
++}
++
++async function readScope() {
++  if (process.platform === "linux") {
++    const [boot, namespace] = await Promise.all([
++      readFile("/proc/sys/kernel/random/boot_id", "utf8"),
++      readlink("/proc/self/ns/pid"),
++    ])
++    if (!uuid(boot.trim()) || !/^pid:\[\d+\]$/.test(namespace)) return
++    return `linux:${boot.trim().toLowerCase()}:${namespace}`
++  }
++  if (process.platform === "darwin") {
++    const boot = await new Promise<string>((resolve, reject) => {
++      execFile(
++        "/usr/sbin/sysctl",
++        ["-n", "kern.bootsessionuuid"],
++        { timeout: 1_000, maxBuffer: 256 },
++        (error, stdout) => {
++          if (error) reject(error)
++          else resolve(stdout.trim())
++        },
++      )
++    })
++    if (uuid(boot)) return `darwin:${boot.toLowerCase()}`
++  }
++}
++
++function uuid(value: string) {
++  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
++}
++
++// Only ESRCH in the same boot/PID namespace proves absence. A reused live PID
++// or EPERM must not let another process enter the owner's critical section.
++export function deadOwner(
++  meta: unknown,
++  localScope: string | undefined,
++  probe: (pid: number, signal: 0) => void = process.kill,
++): boolean | undefined {
++  if (
++    !localScope ||
++    typeof meta !== "object" ||
++    meta === null ||
++    !("processScope" in meta) ||
++    meta.processScope !== localScope
++  )
++    return
++  if (
++    !("pid" in meta) ||
++    typeof meta.pid !== "number" ||
++    !Number.isSafeInteger(meta.pid) ||
++    meta.pid <= 0 ||
++    meta.pid > 2_147_483_647
++  )
++    return
++  try {
++    probe(meta.pid, 0)
++    return false
++  } catch (error) {
++    return typeof error === "object" && error !== null && "code" in error && error.code === "ESRCH"
++  }
++}
+diff --git a/packages/core/test/util/lock-owner.test.ts b/packages/core/test/util/lock-owner.test.ts
+new file mode 100644
+index 0000000..b9dab95
+--- /dev/null
++++ b/packages/core/test/util/lock-owner.test.ts
+@@ -0,0 +1,77 @@
++import { expect, test } from "bun:test"
++import { spawn } from "node:child_process"
++import { deadOwner, processScope } from "../../src/util/lock-owner"
++
++test("kernel scope is available on supported platforms and stable within the process", async () => {
++  const scope = await processScope()
++  if (process.platform === "darwin" || process.platform === "linux") expect(scope).toStartWith(`${process.platform}:`)
++  else expect(scope).toBeUndefined()
++  expect(await processScope()).toBe(scope)
++})
++
++test("proves a child absent only after it exits in this process namespace", async () => {
++  const scope = await processScope()
++  expect(scope).toBeDefined()
++  const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" })
++  const closed = new Promise<void>((resolve) => child.once("close", () => resolve()))
++  try {
++    expect(typeof child.pid).toBe("number")
++    const meta = { processScope: scope, pid: child.pid }
++    expect(deadOwner(meta, scope)).toBe(false)
++    child.kill("SIGKILL")
++    await closed
++    expect(deadOwner(meta, scope)).toBe(true)
++  } finally {
++    child.kill("SIGKILL")
++    await closed
++  }
++})
++
++test("never probes an unrecognized host, namespace, legacy record or invalid PID", () => {
++  for (const meta of [
++    null,
++    [],
++    {},
++    { pid: 12 },
++    { processScope: "other-boot", pid: 12 },
++    ...[0, -1, 1.5, "12", NaN, Infinity, 2_147_483_648].map((pid) => ({ processScope: "this-boot", pid })),
++  ]) {
++    expect(
++      deadOwner(meta, "this-boot", () => {
++        throw new Error("must not probe")
++      }),
++    ).toBeUndefined()
++  }
++  expect(
++    deadOwner({ processScope: "this-boot", pid: 12 }, undefined, () => {
++      throw new Error("must not probe")
++    }),
++  ).toBeUndefined()
++})
++
++test("only ESRCH proves death; permission errors, unexpected errors and PID reuse preserve exclusion", () => {
++  const meta = { processScope: "this-boot", pid: 12 }
++  let calls = 0
++  for (const code of ["EPERM", "EACCES", "EINVAL", "EIO"]) {
++    expect(
++      deadOwner(meta, "this-boot", (pid, signal) => {
++        expect(pid).toBe(12)
++        expect(signal).toBe(0)
++        calls++
++        throw Object.assign(new Error("synthetic probe failure"), { code })
++      }),
++    ).toBe(false)
++  }
++  expect(calls).toBe(4)
++  expect(
++    deadOwner(meta, "this-boot", () => {
++      throw new Error("unknown")
++    }),
++  ).toBe(false)
++  expect(deadOwner(meta, "this-boot", () => {})).toBe(false)
++  expect(
++    deadOwner(meta, "this-boot", () => {
++      throw Object.assign(new Error("absent"), { code: "ESRCH" })
++    }),
++  ).toBe(true)
++})

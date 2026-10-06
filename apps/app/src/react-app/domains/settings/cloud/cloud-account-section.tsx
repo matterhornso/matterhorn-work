@@ -18,6 +18,7 @@ export interface CloudAccountSectionProps {
   orgsBusy: boolean;
   orgsError: string | null;
   sessionBusy: boolean;
+  showOrganizations: boolean;
   onActiveOrgChange: (orgId: string) => void | Promise<void>;
   onRefreshOrgs: () => void | Promise<void>;
   onSignOut: () => void | Promise<void>;
@@ -31,6 +32,7 @@ export function CloudAccountSection({
   orgsBusy,
   orgsError,
   sessionBusy,
+  showOrganizations,
   onActiveOrgChange,
   onRefreshOrgs,
   onSignOut,
@@ -69,7 +71,7 @@ export function CloudAccountSection({
       </div>
 
       {/* Org picker (stepper-style) or connected org display */}
-      {needsOrgSelection ? (
+      {showOrganizations ? needsOrgSelection ? (
         <OrgPicker
           orgs={orgs}
           orgsBusy={orgsBusy}
@@ -84,9 +86,9 @@ export function CloudAccountSection({
           <Loader2 size={14} className="animate-spin" />
           Loading organizations...
         </div>
-      ) : null}
+      ) : null : null}
 
-      {orgsError ? <SettingsNotice tone="error">{orgsError}</SettingsNotice> : null}
+      {showOrganizations && orgsError ? <SettingsNotice tone="error">{orgsError}</SettingsNotice> : null}
     </section>
   );
 }

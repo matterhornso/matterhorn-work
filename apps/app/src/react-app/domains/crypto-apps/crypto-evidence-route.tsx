@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   useCurrentAccount,
   useWallets,
@@ -34,6 +34,10 @@ import { Button } from "../../../components/ui/button";
 import { createMatterhornServerClient, MatterhornServerError } from "../../../app/lib/matterhorn-server";
 import { suiDAppKit } from "../../infra/sui-dapp-kit";
 import { resolveMatterhornConnection } from "../../shell/matterhorn-connection";
+import { captureAccountGeneration } from "../../../app/lib/account-client-state";
+import { WalletConfirmationRecoveryError, type WalletConfirmationAction } from "../../../app/lib/wallet-confirmation-recovery";
+import { useWalletConfirmationRecovery } from "../wallet/use-wallet-confirmation-recovery";
+import { WalletConfirmationNotice } from "../wallet/wallet-confirmation-notice";
 
 type ServerClient = ReturnType<typeof createMatterhornServerClient>;
 
@@ -65,8 +69,10 @@ function statusLabel(item: MatterhornEvidenceVerificationPacket): string {
   return "Encrypted in your workspace";
 }
 
-function userMessage(error: unknown): string {
+export function userMessage(error: unknown): string {
   if (error instanceof MatterhornServerError) {
+    if (error.code === "crypto_evidence_workspace_deleted") return "This workspace is being deleted. This action cannot continue. If you submitted a transaction, check its status in your wallet.";
+    if (error.code === "crypto_evidence_wallet_review_unavailable") return "Wallet review is temporarily unavailable. If you submitted a transaction, check its status in your wallet before trying again.";
     if (error.code === "crypto_evidence_unavailable") return "Encrypted coworker records are not enabled for this deployment.";
     if (error.code === "crypto_evidence_not_found") return "This secure record no longer exists or belongs to another workspace.";
     if (error.code === "crypto_evidence_verification_unavailable") return "Live verification is temporarily unavailable. No proof state was changed.";
@@ -80,26 +86,26 @@ function userMessage(error: unknown): string {
     if (error.code === "crypto_evidence_key_destruction_unavailable") return "The recovery key could not be deleted. The secure record is unchanged.";
     if (error.code === "crypto_evidence_walrus_renewal_not_due") return "This encrypted copy does not need renewal yet.";
     if (error.code === "crypto_evidence_walrus_renewal_in_progress") return "A renewal is already waiting for wallet review.";
-    if (error.code === "crypto_evidence_walrus_renewal_expired_or_replayed") return "This renewal expired or was already used. Check the proof and try again.";
+    if (error.code === "crypto_evidence_walrus_renewal_expired_or_replayed") return "This renewal expired or was already used. Check its transaction status in your wallet before trying again.";
     if (error.code === "crypto_evidence_walrus_renewal_transaction_failed") return "The Sui wallet transaction failed. The encrypted copy was not renewed.";
-    if (error.code === "crypto_evidence_walrus_renewal_unavailable") return "Encrypted testnet storage renewal is temporarily unavailable.";
-    if (error.code.includes("crypto_evidence_walrus_renewal") && error.code.includes("mismatch")) return "The renewal changed after review. Nothing was recorded; check the proof and try again.";
+    if (error.code === "crypto_evidence_walrus_renewal_unavailable") return "Matterhorn could not confirm the renewal. If you submitted a transaction, check its status in your wallet before trying again.";
+    if (error.code.includes("crypto_evidence_walrus_renewal") && error.code.includes("mismatch")) return "Matterhorn could not verify this renewal. Check its transaction status in your wallet before trying again.";
     if (error.code === "crypto_evidence_walrus_deletion_confirmation_required") return "Confirm that the wallet will delete the Walrus copy and Matterhorn recovery key.";
     if (error.code === "crypto_evidence_walrus_not_deletable") return "This encrypted copy was not created as deletable. You can still delete its recovery key.";
     if (error.code === "crypto_evidence_walrus_deletion_in_progress") return "A deletion is already waiting for wallet review.";
-    if (error.code === "crypto_evidence_walrus_deletion_expired_or_replayed") return "This deletion expired or was already used. Check the proof and try again.";
+    if (error.code === "crypto_evidence_walrus_deletion_expired_or_replayed") return "This deletion expired or was already used. Check its transaction status in your wallet before trying again.";
     if (error.code === "crypto_evidence_walrus_deletion_transaction_failed") return "The Sui wallet transaction failed. The encrypted copy was not deleted.";
-    if (error.code === "crypto_evidence_walrus_deletion_unavailable") return "Encrypted Walrus deletion is temporarily unavailable.";
+    if (error.code === "crypto_evidence_walrus_deletion_unavailable") return "Matterhorn could not confirm the deletion. If you submitted a transaction, check its status in your wallet.";
     if (error.code === "crypto_evidence_walrus_wallet_owner_required") return "This copy is not owned by the connected Sui wallet. You can still delete its recovery key.";
-    if (error.code.includes("crypto_evidence_walrus_deletion") && error.code.includes("mismatch")) return "The deletion changed after review. Nothing was recorded; check the proof and try again.";
+    if (error.code.includes("crypto_evidence_walrus_deletion") && error.code.includes("mismatch")) return "Matterhorn could not verify this deletion. Check its transaction status in your wallet before trying again.";
     if (error.code === "crypto_evidence_sui_anchor_confirmation_required") return "Confirm that the Sui testnet anchor will be permanent and public.";
     if (error.code === "crypto_evidence_sui_anchor_unavailable") return "Sui testnet anchoring is not available in this deployment.";
     if (error.code === "crypto_evidence_sui_anchor_in_progress") return "An anchor is already waiting for wallet review.";
-    if (error.code === "crypto_evidence_sui_anchor_expired_or_replayed") return "This anchor request expired or was already used. Prepare a new one.";
+    if (error.code === "crypto_evidence_sui_anchor_expired_or_replayed") return "This anchor request expired or was already used. Check its transaction status in your wallet before trying again.";
     if (error.code === "crypto_evidence_sui_anchor_exists") return "This record is already anchored on Sui.";
     if (error.code === "crypto_evidence_sui_anchor_certification_changed") return "The Walrus proof changed or expired. Check the proof before anchoring.";
     if (error.code === "crypto_evidence_sui_anchor_transaction_failed") return "The Sui wallet transaction failed. The anchor was not recorded.";
-    if (error.code.includes("crypto_evidence_sui_anchor") && error.code.includes("mismatch")) return "The anchor changed after review. Nothing was recorded; prepare it again.";
+    if (error.code.includes("crypto_evidence_sui_anchor") && error.code.includes("mismatch")) return "Matterhorn could not verify this anchor. Check its transaction status in your wallet before trying again.";
   }
   return "Matterhorn could not load the record details. Try again.";
 }
@@ -136,6 +142,10 @@ export function CryptoEvidenceRoute() {
   const account = useCurrentAccount();
   const wallets = useWallets();
   const { workspaceId = "" } = useParams<{ workspaceId: string }>();
+  const walletAccount = useRef(account);
+  walletAccount.current = account;
+  const activeWorkspace = useRef(workspaceId);
+  activeWorkspace.current = workspaceId;
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [publishingId, setPublishingId] = useState<string | null>(null);
@@ -162,6 +172,8 @@ export function CryptoEvidenceRoute() {
     enabled: Boolean(workspaceId.trim()),
     retry: false,
   });
+
+  const recovery = useWalletConfirmationRecovery(query.data?.client, workspaceId);
 
   const verify = useCallback(async (item: MatterhornEvidenceVerificationPacket) => {
     setVerifyingId(item.evidenceId);
@@ -234,163 +246,72 @@ export function CryptoEvidenceRoute() {
     }
   }, []);
 
-  const renew = useCallback(async (item: MatterhornEvidenceVerificationPacket) => {
+  const runWalletAction = useCallback(async (item: MatterhornEvidenceVerificationPacket, action: Exclude<WalletConfirmationAction, "file-renewal">) => {
     if (!account?.address) {
-      setError("Connect the Sui wallet that will review and pay for this renewal.");
+      setError("Connect the Sui wallet that will review this transaction.");
       return;
     }
-    setRenewingId(item.evidenceId);
+    const accountCurrent = captureAccountGeneration();
+    const current = () => accountCurrent() && activeWorkspace.current === workspaceId;
+    const markBusy = action === "evidence-renewal" ? setRenewingId
+      : action === "evidence-deletion" ? setCloudDeletingId : setAnchoringId;
+    markBusy(item.evidenceId);
     setError(null);
     try {
-      const active = query.data ?? await loadEvidence(workspaceId);
-      const prepared = await active.client.renewCryptoEvidence(workspaceId, item.evidenceId, {
-        expectedRevision: item.revision,
-        signer: account.address,
+      await recovery.execute(action, item.evidenceId, async () => {
+        const active = query.data ?? await loadEvidence(workspaceId);
+        const request = { expectedRevision: item.revision, signer: account.address };
+        const prepared = action === "evidence-renewal"
+          ? await active.client.renewCryptoEvidence(workspaceId, item.evidenceId, request)
+          : action === "evidence-deletion"
+            ? await active.client.deleteCryptoEvidenceWalrusCopy(workspaceId, item.evidenceId, request)
+            : await active.client.anchorCryptoEvidenceOnSui(workspaceId, item.evidenceId, request);
+        if (!sameSuiAddress(prepared.preview.signer, account.address)) {
+          throw new WalletConfirmationRecoveryError("The connected wallet does not match the reviewed signer. No wallet request was opened.");
+        }
+        const transaction = Transaction.from(prepared.preview.transactionBytesBase64);
+        if (await transaction.getDigest() !== prepared.preview.transactionDigest) {
+          throw new WalletConfirmationRecoveryError("The transaction changed before wallet review. No wallet request was opened.");
+        }
+        return {
+          pending: {
+            action, resourceId: item.evidenceId, revision: item.revision,
+            signer: normalizeSuiAddress(prepared.preview.signer), network: "testnet",
+            intentId: prepared.preview.intentId, intentHash: prepared.preview.intentHash,
+            transactionDigest: prepared.preview.transactionDigest, expiresAt: prepared.preview.expiresAt,
+          },
+          submit: async () => {
+            if (!current() || walletAccount.current?.address !== account.address) throw new Error("wallet_scope_changed");
+            const result = await suiDAppKit.signAndExecuteTransaction({ transaction, account, network: "testnet" });
+            if (!("Transaction" in result) || result.Transaction?.digest !== prepared.preview.transactionDigest) {
+              throw new Error("wallet_result_unconfirmed");
+            }
+          },
+        };
       });
-      if (!sameSuiAddress(prepared.preview.signer, account.address)) {
-        throw new Error("The connected Sui wallet does not match the renewal signer.");
-      }
-      const transaction = Transaction.from(prepared.preview.transactionBytesBase64);
-      if (await transaction.getDigest() !== prepared.preview.transactionDigest) {
-        throw new Error("The renewal transaction changed before wallet review.");
-      }
-      const result = await suiDAppKit.signAndExecuteTransaction({
-        transaction,
-        account,
-        network: "testnet",
-      });
-      const executed = "Transaction" in result ? result.Transaction : result.FailedTransaction;
-      if (!executed?.digest || executed.digest !== prepared.preview.transactionDigest) {
-        throw new Error("The wallet returned a different transaction. The renewal was not recorded.");
-      }
-      if (!("Transaction" in result)) {
-        throw new Error(executed.status?.error?.message ?? "The Sui wallet returned a failed renewal transaction.");
-      }
-      const confirmed = await active.client.confirmCryptoEvidenceRenewal(workspaceId, item.evidenceId, {
-        intentId: prepared.preview.intentId,
-        intentHash: prepared.preview.intentHash,
-        transactionDigest: executed.digest,
-      });
-      setVerificationById((current) => ({
-        ...current,
-        [item.evidenceId]: {
-          version: confirmed.item.version,
-          evidence: confirmed.item,
-          verification: confirmed.verification,
-        },
-      }));
+      if (!current()) return;
       setRenewCandidateId(null);
-      await queryClient.invalidateQueries({ queryKey });
-    } catch (cause) {
-      const message = userMessage(cause);
-      setError(message === "Matterhorn could not load the record details. Try again."
-        && cause instanceof Error ? cause.message : message);
-    } finally {
-      setRenewingId(null);
-    }
-  }, [account, query.data, queryClient, queryKey, workspaceId]);
-
-  const deleteWalrusCopy = useCallback(async (item: MatterhornEvidenceVerificationPacket) => {
-    if (!account?.address) {
-      setError("Connect the Sui wallet that owns this encrypted copy.");
-      return;
-    }
-    setCloudDeletingId(item.evidenceId);
-    setError(null);
-    try {
-      const active = query.data ?? await loadEvidence(workspaceId);
-      const prepared = await active.client.deleteCryptoEvidenceWalrusCopy(workspaceId, item.evidenceId, {
-        expectedRevision: item.revision,
-        signer: account.address,
-      });
-      if (!sameSuiAddress(prepared.preview.signer, account.address)) {
-        throw new Error("The connected Sui wallet does not match the deletion signer.");
-      }
-      const transaction = Transaction.from(prepared.preview.transactionBytesBase64);
-      if (await transaction.getDigest() !== prepared.preview.transactionDigest) {
-        throw new Error("The deletion transaction changed before wallet review.");
-      }
-      const result = await suiDAppKit.signAndExecuteTransaction({
-        transaction,
-        account,
-        network: "testnet",
-      });
-      const executed = "Transaction" in result ? result.Transaction : result.FailedTransaction;
-      if (!executed?.digest || executed.digest !== prepared.preview.transactionDigest) {
-        throw new Error("The wallet returned a different transaction. The deletion was not recorded.");
-      }
-      if (!("Transaction" in result)) {
-        throw new Error(executed.status?.error?.message ?? "The Sui wallet returned a failed deletion transaction.");
-      }
-      const confirmed = await active.client.confirmCryptoEvidenceWalrusDeletion(workspaceId, item.evidenceId, {
-        intentId: prepared.preview.intentId,
-        intentHash: prepared.preview.intentHash,
-        transactionDigest: executed.digest,
-      });
-      setVerificationById((current) => ({
-        ...current,
-        [item.evidenceId]: {
-          version: confirmed.item.version,
-          evidence: confirmed.item,
-          verification: confirmed.verification,
-        },
-      }));
       setCloudDeleteCandidateId(null);
-      await queryClient.invalidateQueries({ queryKey });
-    } catch (cause) {
-      const message = userMessage(cause);
-      setError(message === "Matterhorn could not load the record details. Try again."
-        && cause instanceof Error ? cause.message : message);
-    } finally {
-      setCloudDeletingId(null);
-    }
-  }, [account, query.data, queryClient, queryKey, workspaceId]);
-
-  const anchorOnSui = useCallback(async (item: MatterhornEvidenceVerificationPacket) => {
-    if (!anchorAcknowledged || !account?.address) return;
-    setAnchoringId(item.evidenceId);
-    setError(null);
-    try {
-      const active = query.data ?? await loadEvidence(workspaceId);
-      const prepared = await active.client.anchorCryptoEvidenceOnSui(workspaceId, item.evidenceId, {
-        expectedRevision: item.revision,
-        signer: account.address,
-      });
-      if (!sameSuiAddress(prepared.preview.signer, account.address)) {
-        throw new Error("The connected Sui wallet does not match the anchor signer.");
-      }
-      const transaction = Transaction.from(prepared.preview.transactionBytesBase64);
-      if (await transaction.getDigest() !== prepared.preview.transactionDigest) {
-        throw new Error("The anchor transaction changed before wallet review.");
-      }
-      const result = await suiDAppKit.signAndExecuteTransaction({
-        transaction,
-        account,
-        network: "testnet",
-      });
-      const executed = "Transaction" in result ? result.Transaction : result.FailedTransaction;
-      if (!executed?.digest || executed.digest !== prepared.preview.transactionDigest) {
-        throw new Error("The wallet returned a different transaction. The anchor was not recorded.");
-      }
-      if (!("Transaction" in result)) {
-        throw new Error(executed.status?.error?.message ?? "The Sui wallet returned a failed anchor transaction.");
-      }
-      await active.client.confirmCryptoEvidenceSuiAnchor(workspaceId, item.evidenceId, {
-        intentId: prepared.preview.intentId,
-        intentHash: prepared.preview.intentHash,
-        transactionDigest: executed.digest,
-      });
       setAnchorCandidateId(null);
       setAnchorAcknowledged(false);
+      setVerificationById((previous) => {
+        const next = { ...previous };
+        delete next[item.evidenceId];
+        return next;
+      });
       await queryClient.invalidateQueries({ queryKey });
     } catch (cause) {
-      const message = userMessage(cause);
-      setError(message === "Matterhorn could not load the record details. Try again."
-        && cause instanceof Error ? cause.message : message);
+      if (current()) setError(cause instanceof WalletConfirmationRecoveryError ? cause.message : userMessage(cause));
     } finally {
-      setAnchoringId(null);
+      if (current()) markBusy(null);
     }
-  }, [account, anchorAcknowledged, query.data, queryClient, queryKey, workspaceId]);
+  }, [account, query.data, queryClient, queryKey, recovery.execute, workspaceId]);
+
+  const renew = (item: MatterhornEvidenceVerificationPacket) => runWalletAction(item, "evidence-renewal");
+  const deleteWalrusCopy = (item: MatterhornEvidenceVerificationPacket) => runWalletAction(item, "evidence-deletion");
+  const anchorOnSui = (item: MatterhornEvidenceVerificationPacket) => {
+    if (anchorAcknowledged) return runWalletAction(item, "evidence-anchor");
+  };
 
   const copyPacket = useCallback(async (item: MatterhornEvidenceVerificationPacket) => {
     setError(null);
@@ -429,6 +350,15 @@ export function CryptoEvidenceRoute() {
           </div>
         </header>
 
+        <WalletConfirmationNotice recovery={recovery} kind="evidence" onConfirmed={async () => {
+          setVerificationById({});
+          setRenewCandidateId(null);
+          setCloudDeleteCandidateId(null);
+          setAnchorCandidateId(null);
+          setAnchorAcknowledged(false);
+          await queryClient.invalidateQueries({ queryKey });
+        }} />
+
         {query.isLoading ? (
           <div className="flex min-h-64 items-center gap-3 text-sm text-muted-foreground" role="status">
             <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
@@ -459,6 +389,7 @@ export function CryptoEvidenceRoute() {
             {error ? <p className="border-b border-border py-4 text-sm text-destructive" role="alert">{error}</p> : null}
             {snapshot.items.map((item) => {
               const expanded = expandedId === item.evidenceId;
+              const walletAvailable = recovery.ready && !recovery.pending.some((pending) => pending.action !== "file-renewal" && pending.resourceId === item.evidenceId);
               const result = verificationById[item.evidenceId];
               const verification = result?.verification ?? item.lastVerification;
               const canVerify = item.state === "published" && snapshot.mode === "testnet";
@@ -470,18 +401,18 @@ export function CryptoEvidenceRoute() {
                 && remainingEpochs !== null
                 && remainingEpochs > 0
                 && remainingEpochs <= 2;
-              const canRenew = Boolean(snapshot.renewalAvailable && item.walletLifecycleReady && renewalDue);
+              const canRenew = Boolean(walletAvailable && snapshot.renewalAvailable && item.walletLifecycleReady && renewalDue);
               const confirmingRenewal = renewCandidateId === item.evidenceId;
               const deletedFromWalrus = Boolean(item.publication?.deletionTransactionDigest);
               const canDeleteWalrusCopy = Boolean(
-                snapshot.deletionAvailable
+                walletAvailable && snapshot.deletionAvailable
                 && item.walletLifecycleReady
                 && item.state === "published"
                 && item.publication
                 && !deletedFromWalrus,
               );
               const canAnchor = Boolean(
-                snapshot.anchorAvailable
+                walletAvailable && snapshot.anchorAvailable
                 && item.walletLifecycleReady
                 && item.state === "published"
                 && item.publication

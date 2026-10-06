@@ -878,6 +878,14 @@ export class MatterhornAuthStore {
     }
     const label = normalizeHostedMcpAccessLabel(input.label);
     return this.withTransaction(() => {
+      this.lockActiveSession(sessionToken);
+      const current = this.requireSession(sessionToken);
+      if (!current.activeOrgId || current.activeOrgId !== session.activeOrgId) {
+        throw new MatterhornAuthError(
+          "hosted_mcp_access_invalid",
+          "Workspace access changed. Select the workspace and try again.",
+        );
+      }
       const now = Date.now();
       const activeRows = statement(this.db, `
         SELECT id, token_hash, user_id, active_org_id, label,
@@ -905,7 +913,7 @@ export class MatterhornAuthStore {
         id,
         token_hash: hashHostedMcpAccessToken(token),
         user_id: session.user.id,
-        active_org_id: session.activeOrgId!,
+        active_org_id: current.activeOrgId,
         label,
         expires_at: expiresAt,
         created_at: now,
@@ -1028,8 +1036,9 @@ export class MatterhornAuthStore {
     credentialId: string,
   ): boolean {
     const authorityKey = this.requireHostedMcpAccessAuthorityKey();
-    const session = this.requireSession(sessionToken);
     return this.withTransaction(() => {
+      this.lockActiveSession(sessionToken);
+      const session = this.requireSession(sessionToken);
       const row = statement(this.db, `
         SELECT id, token_hash, user_id, active_org_id, label,
           expires_at, created_at, last_used_at, revoked_at, authority_seal
@@ -1445,28 +1454,32 @@ export class MatterhornAuthStore {
         "This account is being deleted and can no longer be used.",
       );
     }
-    if (passwordVerification.needsUpgrade) {
-      statement(
+    const passwordHash = passwordVerification.needsUpgrade
+      ? encodePasswordHash(password, Buffer.from(row.password_salt, "hex"))
+      : row.password_hash;
+    return this.withTransaction(() => {
+      // Pin the credential that was verified before hashing. Even without a
+      // hash upgrade this conditional write serializes session issuance with
+      // password rotation in other connections.
+      const current = statement(
         this.db,
-        "UPDATE users SET password_hash = ? WHERE id = ?",
-      ).run(
-        encodePasswordHash(password, Buffer.from(row.password_salt, "hex")),
-        row.id,
-      );
-    }
-
-    const firstOrg = statement(
-      this.db,
-      `SELECT organization_id
-        FROM organization_members
-        WHERE user_id = ?
-        ORDER BY created_at ASC
-        LIMIT 1`,
-    ).get(row.id) as { organization_id: string } | undefined;
-    return this.createSessionForUser(
-      row.id,
-      firstOrg?.organization_id ?? null,
-    );
+        `UPDATE users SET password_hash = ?
+          WHERE id = ? AND password_hash = ? AND password_salt = ?
+            AND email_verified_at IS NOT NULL`,
+      ).run(passwordHash, row.id, row.password_hash, row.password_salt);
+      if (current.changes !== 1) {
+        throw new MatterhornAuthError("invalid_credentials", "Email or password is incorrect.");
+      }
+      const firstOrg = statement(
+        this.db,
+        `SELECT organization_id
+          FROM organization_members
+          WHERE user_id = ?
+          ORDER BY created_at ASC
+          LIMIT 1`,
+      ).get(row.id) as { organization_id: string } | undefined;
+      return this.createSessionForUser(row.id, firstOrg?.organization_id ?? null);
+    });
   }
 
   createEmailVerificationChallenge(
@@ -1537,8 +1550,9 @@ export class MatterhornAuthStore {
     if (challenge.expires_at <= Date.now()) {
       statement(
         this.db,
-        "DELETE FROM email_verification_challenges WHERE user_id = ?",
-      ).run(user.id);
+        `DELETE FROM email_verification_challenges
+          WHERE user_id = ? AND code_hash = ? AND code_salt = ? AND expires_at <= ?`,
+      ).run(user.id, challenge.code_hash, challenge.code_salt, Date.now());
       throw new MatterhornAuthError(
         "expired_verification_code",
         "That verification code has expired. Request a new code.",
@@ -1556,29 +1570,28 @@ export class MatterhornAuthStore {
       );
     }
 
-    const verifiedAt = Date.now();
-    this.withTransaction(() => {
+    return this.withTransaction(() => {
+      const consumed = statement(this.db, `
+        DELETE FROM email_verification_challenges
+        WHERE user_id = ? AND code_hash = ? AND code_salt = ? AND expires_at > ?
+      `).run(user.id, challenge.code_hash, challenge.code_salt, Date.now());
+      if (consumed.changes !== 1) {
+        throw new MatterhornAuthError("invalid_verification_code", "That verification code is invalid.");
+      }
       statement(
         this.db,
         "UPDATE users SET email_verified_at = ? WHERE id = ?",
-      ).run(verifiedAt, user.id);
-      statement(
+      ).run(Date.now(), user.id);
+      const firstOrg = statement(
         this.db,
-        "DELETE FROM email_verification_challenges WHERE user_id = ?",
-      ).run(user.id);
+        `SELECT organization_id
+          FROM organization_members
+          WHERE user_id = ?
+          ORDER BY created_at ASC
+          LIMIT 1`,
+      ).get(user.id) as { organization_id: string } | undefined;
+      return this.createSessionForUser(user.id, firstOrg?.organization_id ?? null);
     });
-    const firstOrg = statement(
-      this.db,
-      `SELECT organization_id
-        FROM organization_members
-        WHERE user_id = ?
-        ORDER BY created_at ASC
-        LIMIT 1`,
-    ).get(user.id) as { organization_id: string } | undefined;
-    return this.createSessionForUser(
-      user.id,
-      firstOrg?.organization_id ?? null,
-    );
   }
 
   createPasswordResetChallenge(
@@ -1649,6 +1662,19 @@ export class MatterhornAuthStore {
     const salt = randomBytes(16);
     const passwordHash = encodePasswordHash(newPassword, salt);
     this.withTransaction(() => {
+      // Hashing occurs outside the write transaction. Another process may
+      // consume, replace or invalidate the token meanwhile; its earlier read
+      // is not authority to change the password after that happens.
+      const consumed = statement(this.db, `
+        DELETE FROM password_reset_challenges
+        WHERE token_hash = ? AND user_id = ? AND expires_at > ?
+      `).run(tokenHash, challenge.user_id, Date.now());
+      if (consumed.changes !== 1) {
+        throw new MatterhornAuthError(
+          "invalid_reset_token",
+          "That password reset link is invalid or has already been used.",
+        );
+      }
       statement(
         this.db,
         "UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?",
@@ -1660,10 +1686,7 @@ export class MatterhornAuthStore {
       statement(this.db, "DELETE FROM sessions WHERE user_id = ?").run(
         challenge.user_id,
       );
-      statement(
-        this.db,
-        "DELETE FROM password_reset_challenges WHERE user_id = ?",
-      ).run(challenge.user_id);
+      this.invalidatePasswordRecovery(challenge.user_id);
     });
   }
 
@@ -1816,12 +1839,15 @@ export class MatterhornAuthStore {
   }
 
   revokeOtherSessions(token: string): number {
-    const session = this.requireSession(token);
-    const result = statement(
-      this.db,
-      "DELETE FROM sessions WHERE user_id = ? AND token_hash <> ?",
-    ).run(session.user.id, hashSessionToken(token));
-    return result.changes ?? 0;
+    return this.withTransaction(() => {
+      this.lockActiveSession(token);
+      const session = this.requireSession(token);
+      const result = statement(
+        this.db,
+        "DELETE FROM sessions WHERE user_id = ? AND token_hash <> ?",
+      ).run(session.user.id, hashSessionToken(token));
+      return result.changes ?? 0;
+    });
   }
 
   changePassword(
@@ -1851,14 +1877,36 @@ export class MatterhornAuthStore {
     const salt = randomBytes(16);
     const passwordHash = encodePasswordHash(input.newPassword, salt);
     this.withTransaction(() => {
-      statement(
+      const current = statement(
         this.db,
-        "UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?",
-      ).run(passwordHash, salt.toString("hex"), session.user.id);
+        `UPDATE users SET password_hash = ?, password_salt = ?
+          WHERE id = ? AND password_hash = ? AND password_salt = ?
+            AND EXISTS (SELECT 1 FROM sessions WHERE token_hash = ? AND user_id = users.id AND expires_at > ?)
+            AND NOT EXISTS (SELECT 1 FROM account_deletion_jobs WHERE user_id = users.id AND status <> 'completed')`,
+      ).run(passwordHash, salt.toString("hex"), session.user.id,
+        row.password_hash, row.password_salt, hashSessionToken(token), Date.now());
+      if (current.changes !== 1) {
+        throw new MatterhornAuthError("unauthorized", "Session or credentials changed. Sign in again.");
+      }
       statement(this.db, "DELETE FROM sessions WHERE user_id = ?").run(
         session.user.id,
       );
+      this.invalidatePasswordRecovery(session.user.id);
     });
+  }
+
+  // Called within the password update transaction. A previously issued link
+  // must not undo a later authenticated password change. A claimed email may
+  // already be in transit, but its link becomes invalid and cannot be retried.
+  private invalidatePasswordRecovery(userId: string): void {
+    statement(this.db, "DELETE FROM password_reset_challenges WHERE user_id = ?").run(userId);
+    statement(this.db, `
+      UPDATE email_outbox
+      SET state = 'terminal', last_error_code = 'password_changed',
+        props_json = '{}', updated_at = ?
+      WHERE user_id = ? AND template = 'passwordReset'
+        AND state IN ('pending', 'retry', 'sending')
+    `).run(Date.now(), userId);
   }
 
   deleteAccount(
@@ -1873,10 +1921,11 @@ export class MatterhornAuthStore {
   }
 
   beginAccountDeletion(token: string, password: string): MatterhornAuthAccountDeletionJob {
-    const deletion = this.prepareAccountDeletion(token, password);
-    const now = Date.now();
-    const jobId = `account_deletion_${randomUUID().replaceAll("-", "")}`;
-    this.withTransaction(() => {
+    const deletion = this.withTransaction(() => {
+      this.lockActiveSession(token);
+      const deletion = this.prepareAccountDeletion(token, password);
+      const now = Date.now();
+      const jobId = `account_deletion_${randomUUID().replaceAll("-", "")}`;
       statement(this.db, `
         INSERT INTO account_deletion_jobs(
           job_id, user_id, organization_ids_json, status, steps_json,
@@ -1892,6 +1941,7 @@ export class MatterhornAuthStore {
         now,
       );
       statement(this.db, "DELETE FROM sessions WHERE user_id = ?").run(deletion.userId);
+      return deletion;
     });
     const job = this.accountDeletionJobForUser(deletion.userId);
     if (!job) throw new Error("Failed to persist account deletion manifest.");
@@ -2005,35 +2055,38 @@ export class MatterhornAuthStore {
     token: string,
     input: { organizationId?: string | null; organizationSlug?: string | null },
   ): MatterhornAuthOrganization {
-    const session = this.requireSession(token);
     const organizationId = input.organizationId?.trim() ?? "";
     const organizationSlug = input.organizationSlug?.trim() ?? "";
-    const row = statement(
-      this.db,
-      `SELECT o.id, o.name, o.slug, m.role
-        FROM organizations o
-        JOIN organization_members m ON m.organization_id = o.id
-        WHERE m.user_id = ?
-          AND ((? <> '' AND o.id = ?) OR (? <> '' AND o.slug = ?))
-        LIMIT 1`,
-    ).get(
-      session.user.id,
-      organizationId,
-      organizationId,
-      organizationSlug,
-      organizationSlug,
-    ) as OrganizationRow | undefined;
-    if (!row) {
-      throw new MatterhornAuthError(
-        "invalid_organization",
-        "Workspace was not found for this account.",
-      );
-    }
-    statement(
-      this.db,
-      "UPDATE sessions SET active_org_id = ? WHERE token_hash = ?",
-    ).run(row.id, hashSessionToken(token));
-    return row;
+    return this.withTransaction(() => {
+      this.lockActiveSession(token);
+      const session = this.requireSession(token);
+      const row = statement(
+        this.db,
+        `SELECT o.id, o.name, o.slug, m.role
+          FROM organizations o
+          JOIN organization_members m ON m.organization_id = o.id
+          WHERE m.user_id = ?
+            AND ((? <> '' AND o.id = ?) OR (? <> '' AND o.slug = ?))
+          LIMIT 1`,
+      ).get(
+        session.user.id,
+        organizationId,
+        organizationId,
+        organizationSlug,
+        organizationSlug,
+      ) as OrganizationRow | undefined;
+      if (!row) {
+        throw new MatterhornAuthError(
+          "invalid_organization",
+          "Workspace was not found for this account.",
+        );
+      }
+      statement(
+        this.db,
+        "UPDATE sessions SET active_org_id = ? WHERE token_hash = ?",
+      ).run(row.id, hashSessionToken(token));
+      return row;
+    });
   }
 
   createOrganization(
@@ -2062,6 +2115,7 @@ export class MatterhornAuthStore {
     };
     const now = Date.now();
     this.withTransaction(() => {
+      this.lockActiveSession(token);
       statement(
         this.db,
         `INSERT INTO organizations (id, name, slug, created_at)
@@ -2173,6 +2227,21 @@ export class MatterhornAuthStore {
       );
     }
     return session;
+  }
+
+  // First statement in a write transaction: prevent a revoked/expired session
+  // from authorizing a later mutation, and serialize subsequent credential and
+  // membership checks with other writers. This does not extend the session.
+  private lockActiveSession(token: string): void {
+    const current = statement(this.db, `
+      UPDATE sessions SET expires_at = expires_at
+      WHERE token_hash = ? AND expires_at > ?
+        AND NOT EXISTS (SELECT 1 FROM account_deletion_jobs
+          WHERE user_id = sessions.user_id AND status <> 'completed')
+    `).run(hashSessionToken(token), Date.now());
+    if (current.changes !== 1) {
+      throw new MatterhornAuthError("unauthorized", "Session is no longer valid. Sign in again.");
+    }
   }
 
   private passwordMatches(row: UserRow, password: string): boolean {

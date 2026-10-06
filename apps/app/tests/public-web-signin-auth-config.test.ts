@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 
 import { DenApiError } from "../src/app/lib/public-auth-client";
 import { loadPublicAuthConfig } from "../src/react-app/domains/cloud/public-web-signin-page";
@@ -71,5 +71,27 @@ describe("loadPublicAuthConfig", () => {
     const config = await loadPublicAuthConfig(load, controller.signal);
     expect(config.signupStatus).toBe("setup_required");
     expect(calls.count).toBe(1);
+  });
+
+  test("never starts a lookup for an already aborted access check", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const { load, calls } = counted("ok");
+    const config = await loadPublicAuthConfig(load, controller.signal);
+    expect(config.signupsAvailable).toBe(false);
+    expect(calls.count).toBe(0);
+  });
+
+  test("releases its backoff abort listener after a successful retry", async () => {
+    const controller = new AbortController();
+    const remove = spyOn(controller.signal, "removeEventListener");
+    try {
+      const { load, calls } = counted(timeout(), "ok");
+      expect(await loadPublicAuthConfig(load, controller.signal)).toEqual(OPEN_CONFIG);
+      expect(calls.count).toBe(2);
+      expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
+    } finally {
+      remove.mockRestore();
+    }
   });
 });

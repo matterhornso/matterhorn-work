@@ -64,6 +64,7 @@ describe("Sui desk integration contract", () => {
 
     expect(Object.keys(DESK_ACTION_REGISTRY.sui)).toEqual([
       "sui_account_read",
+      "sui_object_read",
       "sui_transfer_preview",
       "sui_coin_transfer",
       "sui_object_transfer",

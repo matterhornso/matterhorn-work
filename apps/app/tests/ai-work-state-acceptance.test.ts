@@ -35,14 +35,17 @@ describe("Milestone 3 AI work-state acceptance", () => {
     expect(messages).toContain("Open artifact");
   });
 
-  test("errors preserve a correction draft and provide retry recovery", () => {
+  test("errors preserve the current draft and retry the failed request", () => {
     expect(surface).toContain("Matterhorn could not complete this response. Your prompt is ready to retry.");
-    expect(surface).toContain("Your prompt is still available to edit or send again.");
-    expect(surface).toContain("setComposerDraft(props.sessionId, failure.retryMessage)");
+    expect(surface).toContain("The original request is saved in this conversation.");
+    expect(surface).toContain("retryResponseMessageId: failure.id");
+    expect(surface).not.toContain("setComposerDraft(props.sessionId, failure.retryMessage)");
     expect(surface).toContain('retryable: true');
     expect(surface).toContain('"Retry response"');
     expect(surface).toContain("handleRetryResponse");
-    expect(surface).toContain("if (sending || !draft.trim()) return;");
+    // Attachment-only drafts are valid retries too; mounted browser tests cover
+    // both preflight and dispatch rejection followed by the real retry button.
+    expect(surface).toContain("if (sending || (!draft.trim() && attachments.length === 0)) return;");
     expect(surface).toContain("snapshotQuery.refetch()");
     expect(messages).toContain('role="alert"');
     expect(messages).toContain('status === "failed"');

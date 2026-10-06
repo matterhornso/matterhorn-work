@@ -84,6 +84,66 @@ function coworker(workspaceId = "workspace_finalizer"): MatterhornCoworkerRunBin
 }
 
 describe("finalized coworker evidence", () => {
+  test("does not persist a finalization whose key creation finishes after workspace deletion", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "matterhorn-finalizer-deletion-"));
+    const state = new MatterhornGuardedRuntimeStateStore(join(directory, "state.db"));
+    const authority = testDurableStateAuthority();
+    let releaseKey = () => {};
+    let keyStarted = () => {};
+    const released = new Promise<void>(resolve => { releaseKey = resolve; });
+    const started = new Promise<void>(resolve => { keyStarted = resolve; });
+    const plaintextKey = Buffer.alloc(32, 17);
+    let keyRequests = 0;
+    const destroyedKeys: string[] = [];
+    const keyManager: MatterhornEvidenceKeyManager = {
+      createDataKey: async ({ recipientKeyIds }) => {
+        keyRequests += 1;
+        keyStarted();
+        await released;
+        return { plaintextKey: keyRequests === 1 ? plaintextKey : Buffer.alloc(32, 17), keyReference: `kms://delayed-fixture-${keyRequests}`, wrappedKey: "synthetic-wrapped-key", keyContext: "b".repeat(64), recipientKeyIds };
+      },
+      decryptDataKey: async () => Buffer.alloc(32, 17),
+      destroyKey: async ({ keyReference }) => { destroyedKeys.push(keyReference); },
+    };
+    const store = new MatterhornCryptoEvidenceStore(state, keyManager, {}, null, authority);
+    const pending = sealFinalizedCoworkerRunEvidence({
+      finalizedRun: { receipt: receipt(), coworker: coworker() }, store, keyManager,
+    }).then(() => "persisted", error => error instanceof Error ? error.message : "unknown_error");
+    try {
+      await started;
+      expect(await store.destroyWorkspaceForDeletion({ workspaceId: "workspace_finalizer" }))
+        .toEqual({ checked: 0, destroyed: 0, failures: [] });
+      releaseKey();
+      const outcome = await pending;
+      expect(store.list({ workspaceId: "workspace_finalizer", ownerId: "owner_private_finalizer" })).toEqual([]);
+      expect(outcome).toBe("crypto_evidence_workspace_deleted");
+      expect(plaintextKey.equals(Buffer.alloc(32))).toBe(true);
+      expect(destroyedKeys).toEqual(["kms://delayed-fixture-1"]);
+      const otherConnection = new MatterhornGuardedRuntimeStateStore(join(directory, "state.db"));
+      try {
+        const reopened = new MatterhornCryptoEvidenceStore(otherConnection, keyManager, {}, null, authority);
+        await expect(sealFinalizedCoworkerRunEvidence({
+          finalizedRun: { receipt: receipt(), coworker: coworker() }, store: reopened, keyManager,
+        })).rejects.toThrow("crypto_evidence_workspace_deleted");
+        expect(keyRequests).toBe(1);
+        const retained = await sealFinalizedCoworkerRunEvidence({
+          finalizedRun: { receipt: receipt("workspace_retained"), coworker: coworker("workspace_retained") },
+          store: reopened, keyManager,
+        });
+        expect(retained.created).toBe(true);
+        expect(reopened.list({ workspaceId: "workspace_retained", ownerId: "owner_private_finalizer" })).toHaveLength(1);
+      } finally {
+        otherConnection.close();
+      }
+    } finally {
+      releaseKey();
+      await pending;
+      state.close();
+      authority.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   test("seals once, stays local, and exposes no raw tenant identity in encrypted publication bytes", async () => {
     const directory = await mkdtemp(join(tmpdir(), "matterhorn-finalizer-"));
     const state = new MatterhornGuardedRuntimeStateStore(join(directory, "state.db"));

@@ -2,16 +2,18 @@ import React from "react";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { UIMessage } from "ai";
-import { MATTERHORN_CONTINUE_ANSWER_TEXT } from "@matterhorn-work/types/guarded-agent-runtime";
 import { accountClientState, AccountStateChangedError } from "../src/app/lib/account-client-state";
+import { ChatSubmissionStoppedError, requireActiveChatSubmission } from "../src/app/lib/chat-submission-control";
 
 import { SessionTranscript } from "../src/react-app/domains/session/surface/message-list";
 import {
   resolveAssistantResponseRetryTurn,
+  restoreResponseRetryAttachments,
   responseOutputTitle,
   runAssistantResponseRetry,
+  ResponseRetrySupersededError,
   requireAnswerContinuationSupport,
-  failedContinuationResponseId,
+  failedResponseId,
 } from "../src/react-app/domains/session/surface/response-actions";
 
 const messages: UIMessage[] = [
@@ -51,6 +53,105 @@ function renderTranscript(isStreaming: boolean) {
 }
 
 describe("assistant response actions", () => {
+  for (const boundary of ["before", "prepare", "abort", "revert", "dispatch preparation"]) {
+    test(`Stop during ${boundary} prevents dispatch and compensates only an already reverted retry`, async () => {
+      const calls: string[] = [];
+      const controller = new AbortController();
+      if (boundary === "before") controller.abort();
+      const step = async (name: string) => {
+        calls.push(name);
+        if (boundary === name) controller.abort();
+      };
+      await expect(runAssistantResponseRetry({
+        isCurrent: () => true, signal: controller.signal,
+        prepare: () => step("prepare"), abort: () => step("abort"), revert: () => step("revert"),
+        dispatch: async () => {
+          await step("dispatch preparation");
+          requireActiveChatSubmission(controller.signal);
+          calls.push("dispatch");
+        },
+        restore: () => step("restore"),
+      })).rejects.toThrow(ChatSubmissionStoppedError);
+      const steps = ["prepare", "abort", "revert", "dispatch preparation"];
+      const expected = steps.slice(0, steps.indexOf(boundary) + 1);
+      if (boundary === "revert" || boundary === "dispatch preparation") expected.push("restore");
+      expect(calls).toEqual(expected);
+    });
+  }
+
+  test("Stop plus a newer request never restores the older retry", async () => {
+    const calls: string[] = [];
+    const controller = new AbortController();
+    let current = true;
+    await expect(runAssistantResponseRetry({
+      isCurrent: () => current, signal: controller.signal,
+      prepare: async () => undefined, abort: async () => undefined,
+      revert: async () => { controller.abort(); current = false; },
+      dispatch: () => { calls.push("dispatch"); },
+      restore: async () => { calls.push("restore"); },
+    })).rejects.toThrow(ResponseRetrySupersededError);
+    expect(calls).toEqual([]);
+  });
+
+  test("an accepted dispatch is not restored or misreported as unsent after Stop", async () => {
+    const controller = new AbortController();
+    const calls: string[] = [];
+    await runAssistantResponseRetry({
+      isCurrent: () => true, signal: controller.signal,
+      prepare: async () => undefined, abort: async () => undefined, revert: async () => undefined,
+      dispatch: async () => { controller.abort(); calls.push("accepted"); },
+      restore: async () => { calls.push("restore"); },
+    });
+    expect(calls).toEqual(["accepted"]);
+  });
+
+  test("failed Stop compensation reports restoration uncertainty, not successful cancellation", async () => {
+    const controller = new AbortController();
+    await expect(runAssistantResponseRetry({
+      isCurrent: () => true, signal: controller.signal,
+      prepare: async () => undefined, abort: async () => undefined,
+      revert: async () => { controller.abort(); }, dispatch: async () => undefined,
+      restore: async () => { throw new Error("Restore failed"); },
+    })).rejects.toThrow("could not restore the original conversation");
+  });
+
+  for (const boundary of ["before", "prepare", "abort", "revert", "dispatch"]) {
+    test(`newer request during ${boundary} prevents subsequent retry mutations`, async () => {
+      const calls: string[] = [];
+      let current = boundary !== "before";
+      const step = async (name: string) => {
+        calls.push(name);
+        if (boundary === name) {
+          current = false;
+          if (name === "dispatch") throw new Error("older dispatch failed");
+        }
+      };
+      await expect(runAssistantResponseRetry({
+        isCurrent: () => current,
+        signal: new AbortController().signal,
+        prepare: () => step("prepare"), abort: () => step("abort"), revert: () => step("revert"),
+        dispatch: () => step("dispatch"), restore: () => step("restore"),
+      })).rejects.toThrow(ResponseRetrySupersededError);
+      const steps = ["prepare", "abort", "revert", "dispatch"];
+      expect(calls).toEqual(steps.slice(0, steps.indexOf(boundary) + 1));
+    });
+  }
+
+  test("accepted older retry remains accepted without restoring over newer work", async () => {
+    const calls: string[] = [];
+    let current = true;
+    await runAssistantResponseRetry({
+      isCurrent: () => current,
+      signal: new AbortController().signal,
+      prepare: async () => { calls.push("prepare"); },
+      abort: async () => { calls.push("abort"); },
+      revert: async () => { calls.push("revert"); },
+      dispatch: async () => { calls.push("dispatch"); current = false; },
+      restore: async () => { calls.push("restore"); },
+    });
+    expect(calls).toEqual(["prepare", "abort", "revert", "dispatch"]);
+  });
+
   for (const boundary of ["prepare", "abort", "revert", "dispatch"]) {
     test(`account switch during ${boundary} prevents subsequent retry mutations`, async () => {
       const calls: string[] = [];
@@ -62,6 +163,8 @@ describe("assistant response actions", () => {
         }
       };
       await expect(runAssistantResponseRetry({
+        isCurrent: () => true,
+        signal: new AbortController().signal,
         prepare: () => step("prepare"), abort: () => step("abort"), revert: () => step("revert"),
         dispatch: () => step("dispatch"), restore: () => step("restore"),
       })).rejects.toThrow(AccountStateChangedError);
@@ -69,13 +172,11 @@ describe("assistant response actions", () => {
       expect(calls).toEqual(steps.slice(0, steps.indexOf(boundary) + 1));
     });
   }
-  test("accepted continuation failures retry that response rather than the unrelated draft", () => {
-    const failure = { id: "msg_assistant_1", retryMessage: MATTERHORN_CONTINUE_ANSWER_TEXT };
-    expect(failedContinuationResponseId(failure, messages)).toBe("msg_assistant_1");
-    expect(failedContinuationResponseId(null, messages)).toBeNull();
-    expect(failedContinuationResponseId({ ...failure, retryMessage: "Ordinary question" }, messages)).toBeNull();
-    expect(failedContinuationResponseId(failure, [...messages, { id: "later", role: "user", parts: [] }])).toBeNull();
-    expect(failedContinuationResponseId({ ...failure, id: "older" }, messages)).toBeNull();
+  test("accepted failures retry only the response identified by the displayed error", () => {
+    expect(failedResponseId("msg_assistant_1", messages)).toBe("msg_assistant_1");
+    expect(failedResponseId(undefined, messages)).toBeNull();
+    expect(failedResponseId("msg_assistant_1", [...messages, { id: "later", role: "user", parts: [] }])).toBeNull();
+    expect(failedResponseId("older", messages)).toBeNull();
   });
   test("safe continuation requires acknowledgement from the backend for this exact answer", () => {
     expect(() => requireAnswerContinuationSupport({}, "partial")).toThrow("backend does not support safe answer continuation");
@@ -184,11 +285,12 @@ describe("assistant response actions", () => {
       responseIndex: 3,
       promptMessageId: "msg_user_2",
       prompt: "Now compare fees.",
+      attachments: [],
     });
     expect(resolveAssistantResponseRetryTurn(messages, "missing")).toBeNull();
   });
 
-  test("attachment-only turns stay identifiable but fail closed without a replayable prompt", () => {
+  test("attachment-only turns retain their saved bytes without inventing prompt text", async () => {
     const retry = resolveAssistantResponseRetryTurn([
       { id: "msg_user_file", role: "user", parts: [{ type: "file", url: "data:text/plain;base64,QQ==", mediaType: "text/plain" }] },
       { id: "msg_assistant_file", role: "assistant", parts: [{ type: "text", text: "I read the file." }] },
@@ -196,6 +298,54 @@ describe("assistant response actions", () => {
 
     expect(retry?.promptMessageId).toBe("msg_user_file");
     expect(retry?.prompt).toBe("");
+    if (!retry) throw new Error("Missing retry turn");
+    const restored = restoreResponseRetryAttachments(retry);
+    expect(restored).toHaveLength(1);
+    expect(await restored[0].file.text()).toBe("A");
+    expect(restored[0].id).toBe("retry:msg_user_file:0");
+  });
+
+  test("retry restoration preserves text and binary attachments independently of composer files", async () => {
+    const values = [Buffer.from("Résumé 日本語"), Buffer.from([0, 255, 1, 128])];
+    const restored = restoreResponseRetryAttachments({ responseIndex: 1, promptMessageId: "user", prompt: "Read these",
+      attachments: values.map((value, index) => ({ type: "file", filename: `saved-${index}`, mediaType: index ? "image/png" : "text/plain",
+        url: `data:${index ? "image/png" : "text/plain"};base64,${value.toString("base64")}` })),
+    });
+    for (const [index, attachment] of restored.entries()) {
+      expect(Buffer.from(await attachment.file.arrayBuffer())).toEqual(values[index]);
+      expect(attachment.name).toBe(`saved-${index}`);
+      expect(attachment.size).toBe(values[index].length);
+      expect(attachment.previewUrl).toBeUndefined();
+    }
+    expect(restored.map(file => file.kind)).toEqual(["file", "image"]);
+  });
+
+  for (const url of ["https://example.invalid/private", "file:///private/notes.txt", "blob:expired", "data:text/plain;base64,YQ=", "data:text/plain;base64,Y@==", "data:text/plain;base64,YQ===", "data:text/plain,not-base64", "data:image/png;base64,YQ=="]) {
+    test(`unreplayable historical attachment is not dropped or fetched: ${url}`, () => {
+      expect(() => restoreResponseRetryAttachments({ responseIndex: 1, promptMessageId: "user", prompt: "Read this",
+        attachments: [{ type: "file", filename: "notes.txt", mediaType: "text/plain", url }],
+      })).toThrow("Attach the files again");
+    });
+  }
+
+  for (const size of [0, 5_000_000, 5_000_001]) {
+    test(`historical attachment decoded bound ${size}`, () => {
+      const restore = () => restoreResponseRetryAttachments({ responseIndex: 1, promptMessageId: "user", prompt: "",
+        attachments: [{ type: "file", mediaType: "text/plain", url: `data:text/plain;base64,${Buffer.alloc(size, 97).toString("base64")}` }],
+      });
+      if (size > 5_000_000) expect(restore).toThrow("cannot be restored");
+      else expect(restore()[0].file.size).toBe(size);
+    });
+  }
+
+  test("historical attachment restoration bounds total decoded allocation and part count", () => {
+    const part = { type: "file", mediaType: "text/plain", url: `data:text/plain;base64,${Buffer.alloc(5_000_000, 97).toString("base64")}` } satisfies UIMessage["parts"][number];
+    const turn = { responseIndex: 1, promptMessageId: "user", prompt: "", attachments: [part, part] };
+    expect(restoreResponseRetryAttachments(turn).reduce((total, item) => total + item.size, 0)).toBe(10_000_000);
+    expect(() => restoreResponseRetryAttachments({ ...turn, attachments: [...turn.attachments,
+      { type: "file", mediaType: "text/plain", url: "data:text/plain;base64,YQ==" },
+    ] })).toThrow("cannot be restored");
+    expect(() => restoreResponseRetryAttachments({ ...turn, attachments: Array.from({ length: 65 }, () => part) })).toThrow("cannot be restored");
   });
 
   test("failed retry dispatch restores the original conversation before surfacing the error", async () => {
@@ -203,6 +353,8 @@ describe("assistant response actions", () => {
     const dispatchError = new Error("Selected model is unavailable.");
 
     await expect(runAssistantResponseRetry({
+      isCurrent: () => true,
+      signal: new AbortController().signal,
       prepare: async () => { calls.push("prepare"); },
       abort: async () => { calls.push("abort"); },
       revert: async () => { calls.push("revert"); },
@@ -220,6 +372,8 @@ describe("assistant response actions", () => {
     const calls: string[] = [];
 
     await runAssistantResponseRetry({
+      isCurrent: () => true,
+      signal: new AbortController().signal,
       prepare: async () => { calls.push("prepare"); return { jevReceipt: "scoped-receipt", answerOnly: true }; },
       abort: async () => { calls.push("abort"); },
       revert: async () => { calls.push("revert"); },
@@ -235,6 +389,8 @@ describe("assistant response actions", () => {
 
   test("retry reports when both dispatch and conversation restoration fail", async () => {
     await expect(runAssistantResponseRetry({
+      isCurrent: () => true,
+      signal: new AbortController().signal,
       prepare: async () => undefined,
       abort: async () => undefined,
       revert: async () => undefined,
@@ -246,6 +402,8 @@ describe("assistant response actions", () => {
   test("cancelled Jev preparation leaves the original conversation untouched", async () => {
     const calls: string[] = [];
     await expect(runAssistantResponseRetry({
+      isCurrent: () => true,
+      signal: new AbortController().signal,
       prepare: async () => { calls.push("prepare"); throw new Error("Message cancelled before model submission."); },
       abort: async () => { calls.push("abort"); },
       revert: async () => { calls.push("revert"); },

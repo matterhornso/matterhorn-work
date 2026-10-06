@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { request as httpRequest } from "node:http";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -92,16 +94,16 @@ async function getFreePort(): Promise<number> {
   });
 }
 
-async function boot(root?: string) {
+async function boot(root?: string, approvalMode: "auto" | "manual" = "auto") {
   const resolvedRoot =
     root ?? mkdtempSync(join(tmpdir(), "matterhorn-auth-e2e-"));
   if (!root) roots.push(resolvedRoot);
   process.env.MATTERHORN_WORK_DATA_DIR = join(resolvedRoot, "data");
   process.env.MATTERHORN_WORK_MEMORY_ROOT = join(resolvedRoot, "memory");
   delete process.env.MATTERHORN_AUTH_DB;
-  const server = await startServer(
-    config(await getFreePort(), resolvedRoot),
-  ) as Served;
+  const serverConfig = config(await getFreePort(), resolvedRoot);
+  if (approvalMode === "manual") serverConfig.approval = { mode: "manual", timeoutMs: 4000 };
+  const server = await startServer(serverConfig) as Served;
   let stopped = false;
   const stop = async () => {
     if (stopped) return;
@@ -246,6 +248,123 @@ afterEach(async () => {
 });
 
 describe("public account authentication", () => {
+  for (const operation of ["session", "profile", "security", "export", "sign-out", "password", "revoke-other-sessions", "create-workspace"]) {
+    test(`mixed credentials keep the browser account for ${operation}`, async () => {
+      const app = await boot();
+      const browserEmail = "mixed-browser@example.com";
+      const bearerEmail = "mixed-bearer@example.com";
+      const browser = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+        body: { email: browserEmail, password: PASSWORD },
+      });
+      const external = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+        body: { email: bearerEmail, password: PASSWORD },
+      });
+      expect(browser.response.status).toBe(200);
+      expect(external.response.status).toBe(200);
+      const cookie = sessionCookie(browser.response);
+      const bearer = cookieToken(sessionCookie(external.response));
+      const mixed = { cookie, bearer };
+      const expectedWorkspace = await jsonRequest(app.base, "/workspaces", { cookie });
+      const actualWorkspace = await jsonRequest(app.base, "/workspaces", mixed);
+      expect(actualWorkspace.response.status).toBe(200);
+      expect(actualWorkspace.payload.items.map((item: { id: string }) => item.id))
+        .toEqual(expectedWorkspace.payload.items.map((item: { id: string }) => item.id));
+
+      if (["session", "profile", "security", "export"].includes(operation)) {
+        const path = operation === "session" ? "/api/den/v1/session"
+          : operation === "profile" ? "/api/den/v1/me" : `/api/auth/account/${operation}`;
+        const result = await jsonRequest(app.base, path, mixed);
+        expect(result.response.status).toBe(200);
+        const expectedId = operation === "security" ? browser.payload.organization.id : browser.payload.user.id;
+        const unrelatedId = operation === "security" ? external.payload.organization.id : external.payload.user.id;
+        expect(JSON.stringify(result.payload)).toContain(expectedId);
+        expect(JSON.stringify(result.payload)).not.toContain(unrelatedId);
+      } else if (operation === "sign-out") {
+        const result = await jsonRequest(app.base, "/api/auth/sign-out", { ...mixed, body: {} });
+        expect(result.response.status).toBe(200);
+        expect(result.response.headers.get("set-cookie")).toContain("Max-Age=0");
+        expect((await jsonRequest(app.base, "/api/den/v1/me", { cookie })).response.status).toBe(401);
+        expect((await jsonRequest(app.base, "/api/den/v1/me", { bearer })).response.status).toBe(200);
+      } else if (operation === "password") {
+        const newPassword = "mixed-browser-replacement-password";
+        const result = await jsonRequest(app.base, "/api/auth/account/change-password", {
+          ...mixed, body: { currentPassword: PASSWORD, newPassword },
+        });
+        expect(result.response.status).toBe(200);
+        expect((await jsonRequest(app.base, "/api/auth/sign-in/email", {
+          body: { email: browserEmail, password: newPassword },
+        })).response.status).toBe(200);
+        expect((await jsonRequest(app.base, "/api/auth/sign-in/email", {
+          body: { email: bearerEmail, password: PASSWORD },
+        })).response.status).toBe(200);
+        expect((await jsonRequest(app.base, "/api/den/v1/me", { bearer })).response.status).toBe(200);
+      } else if (operation === "revoke-other-sessions") {
+        const browserOther = await jsonRequest(app.base, "/api/auth/sign-in/email", {
+          body: { email: browserEmail, password: PASSWORD },
+        });
+        const externalOther = await jsonRequest(app.base, "/api/auth/sign-in/email", {
+          body: { email: bearerEmail, password: PASSWORD },
+        });
+        const result = await jsonRequest(app.base, "/api/auth/account/revoke-other-sessions", { ...mixed, body: {} });
+        expect(result.response.status).toBe(200);
+        expect(result.payload.revokedSessions).toBe(1);
+        expect((await jsonRequest(app.base, "/api/den/v1/me", { cookie: sessionCookie(browserOther.response) })).response.status).toBe(401);
+        expect((await jsonRequest(app.base, "/api/den/v1/me", { cookie: sessionCookie(externalOther.response) })).response.status).toBe(200);
+        expect((await jsonRequest(app.base, "/api/den/v1/me", { cookie })).response.status).toBe(200);
+      } else {
+        const result = await jsonRequest(app.base, "/api/auth/organization/create", {
+          ...mixed, body: { name: "Browser workspace", slug: "browser-workspace" },
+        });
+        expect(result.response.status).toBe(200);
+        const browserOrgs = await jsonRequest(app.base, "/api/den/v1/me/orgs", { cookie });
+        const externalOrgs = await jsonRequest(app.base, "/api/den/v1/me/orgs", { bearer });
+        expect(JSON.stringify(browserOrgs.payload)).toContain(result.payload.organization.id);
+        expect(JSON.stringify(externalOrgs.payload)).not.toContain(result.payload.organization.id);
+      }
+    });
+  }
+
+  for (const state of ["missing-cookie", "invalid-cookie", "revoked-cookie", "invalid-bearer", "operator-bearer"]) {
+    test(`mixed credential controls preserve access with ${state}`, async () => {
+      const app = await boot();
+      const browser = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+        body: { email: "credential-control-browser@example.com", password: PASSWORD },
+      });
+      const external = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+        body: { email: "credential-control-bearer@example.com", password: PASSWORD },
+      });
+      expect(browser.response.status).toBe(200);
+      expect(external.response.status).toBe(200);
+      const browserCookie = sessionCookie(browser.response);
+      const externalToken = cookieToken(sessionCookie(external.response));
+      if (state === "revoked-cookie") {
+        expect((await jsonRequest(app.base, "/api/auth/sign-out", { cookie: browserCookie, body: {} })).response.status).toBe(200);
+      }
+      const cookie = state === "missing-cookie" ? undefined
+        : state === "invalid-cookie" ? "mh_session=invalid-disposable-session" : browserCookie;
+      const bearer = state === "invalid-bearer" ? "invalid-disposable-bearer"
+        : state === "operator-bearer" ? TOKEN : externalToken;
+      const browserWins = state === "invalid-bearer" || state === "operator-bearer";
+      const expected = browserWins ? browser : external;
+      const request = { cookie, bearer };
+      const profile = await jsonRequest(app.base, "/api/den/v1/me", request);
+      expect(profile.response.status).toBe(200);
+      expect(profile.payload.user.id).toBe(expected.payload.user.id);
+      const session = await jsonRequest(app.base, "/api/den/v1/session", request);
+      expect(session.payload.user.id).toBe(expected.payload.user.id);
+      const workspace = await jsonRequest(app.base, "/workspaces", request);
+      const expectedWorkspace = await jsonRequest(app.base, "/workspaces", browserWins ? { cookie: browserCookie } : { bearer: externalToken });
+      expect(workspace.response.status).toBe(200);
+      expect(workspace.payload.items.map((item: { id: string }) => item.id))
+        .toEqual(expectedWorkspace.payload.items.map((item: { id: string }) => item.id));
+      expect((await jsonRequest(app.base, "/api/auth/sign-out", { ...request, body: {} })).response.status).toBe(200);
+      expect((await jsonRequest(app.base, "/api/den/v1/me", browserWins ? { cookie: browserCookie } : { bearer: externalToken })).response.status).toBe(401);
+      if (browserWins || state !== "revoked-cookie") {
+        expect((await jsonRequest(app.base, "/api/den/v1/me", browserWins ? { bearer: externalToken } : { cookie: browserCookie })).response.status).toBe(200);
+      }
+    });
+  }
+
   test("exports only the signed-in account record and never credential material", async () => {
     const app = await boot();
     process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "false";
@@ -415,6 +534,64 @@ describe("public account authentication", () => {
       body: { email: "verify@example.com", password: "matterhorn-reset-password" },
     });
     expect(newPassword.response.status).toBe(200);
+  });
+
+  test("a reset link cannot overwrite a subsequent authenticated password change", async () => {
+    const app = await boot();
+    process.env.EMAIL_FROM = "accounts@example.com";
+    process.env.EMAIL_FROM_NAME = "Matterhorn Desks";
+    process.env.MATTERHORN_EMAIL_DEV_MODE = "true";
+    process.env.MATTERHORN_APP_URL = app.base;
+    const email = "password-lifecycle@example.com";
+    const newPassword = "disposable-new-account-password";
+    const signup = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email, password: PASSWORD },
+    });
+    expect(signup.response.status).toBe(200);
+    const cookie = sessionCookie(signup.response);
+    const delivery = await captureDevEmail(() => jsonRequest(app.base, "/api/auth/password-reset/request", {
+      body: { email },
+    }));
+    expect(delivery.result.response.status).toBe(202);
+    const link = delivery.payload.props.resetLink;
+    if (typeof link !== "string") throw new Error("Missing disposable reset link");
+    const token = new URLSearchParams(new URL(link).hash.slice(1)).get("token");
+    if (!token) throw new Error("Missing disposable reset token");
+    const changed = await jsonRequest(app.base, "/api/auth/account/change-password", {
+      cookie, body: { currentPassword: PASSWORD, newPassword },
+    });
+    expect(changed.response.status).toBe(200);
+    expect(changed.payload).toEqual({ ok: true, signedOutEverywhere: true });
+    const obsolete = await jsonRequest(app.base, "/api/auth/password-reset/confirm", {
+      body: { token, newPassword: "disposable-unwanted-reset-password" },
+    });
+    expect(obsolete.response.status).toBe(400);
+    expect(obsolete.payload.code).toBe("invalid_reset_token");
+    expect(obsolete.response.headers.get("set-cookie")).toBeNull();
+    expect((await jsonRequest(app.base, "/api/den/v1/session", { cookie })).payload).toEqual({ authenticated: false });
+    const signin = await jsonRequest(app.base, "/api/auth/sign-in/email", {
+      body: { email, password: newPassword },
+    });
+    expect(signin.response.status).toBe(200);
+    expect((await jsonRequest(app.base, "/api/auth/sign-in/email", {
+      body: { email, password: PASSWORD },
+    })).response.status).toBe(401);
+
+    const fresh = await captureDevEmail(() => jsonRequest(app.base, "/api/auth/password-reset/request", {
+      body: { email },
+    }));
+    expect(fresh.result.response.status).toBe(202);
+    const freshLink = fresh.payload.props.resetLink;
+    if (typeof freshLink !== "string") throw new Error("Missing fresh disposable reset link");
+    const freshToken = new URLSearchParams(new URL(freshLink).hash.slice(1)).get("token");
+    if (!freshToken) throw new Error("Missing fresh disposable reset token");
+    expect((await jsonRequest(app.base, "/api/auth/password-reset/confirm", {
+      body: { token: freshToken, newPassword: "disposable-fresh-reset-password" },
+    })).response.status).toBe(200);
+    expect((await jsonRequest(app.base, "/api/den/v1/session", { cookie: sessionCookie(signin.response) })).payload).toEqual({ authenticated: false });
+    expect((await jsonRequest(app.base, "/api/auth/sign-in/email", {
+      body: { email, password: "disposable-fresh-reset-password" },
+    })).response.status).toBe(200);
   });
 
   test("fails closed before creating an account when verification email is not configured", async () => {
@@ -764,6 +941,19 @@ describe("public account authentication", () => {
     const workspaceId = workspaces.payload.items[0].id as string;
     expect(workspaceId).toMatch(/^ws_web_/);
 
+    // A first-party cookie must select its own account, not be poisoned by
+    // another account's restricted MCP credential in an injected header.
+    for (const path of ["/api/den/v1/me", "/api/den/v1/session", "/api/auth/account/export"]) {
+      const mixed = await jsonRequest(app.base, path, { cookie: otherCookie, bearer: accessToken });
+      expect(mixed.response.status).toBe(200);
+      expect(JSON.stringify(mixed.payload)).toContain(other.payload.user.id);
+      expect(JSON.stringify(mixed.payload)).not.toContain(owner.payload.user.id);
+    }
+    const mixedWorkspace = await jsonRequest(app.base, "/workspaces", { cookie: otherCookie, bearer: accessToken });
+    expect(mixedWorkspace.response.status).toBe(200);
+    expect(mixedWorkspace.payload.items).toHaveLength(1);
+    expect(mixedWorkspace.payload.items[0].id).not.toBe(workspaceId);
+
     const mcpHeaders = {
       Accept: "application/json, text/event-stream",
       "MCP-Protocol-Version": "2025-11-25",
@@ -771,6 +961,7 @@ describe("public account authentication", () => {
     for (const auth of [
       { cookie: ownerCookie },
       { bearer: TOKEN },
+      { cookie: otherCookie, bearer: accessToken },
     ]) {
       const notInvitedTransport = await jsonRequest(app.base, "/mcp/guarded", {
         ...auth,
@@ -952,6 +1143,77 @@ describe("public account authentication", () => {
     })).response.status).toBe(401);
   });
 
+  for (const change of ["key-revoked", "mode-disabled", "eligibility-removed", "unchanged"]) {
+    test(`delayed MCP body preserves access errors after ${change}`, async () => {
+      process.env.MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET = "disposable-mcp-body-integrity-secret";
+      process.env.MATTERHORN_HOSTED_MCP_ACCESS_MODE = "invite";
+      const app = await boot();
+      const signup = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+        body: { email: "mcp-body@example.com", password: PASSWORD },
+      });
+      expect(signup.response.status).toBe(200);
+      const cookie = sessionCookie(signup.response);
+      process.env.MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS = signup.payload.user.id;
+      const created = await jsonRequest(app.base, "/api/auth/account/mcp-access", {
+        cookie, body: { label: "Disposable body upload" },
+      });
+      expect(created.response.status).toBe(201);
+      const workspacePath = join(app.root, "data", "web-workspaces", signup.payload.organization.id);
+      expect(existsSync(workspacePath)).toBe(false);
+      const body = JSON.stringify({ jsonrpc: "2.0", id: "delayed-body", method: "tools/list" });
+      let finishUpload = () => {};
+      const completed = new Promise<{ status: number; body: string }>((resolve, reject) => {
+        const request = httpRequest(`${app.base}/mcp/guarded`, {
+          method: "POST", headers: {
+            Authorization: `Bearer ${created.payload.credential.accessToken}`,
+            "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body),
+            Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-11-25",
+          },
+        }, response => {
+          let result = "";
+          response.setEncoding("utf8");
+          response.on("data", chunk => { result += chunk; });
+          response.on("end", () => resolve({ status: response.statusCode ?? 0, body: result }));
+          response.on("error", reject);
+        });
+        request.on("error", reject);
+        request.setTimeout(4000, () => request.destroy(new Error("Disposable MCP upload timed out")));
+        finishUpload = () => {
+          finishUpload = () => {};
+          request.end(body.slice(1));
+        };
+        request.write(body.slice(0, 1));
+        request.flushHeaders();
+      });
+      try {
+        // Provisioning proves the key passed authentication while the valid
+        // JSON payload is still incomplete. No sleep-only race assumption.
+        for (let attempt = 0; attempt < 200 && !existsSync(workspacePath); attempt += 1) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        expect(existsSync(workspacePath)).toBe(true);
+        if (change === "key-revoked") {
+          const revoked = await jsonRequest(app.base, `/api/auth/account/mcp-access/${created.payload.credential.id}`, {
+            cookie, method: "DELETE",
+          });
+          expect(revoked.response.status).toBe(200);
+        } else if (change === "mode-disabled") {
+          process.env.MATTERHORN_HOSTED_MCP_ACCESS_MODE = "off";
+        } else if (change === "eligibility-removed") {
+          process.env.MATTERHORN_HOSTED_MCP_ACCESS_ACCOUNT_IDS = "";
+        }
+        finishUpload();
+        const result = await completed;
+        expect(result.status).toBe(change === "unchanged" ? 200 : 401);
+        if (change === "unchanged") expect(JSON.parse(result.body).result.tools).toHaveLength(11);
+        else expect(JSON.parse(result.body).code).toBe("unauthorized");
+      } finally {
+        finishUpload();
+        await completed.catch(() => undefined);
+      }
+    });
+  }
+
   test("manages sessions, rotates passwords, and deletes owned account data", async () => {
     const app = await boot();
     const email = "security-owner@example.com";
@@ -1085,6 +1347,200 @@ describe("public account authentication", () => {
     expect((await jsonRequest(app.base, "/api/auth/sign-in/email", {
       body: { email, password: newPassword },
     })).response.status).toBe(401);
+  });
+
+  test.each(["api", "workspace", "inbox"].flatMap(surface =>
+    ["delete", "logout", "workspace-change", "unchanged"].map(change => ({ surface, change })),
+  ))("rechecks delayed upload access: $surface, $change", async ({ surface, change }) => {
+    const app = await boot();
+    const email = "late-memory-owner@example.com";
+    const signup = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email, password: PASSWORD },
+    });
+    expect(signup.response.status).toBe(200);
+    const cookie = sessionCookie(signup.response);
+    const workspacePath = join(app.root, "data", "web-workspaces", signup.payload.organization.id);
+    const workspaceId = `ws_web_${createHash("sha256")
+      .update(`matterhorn-web-workspace:${signup.payload.organization.id}`).digest("hex").slice(0, 16)}`;
+    const endpoint = surface === "api" ? "/api/memory/capture"
+      : `/workspace/${workspaceId}/${surface === "inbox" ? "inbox" : "memory/capture"}`;
+    const memoryBody = { record: {
+      id: "mem_late_upload", kind: "user_preference", scope: "workspace",
+      title: "Delayed local fixture", summary: "Must not survive account deletion",
+      body: { responseStyle: "deleted-account-fixture" }, tags: [], links: [],
+      provenance: { source: "user_confirmed", capturedAt: "2026-10-04T00:00:00.000Z", capturedBy: "user", confidence: 1, reasonRemembered: "Disposable race test" },
+      sensitivity: "private", createdAt: "2026-10-04T00:00:00.000Z", updatedAt: "2026-10-04T00:00:00.000Z",
+      canUseInChat: true, canExport: false, canDelete: true,
+    } };
+    const boundary = "matterhorn-disposable-upload-boundary";
+    const body = surface === "inbox"
+      ? `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="late.txt"\r\nContent-Type: text/plain\r\n\r\nDisposable upload\r\n--${boundary}--\r\n`
+      : JSON.stringify(memoryBody);
+    const contentType = surface === "inbox" ? `multipart/form-data; boundary=${boundary}` : "application/json";
+    // A second account's existing memory must remain usable after the first
+    // account is deleted or revoked. This also detects cross-account purges.
+    const other = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "unaffected-memory-owner@example.com", password: PASSWORD },
+    });
+    expect(other.response.status).toBe(200);
+    const otherCookie = sessionCookie(other.response);
+    const otherCapture = await jsonRequest(app.base, "/api/memory/capture", {
+      cookie: otherCookie, body: memoryBody,
+    });
+    expect(otherCapture.response.status).toBe(200);
+    const otherBefore = await jsonRequest(app.base, "/api/memory/entities", { cookie: otherCookie });
+    expect(otherBefore.response.status).toBe(200);
+    let finishUpload = () => {};
+    const completed = new Promise<number>((resolve, reject) => {
+      const request = httpRequest(`${app.base}${endpoint}`, {
+        method: "POST",
+        // Revocation must reject the original account request, not fall back
+        // to this otherwise valid local operator token after reading the body.
+        headers: { Cookie: cookie, Authorization: `Bearer ${TOKEN}`, "Content-Type": contentType, "Content-Length": Buffer.byteLength(body) },
+      }, response => {
+        response.resume();
+        response.on("end", () => resolve(response.statusCode ?? 0));
+        response.on("error", reject);
+      });
+      request.on("error", reject);
+      request.setTimeout(4000, () => request.destroy(new Error("Disposable upload timed out")));
+      finishUpload = () => request.end(body.slice(1));
+      request.write(body.slice(0, 1));
+      request.flushHeaders();
+    });
+    try {
+      // Workspace creation proves the streaming request reached account-scoped
+      // middleware; the rest of its body remains withheld from the handler.
+      for (let attempt = 0; attempt < 200 && !existsSync(workspacePath); attempt += 1) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      expect(existsSync(workspacePath)).toBe(true);
+      if (change === "delete") {
+        const deleted = await jsonRequest(app.base, "/api/auth/account", {
+          method: "DELETE", cookie, body: { password: PASSWORD, confirmationEmail: email },
+        });
+        expect(deleted.response.status).toBe(200);
+        expect(existsSync(workspacePath)).toBe(false);
+      } else if (change === "logout") {
+        expect((await jsonRequest(app.base, "/api/auth/sign-out", {
+          method: "POST", cookie,
+        })).response.status).toBe(200);
+      } else if (change === "workspace-change") {
+        const created = await jsonRequest(app.base, "/api/auth/organization/create", {
+          cookie, body: { name: "Other disposable workspace", slug: "other-disposable-workspace" },
+        });
+        expect(created.response.status).toBe(200);
+        expect((await jsonRequest(app.base, "/api/den/v1/me/active-organization", {
+          cookie, body: { organizationId: created.payload.organization.id },
+        })).response.status).toBe(200);
+      }
+    } finally {
+      finishUpload();
+      await completed;
+    }
+    if (change === "delete") expect(existsSync(workspacePath)).toBe(false);
+    expect(await completed).toBe(change === "unchanged" ? (surface === "workspace" ? 201 : 200) : change === "workspace-change" ? 403 : 401);
+    if (surface === "inbox") {
+      const uploaded = join(workspacePath, ".opencode", "openwork", "inbox", "late.txt");
+      expect(existsSync(uploaded)).toBe(change === "unchanged");
+      if (change === "unchanged") expect(readFileSync(uploaded, "utf8")).toBe("Disposable upload");
+    } else if (change !== "unchanged") {
+      const memoryIndex = join(workspacePath, ".matterhorn-work", "memory", "memory-index.json");
+      if (existsSync(memoryIndex)) expect(readFileSync(memoryIndex, "utf8")).not.toContain("mem_late_upload");
+    }
+    const otherAfter = await jsonRequest(app.base, "/api/memory/entities", { cookie: otherCookie });
+    expect(otherAfter.response.status).toBe(200);
+    expect(otherAfter.payload).toEqual(otherBefore.payload);
+  });
+
+  test.each(["delete", "logout", "workspace-change", "unchanged"])("pending workspace approvals recheck access after %s without cancelling another account", async change => {
+    const app = await boot(undefined, "manual");
+    const hostHeaders = { "x-matterhorn-host-token": HOST_TOKEN };
+    const accounts: Array<{ email: string; cookie: string; workspaceId: string; workspacePath: string }> = [];
+    for (const email of ["pending-owner@example.com", "pending-other@example.com"]) {
+      const signup = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+        body: { email, password: PASSWORD },
+      });
+      expect(signup.response.status).toBe(200);
+      const cookie = sessionCookie(signup.response);
+      const workspaces = await jsonRequest(app.base, "/workspaces", { cookie });
+      expect(workspaces.response.status).toBe(200);
+      const workspace = workspaces.payload.items[0];
+      if (typeof workspace.id !== "string" || typeof workspace.path !== "string") {
+        throw new Error("Disposable account workspace is missing");
+      }
+      accounts.push({ email, cookie, workspaceId: workspace.id, workspacePath: workspace.path });
+    }
+    const uploads = accounts.map(account => {
+      const controller = new AbortController();
+      const form = new FormData();
+      form.set("file", new File(["Disposable approval fixture"], "pending.txt"));
+      const completed = fetch(`${app.base}/workspace/${account.workspaceId}/inbox`, {
+        method: "POST", headers: { Cookie: account.cookie }, body: form, signal: controller.signal,
+      }).then(response => response.status, () => 0);
+      return { controller, completed };
+    });
+    try {
+      let approvals = await jsonRequest(app.base, "/approvals", { headers: hostHeaders });
+      expect(approvals.response.status).toBe(200);
+      for (let attempt = 0; attempt < 100 && approvals.payload.items.length !== 2; attempt += 1) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        approvals = await jsonRequest(app.base, "/approvals", { headers: hostHeaders });
+      }
+      expect(approvals.response.status).toBe(200);
+      expect(approvals.payload.items).toHaveLength(2);
+      const pending = approvals.payload.items.find((item: { workspaceId: string }) => item.workspaceId === accounts[0].workspaceId);
+      const other = approvals.payload.items.find((item: { workspaceId: string }) => item.workspaceId === accounts[1].workspaceId);
+      expect(typeof pending?.id).toBe("string");
+      expect(typeof other?.id).toBe("string");
+      if (change === "delete") {
+        const deleted = await jsonRequest(app.base, "/api/auth/account", {
+          method: "DELETE", cookie: accounts[0].cookie,
+          body: { password: PASSWORD, confirmationEmail: accounts[0].email },
+        });
+        expect(deleted.response.status).toBe(200);
+        expect(existsSync(accounts[0].workspacePath)).toBe(false);
+        const guardedDb = new Database(join(app.root, "data", "guarded-runtime", "state.db"), { readonly: true });
+        try {
+          const marker = guardedDb.query("SELECT state_key FROM guarded_state WHERE kind = 'workspace_deletion_barrier'").all();
+          expect(marker).toEqual([{ state_key: accounts[0].workspaceId }]);
+        } finally {
+          guardedDb.close();
+        }
+      } else if (change === "logout") {
+        expect((await jsonRequest(app.base, "/api/auth/sign-out", {
+          method: "POST", cookie: accounts[0].cookie,
+        })).response.status).toBe(200);
+      } else if (change === "workspace-change") {
+        const created = await jsonRequest(app.base, "/api/auth/organization/create", {
+          cookie: accounts[0].cookie, body: { name: "Approval workspace", slug: "approval-workspace" },
+        });
+        expect(created.response.status).toBe(200);
+        expect((await jsonRequest(app.base, "/api/den/v1/me/active-organization", {
+          cookie: accounts[0].cookie, body: { organizationId: created.payload.organization.id },
+        })).response.status).toBe(200);
+      }
+      const lateApproval = await jsonRequest(app.base, `/approvals/${pending.id}`, {
+        headers: hostHeaders, body: { reply: "allow" },
+      });
+      const uploadStatus = await uploads[0].completed;
+      if (change === "delete") expect(existsSync(accounts[0].workspacePath)).toBe(false);
+      expect(existsSync(join(accounts[0].workspacePath, ".opencode", "openwork", "inbox", "pending.txt")))
+        .toBe(change === "unchanged");
+      expect(lateApproval.response.status).toBe(change === "delete" ? 404 : 200);
+      expect(uploadStatus).toBe(change === "unchanged" ? 200 : change === "workspace-change" ? 403 : 401);
+      const remaining = await jsonRequest(app.base, "/approvals", { headers: hostHeaders });
+      expect(remaining.payload.items).toEqual([other]);
+      expect((await jsonRequest(app.base, `/approvals/${other.id}`, {
+        headers: hostHeaders, body: { reply: "allow" },
+      })).response.status).toBe(200);
+      expect(await uploads[1].completed).toBe(200);
+      expect(readFileSync(join(accounts[1].workspacePath, ".opencode", "openwork", "inbox", "pending.txt"), "utf8"))
+        .toBe("Disposable approval fixture");
+    } finally {
+      for (const upload of uploads) upload.controller.abort();
+      await Promise.all(uploads.map(upload => upload.completed));
+    }
   });
 
   test("blocks deletion while the account owns a workspace with other members", async () => {

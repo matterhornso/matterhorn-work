@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -34,6 +35,92 @@ async function store(config: Partial<MatterhornModelUsageConfig> = {}) {
 }
 
 describe("MatterhornModelUsageStore", () => {
+  for (const priorTool of [false, true]) {
+    for (const name of ["MessageAbortedError", "APIError"]) {
+      test(`retains unknown ${name} usage across restart until a late report (prior tool=${priorTool})`, async () => {
+        const root = await mkdtemp(join(tmpdir(), "matterhorn-late-usage-"));
+        roots.push(root);
+        const options = { path: join(root, "usage.db"), config: resolveMatterhornModelUsageConfig({
+          MATTERHORN_MODEL_USAGE_ENFORCEMENT: "hard", MATTERHORN_MODEL_USAGE_RESERVATION_TOKENS: "1000",
+        }) };
+        let usage = new MatterhornModelUsageStore(options);
+        try {
+          const now = Date.now();
+          const scope = { subject: { id: "late" }, workspaceId: "ws", sessionId: "ses", providerId: "fixture", modelId: "fixture" };
+          expect(usage.reserve({ ...scope, messageId: "user" }).allowed).toBe(true);
+          const info = { id: "interrupted", parentID: "user", sessionID: "ses", role: "assistant",
+            providerID: "fixture", modelID: "fixture", time: { created: now + 1, completed: now + 2 },
+            error: { name }, tokens: { input: 0, output: 0 } };
+          const steps = priorTool ? [{ info: { ...info, id: "tool-step", time: { created: now, completed: now + 1 },
+            error: undefined, finish: "tool-calls", tokens: { input: 100, output: 23 } }, parts: [] }] : [];
+          const interrupted = [...steps, { info, parts: [] }];
+          for (let i = 0; i < 2; i++) {
+            expect(usage.reconcile({ ...scope, messages: interrupted })).toBe(0);
+            expect(usage.status(scope.subject)).toMatchObject({ pendingRequests: 1,
+              monthly: { usedTokens: 0, reservedTokens: 1000 } });
+            if (i === 0) { usage.close(); usage = new MatterhornModelUsageStore(options); }
+          }
+          const final = [...steps, { info: { ...info, tokens: { input: 300, output: 173 } }, parts: [] }];
+          expect(usage.reconcile({ ...scope, messages: final, unusedMessageIds: ["user"] })).toBe(1);
+          expect(usage.reconcile({ ...scope, messages: final })).toBe(0);
+          expect(usage.reconcile({ ...scope, messages: interrupted })).toBe(0);
+          expect(usage.status(scope.subject)).toMatchObject({ pendingRequests: 0,
+            monthly: { usedTokens: priorTool ? 596 : 473, reservedTokens: 0 } });
+        } finally { usage.close(); }
+      });
+    }
+  }
+
+  test("unused dispatch evidence cancels only the exact subject, workspace, session and bound parent", async () => {
+    const usage = await store();
+    try {
+      const scope = { subject: { id: "unused" }, workspaceId: "ws", sessionId: "ses", providerId: "fixture", modelId: "fixture" };
+      for (const variant of [{}, { subject: { id: "other" } }, { workspaceId: "other" }, { sessionId: "other" }]) {
+        expect(usage.reserve({ ...scope, ...variant, messageId: "parent" }).allowed).toBe(true);
+      }
+      expect(usage.reserve({ ...scope, messageId: "other-parent" }).allowed).toBe(true);
+      expect(usage.reserve(scope).allowed).toBe(true); // A legacy unbound hold is not refundable by parent.
+      expect(usage.reconcile({ ...scope, messages: [], unusedMessageIds: ["unknown"] })).toBe(0);
+      expect(usage.reconcile({ ...scope, messages: [], unusedMessageIds: ["parent"] })).toBe(1);
+      expect(usage.reconcile({ ...scope, messages: [], unusedMessageIds: ["parent"] })).toBe(0);
+      expect(usage.status(scope.subject).pendingRequests).toBe(4);
+      expect(usage.status({ id: "other" }).pendingRequests).toBe(1);
+    } finally { usage.close(); }
+  });
+
+  test("persists compaction ownership in the reservation insert before another instance can reconcile", async () => {
+    const root = await mkdtemp(join(tmpdir(), "matterhorn-atomic-usage-"));
+    roots.push(root);
+    const options = { path: join(root, "usage.db"), config: resolveMatterhornModelUsageConfig({
+      MATTERHORN_MODEL_USAGE_ENFORCEMENT: "hard", MATTERHORN_MODEL_USAGE_RESERVATION_TOKENS: "20000",
+    }) };
+    const writer = new MatterhornModelUsageStore(options);
+    const reader = new MatterhornModelUsageStore(options);
+    const db = new Database(options.path);
+    try {
+      // This guard rejects a two-statement insert-then-bind implementation even
+      // if both statements usually run without an intervening event-loop yield.
+      db.exec(`CREATE TRIGGER require_compaction_binding BEFORE INSERT ON model_usage_operations
+        WHEN NEW.session_id = 'compaction' AND NEW.user_message_id IS NULL
+        BEGIN SELECT RAISE(ABORT, 'compaction must be born bound'); END`);
+      const scope = { subject: { id: "atomic" }, workspaceId: "ws", sessionId: "compaction", providerId: "fixture", modelId: "fixture" };
+      const bound = writer.reserve({ ...scope, messageId: "msg_compaction" });
+      expect(bound.allowed).toBe(true);
+      const result = (parentID: string, total: number) => ({ info: {
+        id: `assistant_${parentID}`, sessionID: scope.sessionId, parentID, role: "assistant", summary: true,
+        providerID: "fixture", modelID: "fixture", finish: "stop", tokens: { total },
+        time: { created: Date.now(), completed: Date.now() + 1 },
+      }, parts: [] });
+      const unrelated = result("msg_unrelated", 123);
+      expect(reader.reconcile({ ...scope, messages: [unrelated] })).toBe(0);
+      expect(reader.status(scope.subject)).toMatchObject({ pendingRequests: 1, monthly: { usedTokens: 0, reservedTokens: 20000 } });
+      const messages = [unrelated, result("msg_compaction", 473)];
+      expect(reader.reconcile({ ...scope, messages })).toBe(1);
+      expect(writer.reconcile({ ...scope, messages })).toBe(0);
+      expect(writer.status(scope.subject)).toMatchObject({ pendingRequests: 0, monthly: { usedTokens: 473, reservedTokens: 0 } });
+    } finally { db.close(); reader.close(); writer.close(); }
+  });
+
   for (const finish of ["unknown", "tool-calls", "stop"]) {
     for (const name of ["MessageAbortedError", "APIError"]) {
       test(`settles actual usage after terminal ${name} with stale ${finish} finish`, async () => {

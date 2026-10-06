@@ -559,6 +559,9 @@ export class MatterhornCryptoEvidenceStore {
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
     return this.stateStore.transaction(() => {
+      if (input.operation !== "destroy_key" && input.operation !== "delete") {
+        this.assertWorkspaceWritable(input.workspaceId);
+      }
       this.stateStore.deleteExpired(now.getTime());
       const record = this.storedRecord(input.evidenceId, now.getTime());
       if (!record) throw new Error("crypto_evidence_not_found");
@@ -807,6 +810,35 @@ export class MatterhornCryptoEvidenceStore {
     return events.map((event) => structuredClone(event));
   }
 
+  assertWorkspaceWritable(workspaceId: string): void {
+    if (this.stateStore.isWorkspaceDeleted(workspaceId)) throw new Error("crypto_evidence_workspace_deleted");
+  }
+
+  private assertCurrentRecoveryRecord(record: MatterhornCryptoEvidenceRecord): void {
+    this.assertWorkspaceWritable(record.workspaceId);
+    const current = this.storedRecord(record.id);
+    if (!current) throw new Error("crypto_evidence_not_found");
+    assertTenant(current, record);
+    if (current.state === "key_destroyed" || this.recoveryMaterialErased(current)) {
+      throw new Error("crypto_evidence_key_destroyed");
+    }
+    if (current.revision !== record.revision) throw new Error("crypto_evidence_revision_conflict");
+  }
+
+  private recordDeniedAccessIfPresent(
+    record: MatterhornCryptoEvidenceRecord,
+    action: MatterhornCryptoEvidenceAccessEvent["action"],
+    reason: string,
+  ): void {
+    this.stateStore.transaction(() => {
+      if (this.stateStore.isWorkspaceDeleted(record.workspaceId)) return;
+      const current = this.storedRecord(record.id);
+      if (!current) return;
+      assertTenant(current, record);
+      this.recordAccess({ record: current, action, outcome: "denied", reason });
+    });
+  }
+
   create(input: {
     workspaceId: string;
     ownerId: string;
@@ -815,6 +847,18 @@ export class MatterhornCryptoEvidenceStore {
     sealed: MatterhornSealedEvidence;
     now?: Date;
   }): MatterhornCryptoEvidenceRecord {
+    return this.stateStore.transaction(() => this.createActiveRecord(input));
+  }
+
+  private createActiveRecord(input: {
+    workspaceId: string;
+    ownerId: string;
+    runId: string;
+    coworkerId: string;
+    sealed: MatterhornSealedEvidence;
+    now?: Date;
+  }): MatterhornCryptoEvidenceRecord {
+    this.assertWorkspaceWritable(input.workspaceId);
     for (const value of [input.workspaceId, input.ownerId, input.runId, input.coworkerId]) {
       if (!value.trim()) throw new Error("crypto_evidence_identity_invalid");
     }
@@ -988,6 +1032,14 @@ export class MatterhornCryptoEvidenceStore {
     expectedRevision: number;
     verification: MatterhornEvidenceVerificationStatus;
   }): void {
+    this.stateStore.transaction(() => this.recordVerificationStatusInTransaction(input));
+  }
+
+  /** Caller must hold the state-store transaction, as renewal confirmation does. */
+  recordVerificationStatusInTransaction(
+    input: Parameters<MatterhornCryptoEvidenceStore["recordVerificationStatus"]>[0],
+  ): void {
+    this.assertWorkspaceWritable(input.workspaceId);
     const record = this.get(input);
     if (!record) throw new Error("crypto_evidence_not_found");
     if (record.revision !== input.expectedRevision) throw new Error("crypto_evidence_revision_conflict");
@@ -1025,7 +1077,7 @@ export class MatterhornCryptoEvidenceStore {
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
     return this.storedRecords()
-      .filter((record) => record.state === "published")
+      .filter((record) => record.state === "published" && !this.stateStore.isWorkspaceDeleted(record.workspaceId))
       .map((record) => ({
         record,
         verification: this.getVerificationStatus({
@@ -1277,6 +1329,7 @@ export class MatterhornCryptoEvidenceStore {
     anchor: MatterhornSuiEvidenceAnchor;
     now?: Date;
   }): MatterhornCryptoEvidenceRecord {
+    this.assertWorkspaceWritable(input.workspaceId);
     const current = this.get(input);
     if (!current) throw new Error("crypto_evidence_not_found");
     if (current.revision !== input.expectedRevision) throw new Error("crypto_evidence_revision_conflict");
@@ -1352,6 +1405,7 @@ export class MatterhornCryptoEvidenceStore {
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
     return this.stateStore.transaction(() => {
+      this.assertWorkspaceWritable(input.workspaceId);
       if (!this.hasWalrusPublicationClaim({ ...input, now })) {
         throw new Error("crypto_evidence_walrus_publication_claim_invalid");
       }
@@ -1411,6 +1465,7 @@ export class MatterhornCryptoEvidenceStore {
     proof: MatterhornWalrusProof;
     now?: Date;
   }): MatterhornCryptoEvidenceRecord {
+    this.assertWorkspaceWritable(input.workspaceId);
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
     if (!this.hasWalrusRenewalClaim({ ...input, now })) {
@@ -1495,6 +1550,7 @@ export class MatterhornCryptoEvidenceStore {
     if (!Number.isFinite(now.getTime())) throw new Error("crypto_evidence_time_invalid");
 
     return this.stateStore.transaction(() => {
+      this.assertWorkspaceWritable(input.workspaceId);
       const nextRecords = input.entries.map((entry) => {
         if (!this.hasWalrusPublicationClaim({
           workspaceId: input.workspaceId,
@@ -1584,6 +1640,7 @@ export class MatterhornCryptoEvidenceStore {
     coworkerId: string;
     evidenceId: string;
   }): Promise<MatterhornEvidenceBundle> {
+    this.assertWorkspaceWritable(input.workspaceId);
     const record = this.get(input);
     if (!record) throw new Error("crypto_evidence_not_found");
     if (!record.envelope || !record.key.keyReference || !record.key.wrappedKey || !record.key.keyContext
@@ -1600,19 +1657,23 @@ export class MatterhornCryptoEvidenceStore {
         keyContext: record.key.keyContext,
       });
       try {
-        const bundle = decryptMatterhornEvidenceEnvelope({ envelope: record.envelope, key });
-        if (bundle.workspaceIdHash !== record.index.workspaceIdHash
-          || bundle.runIdHash !== record.index.runIdHash
-          || bundle.coworkerIdHash !== record.index.coworkerIdHash) {
-          throw new Error("crypto_evidence_identity_hash_mismatch");
-        }
-        this.recordAccess({ record, action: "decrypt", outcome: "allowed", reason: "decrypted" });
-        return bundle;
+        const envelope = record.envelope;
+        return this.stateStore.transaction(() => {
+          this.assertCurrentRecoveryRecord(record);
+          const bundle = decryptMatterhornEvidenceEnvelope({ envelope, key });
+          if (bundle.workspaceIdHash !== record.index.workspaceIdHash
+            || bundle.runIdHash !== record.index.runIdHash
+            || bundle.coworkerIdHash !== record.index.coworkerIdHash) {
+            throw new Error("crypto_evidence_identity_hash_mismatch");
+          }
+          this.recordAccess({ record, action: "decrypt", outcome: "allowed", reason: "decrypted" });
+          return bundle;
+        });
       } finally {
         key.fill(0);
       }
     } catch (error) {
-      this.recordAccess({ record, action: "decrypt", outcome: "denied", reason: "decrypt_failed" });
+      this.recordDeniedAccessIfPresent(record, "decrypt", "decrypt_failed");
       throw error;
     }
   }
@@ -1625,6 +1686,7 @@ export class MatterhornCryptoEvidenceStore {
     expectedRevision: number;
     now?: Date;
   }): Promise<MatterhornCryptoEvidenceRecord> {
+    this.assertWorkspaceWritable(input.workspaceId);
     const existing = this.get(input);
     if (!existing) throw new Error("crypto_evidence_not_found");
     if (existing.state === "key_destroyed" || !existing.key.keyReference
@@ -1655,13 +1717,14 @@ export class MatterhornCryptoEvidenceStore {
           keyContext,
         });
       } catch (error) {
-        this.recordAccess({ record: current, action: "rotate_key", outcome: "denied", reason: "rotation_failed" });
+        this.recordDeniedAccessIfPresent(current, "rotate_key", "rotation_failed");
         throw error;
       }
       if (!rotated.keyReference.trim() || !rotated.wrappedKey.trim()) {
-        this.recordAccess({ record: current, action: "rotate_key", outcome: "denied", reason: "rotation_invalid" });
+        this.recordDeniedAccessIfPresent(current, "rotate_key", "rotation_invalid");
         throw new Error("crypto_evidence_key_rotation_invalid");
       }
+      const completedAt = input.now ?? new Date();
       const next: MatterhornCryptoEvidenceRecord = {
         ...current,
         revision: current.revision + 1,
@@ -1670,13 +1733,24 @@ export class MatterhornCryptoEvidenceStore {
           keyReference: rotated.keyReference,
           keyReferenceHash: sha256(rotated.keyReference),
           wrappedKey: rotated.wrappedKey,
-          rotatedAt: now.toISOString(),
+          rotatedAt: completedAt.toISOString(),
         },
-        updatedAt: now.toISOString(),
+        updatedAt: completedAt.toISOString(),
       };
-      this.persistRecord(next, now.getTime());
-      this.clearVerificationStatus({ workspaceId: next.workspaceId, evidenceId: next.id });
-      this.recordAccess({ record: next, action: "rotate_key", outcome: "allowed", reason: "rewrapped", now });
+      this.stateStore.transaction(() => {
+        this.assertCurrentRecoveryRecord(current);
+        const claim = this.activeOperationClaim({ ...input, nowMs: completedAt.getTime() });
+        if (!claim || claim.claimId !== claimed.claimId || claim.evidenceId !== current.id
+          || claim.expectedRevision !== current.revision || claim.operation !== "rotate_key") {
+          throw new Error("crypto_evidence_operation_claim_invalid");
+        }
+        this.persistRecord(next, completedAt.getTime());
+        this.clearVerificationStatus({ workspaceId: next.workspaceId, evidenceId: next.id });
+        this.recordAccess({ record: next, action: "rotate_key", outcome: "allowed", reason: "rewrapped", now: completedAt });
+        if (!this.endExclusiveOperationInTransaction({ ...input, claimId: claimed.claimId, now: completedAt })) {
+          throw new Error("crypto_evidence_operation_claim_invalid");
+        }
+      });
       this.stateStore.secureCheckpoint();
       return clone(next);
     } finally {
@@ -1715,7 +1789,7 @@ export class MatterhornCryptoEvidenceStore {
           coworkerId: record.coworkerId,
           evidenceId: record.id,
           expectedRevision: record.revision,
-          now,
+          ...(input.now ? { now: input.now } : {}),
         });
         rotated += 1;
       } catch (error) {
@@ -1941,6 +2015,7 @@ export class MatterhornCryptoEvidenceStore {
     destroyed: number;
     failures: Array<{ evidenceId: string; error: string }>;
   }> {
+    this.stateStore.markWorkspaceDeleted(input.workspaceId);
     const records = this.storedRecords({
       workspaceId: input.workspaceId,
     });

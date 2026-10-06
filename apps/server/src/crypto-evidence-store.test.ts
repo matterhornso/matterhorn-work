@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setSystemTime, test } from "bun:test";
 
 import {
   MATTERHORN_WALRUS_PROOF_VERSION,
@@ -65,6 +65,172 @@ function receipt(input: { id?: string; runId?: string; workspaceId?: string } = 
 }
 
 describe("durable crypto evidence store", () => {
+  for (const change of ["workspace", "key", "other_workspace", "none"]) {
+    test(`delayed evidence decryption rechecks ${change} deletion`, async () => {
+      const directory = await mkdtemp(join(tmpdir(), "matterhorn-evidence-delayed-read-"));
+      const state = new MatterhornGuardedRuntimeStateStore(join(directory, "state.db"));
+      const authority = testDurableStateAuthority();
+      let release = () => {};
+      let notifyStarted = () => {};
+      const released = new Promise<void>(resolve => { release = resolve; });
+      const started = new Promise<void>(resolve => { notifyStarted = resolve; });
+      const returnedKey = Buffer.alloc(32, 7);
+      const keyManager: MatterhornEvidenceKeyManager = {
+        createDataKey: async ({ recipientKeyIds }) => ({
+          plaintextKey: Buffer.alloc(32, 7), keyReference: "kms://read-fixture",
+          wrappedKey: "synthetic-wrapped-key", keyContext: "a".repeat(64), recipientKeyIds,
+        }),
+        decryptDataKey: async () => { notifyStarted(); await released; return returnedKey; },
+        destroyKey: async () => {},
+      };
+      let pending: Promise<{ hash: string; error: string }> | undefined;
+      try {
+        const store = new MatterhornCryptoEvidenceStore(state, keyManager, {}, null, authority);
+        const sealed = await sealMatterhornRunEvidence({ receipt: receipt(), coworkerId: "coworker_store", recipientKeyIds: ["recipient"], keyManager });
+        const identity = { workspaceId: "workspace_store", ownerId: "owner_store", coworkerId: "coworker_store" };
+        const created = store.create({ ...identity, runId: "run_store", sealed });
+        sealed.walrusCiphertext.fill(0);
+        pending = store.decrypt({ ...identity, evidenceId: created.id }).then(
+          result => ({ hash: result.runIdHash, error: "" }),
+          error => ({ hash: "", error: error instanceof Error ? error.message : "unknown_error" }),
+        );
+        await started;
+        if (change === "workspace") {
+          expect(await store.destroyWorkspaceForDeletion(identity)).toEqual({ checked: 1, destroyed: 1, failures: [] });
+          state.purgeWorkspace(identity.workspaceId);
+        } else if (change === "key") {
+          await store.destroyKey({ ...identity, evidenceId: created.id, expectedRevision: 1 });
+        } else if (change === "other_workspace") {
+          await store.destroyWorkspaceForDeletion({ workspaceId: "workspace_other" });
+        }
+        release();
+        const outcome = await pending;
+        if (change === "workspace" || change === "key") {
+          expect(outcome.hash).toBe("");
+          expect(outcome.error).toBe(change === "workspace" ? "crypto_evidence_workspace_deleted" : "crypto_evidence_key_destroyed");
+        } else {
+          expect(outcome).toEqual({ hash: created.index.runIdHash, error: "" });
+        }
+        expect(returnedKey.every(byte => byte === 0)).toBe(true);
+        if (change === "workspace") {
+          expect(state.listRecords("crypto_evidence_audit", { workspaceId: identity.workspaceId })).toEqual([]);
+          expect(store.get({ ...identity, evidenceId: created.id })).toBeNull();
+        }
+      } finally {
+        release();
+        await pending;
+        authority.close();
+        state.close();
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+  }
+
+  for (const change of ["workspace", "expired_claim", "lease_elapsed", "replacement_claim", "key_destroyed", "rollback", "none"]) {
+    test(`delayed key rotation rechecks ${change} before persistence`, async () => {
+      const directory = await mkdtemp(join(tmpdir(), "matterhorn-evidence-delayed-rotation-"));
+      const state = new MatterhornGuardedRuntimeStateStore(join(directory, "state.db"));
+      const authority = testDurableStateAuthority();
+      let release = () => {};
+      let notifyStarted = () => {};
+      const released = new Promise<void>(resolve => { release = resolve; });
+      const started = new Promise<void>(resolve => { notifyStarted = resolve; });
+      const keyManager: MatterhornEvidenceKeyManager = {
+        createDataKey: async ({ recipientKeyIds }) => ({
+          plaintextKey: Buffer.alloc(32, 7), keyReference: "kms://rotation-fixture",
+          wrappedKey: "synthetic-original-key", keyContext: "a".repeat(64), recipientKeyIds,
+        }),
+        decryptDataKey: async () => Buffer.alloc(32, 7),
+        rotateDataKey: async () => {
+          notifyStarted(); await released;
+          return { keyReference: "kms://rotated-fixture", wrappedKey: "synthetic-rotated-key" };
+        },
+        destroyKey: async () => {},
+      };
+      let pending: Promise<string> | undefined;
+      let replacement: { claimId: string; now: Date } | undefined;
+      try {
+        const store = new MatterhornCryptoEvidenceStore(state, keyManager, {}, null, authority);
+        const sealed = await sealMatterhornRunEvidence({ receipt: receipt(), coworkerId: "coworker_store", recipientKeyIds: ["recipient"], keyManager });
+        const identity = { workspaceId: "workspace_store", ownerId: "owner_store", coworkerId: "coworker_store" };
+        const created = store.create({
+          ...identity, runId: "run_store", sealed,
+          ...(change === "lease_elapsed" ? { now: new Date(Date.now() - 2 * 24 * 60 * 60_000) } : {}),
+        });
+        sealed.walrusCiphertext.fill(0);
+        pending = change === "lease_elapsed"
+          ? store.rotateDue({ maxAgeMs: 24 * 60 * 60_000 }).then(result => result.failures[0]?.error ?? "rotated")
+          : store.rotateKey({ ...identity, evidenceId: created.id, expectedRevision: 1 }).then(
+            () => "rotated", error => error instanceof Error ? error.message : "unknown_error",
+          );
+        await started;
+        if (change === "workspace") {
+          // The outstanding rotation owns the key claim, so cleanup must retry.
+          expect(await store.destroyWorkspaceForDeletion(identity)).toEqual({
+            checked: 1, destroyed: 0,
+            failures: [{ evidenceId: created.id, error: "crypto_evidence_operation_in_progress" }],
+          });
+        } else if (change === "expired_claim" || change === "key_destroyed" || change === "replacement_claim") {
+          const afterLease = new Date(Date.now() + 6 * 60_000);
+          state.deleteExpired(afterLease.getTime());
+          if (change === "key_destroyed") {
+            await store.destroyKey({ ...identity, evidenceId: created.id, expectedRevision: 1, now: afterLease });
+          } else if (change === "replacement_claim") {
+            replacement = {
+              ...store.beginWalrusPublication({ ...identity, evidenceId: created.id, expectedRevision: 1, now: afterLease }),
+              now: afterLease,
+            };
+          }
+        } else if (change === "lease_elapsed") {
+          setSystemTime(new Date(Date.now() + 6 * 60_000));
+        } else if (change === "rollback") {
+          const deleteState = state.delete.bind(state);
+          let rejectClaimConsumption = true;
+          state.delete = (kind, key) => {
+            if (kind === "crypto_evidence_operation_claim" && rejectClaimConsumption) {
+              rejectClaimConsumption = false;
+              return false;
+            }
+            return deleteState(kind, key);
+          };
+        }
+        release();
+        const outcome = await pending;
+        const latest = store.get({ ...identity, evidenceId: created.id });
+        if (change === "none") {
+          expect(outcome).toBe("rotated");
+          expect(latest?.key.wrappedKey).toBe("synthetic-rotated-key");
+          expect(latest?.revision).toBe(2);
+        } else {
+          expect(outcome).not.toBe("rotated");
+          expect(latest?.key.wrappedKey).toBe(change === "key_destroyed" ? null : "synthetic-original-key");
+          expect(latest?.state).toBe(change === "key_destroyed" ? "key_destroyed" : "sealed");
+          if (change === "workspace") {
+            expect(outcome).toBe("crypto_evidence_workspace_deleted");
+            expect(await store.destroyWorkspaceForDeletion(identity)).toEqual({ checked: 1, destroyed: 1, failures: [] });
+          } else if (change === "key_destroyed") {
+            expect(outcome).toBe("crypto_evidence_key_destroyed");
+          } else {
+            expect(outcome).toBe("crypto_evidence_operation_claim_invalid");
+            expect(latest?.revision).toBe(1);
+            expect(store.listAccessAudit({ ...identity, evidenceId: created.id }).map(event => event.action)).toEqual(["seal"]);
+          }
+        }
+        if (replacement) {
+          expect(store.hasWalrusPublicationClaim({ ...identity, evidenceId: created.id, expectedRevision: 1, ...replacement })).toBe(true);
+          expect(store.endWalrusPublication({ ...identity, evidenceId: created.id, ...replacement })).toBe(true);
+        }
+      } finally {
+        release();
+        await pending;
+        if (change === "lease_elapsed") setSystemTime();
+        authority.close();
+        state.close();
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+  }
+
   test("persists only encrypted evidence, enforces tenant isolation, and destroys recovery material", async () => {
     const directory = await mkdtemp(join(tmpdir(), "matterhorn-evidence-store-"));
     const state = new MatterhornGuardedRuntimeStateStore(join(directory, "state.db"));

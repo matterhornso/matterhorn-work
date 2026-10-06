@@ -33,11 +33,45 @@ function errorMessage(value: unknown, fallback: string): string {
   return fallback;
 }
 
-async function requestPublicAuth<T>(
+function parsePublicAuthConfig(value: unknown): DenPublicAuthConfig {
+  if (
+    !isRecord(value) ||
+    typeof value.signupsAvailable !== "boolean" ||
+    (value.signupStatus !== "open" && value.signupStatus !== "paused" && value.signupStatus !== "setup_required") ||
+    value.signupsAvailable !== (value.signupStatus === "open") ||
+    typeof value.emailVerificationRequired !== "boolean" ||
+    typeof value.passwordResetAvailable !== "boolean" ||
+    typeof value.legalAcceptanceRequired !== "boolean" ||
+    typeof value.minimumPasswordLength !== "number" ||
+    !Number.isSafeInteger(value.minimumPasswordLength) ||
+    value.minimumPasswordLength < 1 ||
+    (value.turnstileSiteKey !== null && (typeof value.turnstileSiteKey !== "string" || !value.turnstileSiteKey.trim()))
+  ) {
+    throw new Error("Account configuration is temporarily unavailable.");
+  }
+  return {
+    signupsAvailable: value.signupsAvailable,
+    signupStatus: value.signupStatus,
+    emailVerificationRequired: value.emailVerificationRequired,
+    passwordResetAvailable: value.passwordResetAvailable,
+    legalAcceptanceRequired: value.legalAcceptanceRequired,
+    minimumPasswordLength: value.minimumPasswordLength,
+    turnstileSiteKey: value.turnstileSiteKey,
+  };
+}
+
+function requireAuthAcknowledgement(value: unknown): { ok: true } {
+  if (!isRecord(value) || value.ok !== true) {
+    throw new Error("Account service returned an invalid response.");
+  }
+  return { ok: true };
+}
+
+async function requestPublicAuth(
   config: PublicCloudConfig,
   path: string,
-  input: { method?: "GET" | "POST"; body?: unknown } = {},
-): Promise<T> {
+  input: { method?: "GET" | "POST"; body?: unknown; signal?: AbortSignal } = {},
+): Promise<unknown> {
   const controller = new AbortController();
   const timeout = globalThis.setTimeout(() => controller.abort(), PUBLIC_AUTH_TIMEOUT_MS);
   try {
@@ -49,7 +83,7 @@ async function requestPublicAuth<T>(
         ...(input.body === undefined ? {} : { "Content-Type": "application/json" }),
       },
       body: input.body === undefined ? undefined : JSON.stringify(input.body),
-      signal: controller.signal,
+      signal: input.signal ? AbortSignal.any([controller.signal, input.signal]) : controller.signal,
     });
     const text = await response.text();
     let payload: unknown = null;
@@ -73,8 +107,9 @@ async function requestPublicAuth<T>(
         isRecord(payload) ? payload.details : undefined,
       );
     }
-    return payload as T;
+    return payload;
   } catch (error) {
+    if (input.signal?.aborted) throw error;
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new Error("Request timed out.");
     }
@@ -86,9 +121,9 @@ async function requestPublicAuth<T>(
 
 export function createPublicAuthClient(config: PublicCloudConfig) {
   return {
-    getPublicAuthConfig: () => requestPublicAuth<DenPublicAuthConfig>(config, "/api/auth/config"),
-    signInEmail: (email: string, password: string) => requestPublicAuth<unknown>(config, "/api/auth/sign-in/email", {
-      method: "POST",
+    getPublicAuthConfig: async (signal?: AbortSignal) => parsePublicAuthConfig(await requestPublicAuth(config, "/api/auth/config", { signal })),
+    signInEmail: (email: string, password: string, signal?: AbortSignal) => requestPublicAuth(config, "/api/auth/sign-in/email", {
+      method: "POST", signal,
       body: { email: email.trim(), password },
     }),
     async signUpEmail(
@@ -96,9 +131,10 @@ export function createPublicAuthClient(config: PublicCloudConfig) {
       password: string,
       legalAccepted = false,
       turnstileToken?: string,
+      signal?: AbortSignal,
     ): Promise<PublicAuthSignUpResult> {
-      const payload = await requestPublicAuth<unknown>(config, "/api/auth/sign-up/email", {
-        method: "POST",
+      const payload = await requestPublicAuth(config, "/api/auth/sign-up/email", {
+        method: "POST", signal,
         body: {
           name: "Matterhorn Desks User",
           email: email.trim(),
@@ -112,21 +148,21 @@ export function createPublicAuthClient(config: PublicCloudConfig) {
         email: isRecord(payload) && typeof payload.email === "string" ? payload.email : null,
       };
     },
-    verifyEmail: (email: string, code: string) => requestPublicAuth<unknown>(config, "/api/auth/verify-email", {
-      method: "POST",
+    verifyEmail: (email: string, code: string, signal?: AbortSignal) => requestPublicAuth(config, "/api/auth/verify-email", {
+      method: "POST", signal,
       body: { email: email.trim(), code: code.trim() },
     }),
-    resendVerification: (email: string) => requestPublicAuth<unknown>(config, "/api/auth/resend-verification", {
-      method: "POST",
+    resendVerification: (email: string, signal?: AbortSignal) => requestPublicAuth(config, "/api/auth/resend-verification", {
+      method: "POST", signal,
       body: { email: email.trim() },
-    }),
-    requestPasswordReset: (email: string) => requestPublicAuth<unknown>(config, "/api/auth/password-reset/request", {
-      method: "POST",
+    }).then(requireAuthAcknowledgement),
+    requestPasswordReset: (email: string, signal?: AbortSignal) => requestPublicAuth(config, "/api/auth/password-reset/request", {
+      method: "POST", signal,
       body: { email: email.trim() },
-    }),
-    confirmPasswordReset: (token: string, newPassword: string) => requestPublicAuth<unknown>(config, "/api/auth/password-reset/confirm", {
-      method: "POST",
+    }).then(requireAuthAcknowledgement),
+    confirmPasswordReset: (token: string, newPassword: string, signal?: AbortSignal) => requestPublicAuth(config, "/api/auth/password-reset/confirm", {
+      method: "POST", signal,
       body: { token: token.trim(), newPassword },
-    }),
+    }).then(requireAuthAcknowledgement),
   };
 }

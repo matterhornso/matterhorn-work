@@ -19,7 +19,7 @@ for (const source of [publicBetaLaunchDoc, productionLaunchDoc, gateSource]) {
 }
 assert.match(gateSource, /pnpm gate:public-beta-web --json/);
 
-for (const vercelConfig of vercelConfigs) {
+function assertVercelSecurityHeaders(vercelConfig) {
   const immutableAssetHeaders = Object.fromEntries(
     vercelConfig.headers
       .find((entry) => entry.source === "/assets/:path*")
@@ -29,8 +29,8 @@ for (const vercelConfig of vercelConfigs) {
   assert.equal(immutableAssetHeaders["cache-control"], "public, max-age=31536000, immutable");
   const vercelHeaders = Object.fromEntries(
     vercelConfig.headers
-      .find((entry) => entry.source === "/(.*)")
-      .headers
+      .filter((entry) => entry.source === "/(.*)" && !entry.has && !entry.missing)
+      .flatMap((entry) => entry.headers)
       .map((header) => [header.key.toLowerCase(), header.value]),
   );
   assert.match(vercelHeaders["content-security-policy"], /frame-ancestors 'none'/);
@@ -42,6 +42,18 @@ for (const vercelConfig of vercelConfigs) {
   assert.equal(vercelHeaders["referrer-policy"], "strict-origin-when-cross-origin");
   assert.equal(vercelHeaders["x-content-type-options"], "nosniff");
   assert.equal(vercelHeaders["x-frame-options"], "DENY");
+}
+
+for (const vercelConfig of vercelConfigs) {
+  assertVercelSecurityHeaders(vercelConfig);
+  // Host-specific headers must never stand in for protection on every host.
+  const conditionalOnlySecurity = structuredClone(vercelConfig);
+  for (const entry of conditionalOnlySecurity.headers) {
+    if (entry.headers.some((header) => header.key.toLowerCase() === "content-security-policy")) {
+      entry.has = [{ type: "host", value: "preview.example" }];
+    }
+  }
+  assert.throws(() => assertVercelSecurityHeaders(conditionalOnlySecurity));
 }
 
 const managedKeys = [

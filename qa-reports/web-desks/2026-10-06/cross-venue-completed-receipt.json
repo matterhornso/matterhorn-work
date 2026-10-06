@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "capturedAt": "2026-10-06T00:45:26.604Z",
+  "workspaceId": "ws_web_58c1823405d1a742",
+  "sessionId": "ses_ef15666b1ffej40d1LJZtNJ11m",
+  "scope": "Normal-account GET-only snapshot of an isolated local runtime. Model completion is not proof that requested tool work succeeded.",
+  "snapshotStatus": "idle",
+  "messages": [
+    {
+      "role": "user",
+      "completed": false,
+      "tokens": {
+        "cache": {}
+      }
+    },
+    {
+      "role": "assistant",
+      "modelId": "asi1",
+      "completed": true,
+      "finish": "tool-calls",
+      "tokens": {
+        "total": 3742,
+        "input": 3710,
+        "output": 26,
+        "reasoning": 6,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      }
+    },
+    {
+      "role": "assistant",
+      "modelId": "asi1",
+      "completed": true,
+      "finish": "stop",
+      "tokens": {
+        "total": 4925,
+        "input": 1779,
+        "output": 508,
+        "reasoning": 78,
+        "cache": {
+          "read": 2560,
+          "write": 0
+        }
+      }
+    }
+  ],
+  "tools": [
+    {
+      "name": "unrecognized_tool",
+      "status": "completed",
+      "observedAt": "2026-10-06T00:43:39.901Z"
+    }
+  ],
+  "toolCounts": {
+    "total": 1,
+    "completed": 1,
+    "errors": 0
+  },
+  "receipts": [
+    {
+      "runId": "agent_run_48b76c8b-9eb4-415d-9b96-5fc220f3696f",
+      "status": "success",
+      "model": "asi1",
+      "usage": {
+        "inputTokens": 5489,
+        "outputTokens": 534,
+        "reasoningTokens": 84,
+        "cacheReadTokens": 2560,
+        "cacheWriteTokens": 0,
+        "estimatedCostUsd": 0
+      },
+      "privacyMode": "public_research",
+      "tools": [
+        {
+          "name": "unrecognized_tool",
+          "status": "success"
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "pendingRequests": 0,
+    "daily": {
+      "usedTokens": 9651,
+      "reservedTokens": 0,
+      "chargedTokens": 9651,
+      "limit": 100000,
+      "remainingTokens": 90349
+    },
+    "monthly": {
+      "usedTokens": 9651,
+      "reservedTokens": 0,
+      "chargedTokens": 9651,
+      "limit": 100000,
+      "remainingTokens": 90349
+    }
+  },
+  "safety": {
+    "requestMethod": "GET",
+    "newModelRequests": 0,
+    "adminCredentialsUsed": false,
+    "rawContentPersisted": false
+  }
+}

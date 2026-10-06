@@ -16,7 +16,9 @@ const repoRoot = resolve(readArg("--repo-root") || scriptRoot);
 const jsonOutput = readArg("--json-output");
 const strict = args.includes("--strict");
 const json = args.includes("--json");
-const maxFileBytes = Number(readArg("--max-file-bytes") || 2 * 1024 * 1024);
+// Include the pinned full model catalog (~5 MiB) in the same secret rules.
+// Larger files still block strict mode instead of silently escaping scanning.
+const maxFileBytes = Number(readArg("--max-file-bytes") || 8 * 1024 * 1024);
 
 const ignoredPrefixes = [
   ".git/",

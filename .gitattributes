@@ -1,0 +1,3 @@
+# Unified patches encode an empty context line as a single space. Preserve
+# those checked and hashed bytes; ordinary source retains whitespace checks.
+patches/runtime/*.patch whitespace=-blank-at-eol

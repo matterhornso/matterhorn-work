@@ -16,9 +16,11 @@ describe("pending host approvals", () => {
       const approvals = new ApprovalService({ mode: "manual", timeoutMs: 20 });
       const controller = new AbortController();
       const removeListener = spyOn(controller.signal, "removeEventListener");
+      const scope = { workspaceId: input.workspaceId, sessionId: "session-a", subjectId: "user:a" };
       try {
-        const pending = approvals.requestApproval(input, controller.signal);
+        const pending = approvals.requestApproval(input, controller.signal, scope);
         const id = approvals.list()[0].id;
+        expect(approvals.hasPendingSession(scope, "session.prompt")).toBe(true);
         if (outcome === "cancelled") controller.abort();
         if (outcome === "allow" || outcome === "deny") approvals.respond(id, outcome);
         expect(await pending).toEqual({
@@ -27,6 +29,7 @@ describe("pending host approvals", () => {
           reason: outcome === "allow" ? undefined : outcome === "deny" ? "denied" : outcome,
         });
         expect(approvals.list()).toEqual([]);
+        expect(approvals.hasPendingSession(scope, "session.prompt")).toBe(false);
         expect(removeListener).toHaveBeenCalledTimes(1);
         expect(approvals.respond(id, "allow")).toBeNull();
         controller.abort();
@@ -70,6 +73,32 @@ describe("pending host approvals", () => {
       id: "auto", allowed: true,
     });
     expect(approvals.list()).toEqual([]);
+    expect(approvals.hasPendingSession({ workspaceId: input.workspaceId, sessionId: "session-a", subjectId: "user:a" }, "session.prompt")).toBe(false);
+  });
+
+  test("pending status requires exact action, workspace, session and original subject", async () => {
+    const approvals = new ApprovalService({ mode: "manual", timeoutMs: 1_000 });
+    const scope = { workspaceId: input.workspaceId, sessionId: "session-a", subjectId: "user:a" };
+    const pending = approvals.requestApproval(input, undefined, scope);
+    expect(approvals.hasPendingSession(scope, "session.prompt")).toBe(true);
+    for (const other of [
+      { ...scope, workspaceId: "other-workspace" },
+      { ...scope, sessionId: "other-session" },
+      { ...scope, subjectId: "user:b" },
+    ]) expect(approvals.hasPendingSession(other, "session.prompt")).toBe(false);
+    expect(approvals.hasPendingSession(scope, "session.compact")).toBe(false);
+    approvals.cancelSession(scope);
+    expect(approvals.hasPendingSession(scope, "session.prompt")).toBe(false);
+    expect((await pending).reason).toBe("cancelled");
+
+    const unrelated = [
+      approvals.requestApproval(input),
+      approvals.requestApproval({ ...input, action: "session.compact" }, undefined, scope),
+      approvals.requestApproval({ ...input, workspaceId: "other-workspace" }, undefined, scope),
+    ];
+    expect(approvals.hasPendingSession(scope, "session.prompt")).toBe(false);
+    for (const request of approvals.list()) approvals.respond(request.id, "deny");
+    await Promise.all(unrelated);
   });
 
   test("Stop only cancels approvals for the same account, workspace and session", async () => {
@@ -88,5 +117,35 @@ describe("pending host approvals", () => {
     for (const request of approvals.list()) approvals.respond(request.id, "allow");
     expect((await Promise.all(unrelated)).every((result) => result.allowed)).toBe(true);
     expect(approvals.list()).toEqual([]);
+  });
+
+  test("workspace deletion cancels scoped and unscoped waiters but preserves other workspaces", async () => {
+    const approvals = new ApprovalService({ mode: "manual", timeoutMs: 1_000 });
+    const controller = new AbortController();
+    const removeListener = spyOn(controller.signal, "removeEventListener");
+    try {
+      const unscoped = approvals.requestApproval(input, controller.signal);
+      const scoped = approvals.requestApproval(input, undefined, {
+        workspaceId: input.workspaceId, sessionId: "session-a", subjectId: "user:a",
+      });
+      const unrelated = approvals.requestApproval({ ...input, workspaceId: "other-workspace" });
+      const [first, second, other] = approvals.list();
+      approvals.cancelWorkspace(input.workspaceId);
+      expect(await unscoped).toEqual({ id: first.id, allowed: false, reason: "cancelled" });
+      expect(await scoped).toEqual({ id: second.id, allowed: false, reason: "cancelled" });
+      expect(removeListener).toHaveBeenCalledTimes(1);
+      expect(approvals.list()).toEqual([other]);
+      expect(approvals.respond(first.id, "allow")).toBeNull();
+      expect(approvals.respond(second.id, "allow")).toBeNull();
+      approvals.cancelWorkspace(input.workspaceId);
+      expect(approvals.list()).toEqual([other]);
+      approvals.respond(other.id, "allow");
+      expect((await unrelated).allowed).toBe(true);
+      expect(approvals.list()).toEqual([]);
+    } finally {
+      controller.abort();
+      for (const pending of approvals.list()) approvals.respond(pending.id, "deny");
+      removeListener.mockRestore();
+    }
   });
 });

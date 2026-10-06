@@ -11,6 +11,7 @@ import type { MatterhornAgentRunReceipt } from "@matterhorn-work/types/guarded-a
 import type { MatterhornEvidenceKeyManager } from "./crypto-evidence-sealer.js";
 import { sealMatterhornRunEvidence } from "./crypto-evidence-sealer.js";
 import { MatterhornCryptoEvidenceStore } from "./crypto-evidence-store.js";
+import { MatterhornCryptoEvidenceVerificationService } from "./crypto-evidence-verification.js";
 import { testDurableStateAuthority } from "./durable-state-authority.test-support.js";
 import {
   createPinnedWalrusEvidenceTransport,
@@ -145,6 +146,214 @@ function hash(bytes: Uint8Array): string {
 }
 
 describe("testnet Walrus evidence publisher", () => {
+  for (const stage of ["certification", "readback", "before_status_save"]) {
+    for (const outcome of ["success", "failure"]) {
+      for (const change of ["delete", "other_workspace", "destroy_key"]) {
+        test(`verification ${stage} ${outcome} after ${change}`, async () => {
+          const value = await fixture();
+          let release!: () => void;
+          let entered!: () => void;
+          const gate = new Promise<void>(resolve => { release = resolve; });
+          const started = new Promise<void>(resolve => { entered = resolve; });
+          let verifying = false;
+          let reads = 0;
+          let bytes = Buffer.alloc(0);
+          const pause = async () => {
+            entered();
+            await gate;
+            if (outcome === "failure") throw new Error("synthetic transport failure");
+          };
+          const publisher = new MatterhornTestnetWalrusEvidencePublisher(value.store, {
+            publish: async input => {
+              bytes = Buffer.from(input.bytes);
+              return { blobId: "blob-testnet-1", suiObjectId: "0x1234", declaredEndEpoch: 110 };
+            },
+            readByObjectId: async () => {
+              if (verifying) {
+                reads += 1;
+                if (stage === "readback") await pause();
+              }
+              return Buffer.from(bytes);
+            },
+          }, async () => {
+            if (verifying && stage === "certification") await pause();
+            return certification({ ownerAddress: WALLET_OWNER });
+          });
+          const request = {
+            workspaceId: "workspace_walrus", ownerId: "owner_walrus", evidenceId: value.record.id,
+            signal: new AbortController().signal,
+          };
+          try {
+            const published = await publisher.publish({
+              ...request, expectedRevision: value.record.revision, ownerAddress: WALLET_OWNER,
+            });
+            let verificationReturned = false;
+            const service = new MatterhornCryptoEvidenceVerificationService(value.store, async input => {
+              const verified = await publisher.verify(input);
+              if (stage === "before_status_save") await pause();
+              verificationReturned = true;
+              return verified;
+            });
+            verifying = true;
+            const pending = service.verify(request);
+            await started;
+            if (change === "destroy_key") {
+              await value.store.destroyKey({
+                ...request, coworkerId: "coworker_walrus", expectedRevision: published.revision,
+              });
+            } else {
+              value.state.markWorkspaceDeleted(change === "delete" ? request.workspaceId : "workspace_other");
+            }
+            release();
+            if (change === "other_workspace") {
+              const result = await pending;
+              expect(result.verification.status).toBe(outcome === "success" ? "verified" : "failed");
+              expect(value.store.getVerificationStatus(request)).toEqual(result.verification);
+            } else {
+              await expect(pending).rejects.toThrow(change === "delete"
+                ? "crypto_evidence_workspace_deleted" : "crypto_evidence_revision_conflict");
+              expect(value.store.getVerificationStatus(request)).toBeNull();
+              expect(value.state.listRecords("crypto_evidence_verification_status", { workspaceId: request.workspaceId })).toHaveLength(0);
+              if (stage === "certification") expect(reads).toBe(0);
+              if (stage !== "before_status_save") expect(verificationReturned).toBe(false);
+            }
+          } finally {
+            release();
+            value.state.close();
+            await rm(value.directory, { recursive: true, force: true });
+          }
+        });
+      }
+    }
+  }
+
+  for (const stage of ["upload", "readback"]) {
+    for (const deletedWorkspace of ["workspace_walrus", "workspace_other"]) {
+      test(`publication rechecks ${deletedWorkspace} deletion after ${stage}`, async () => {
+        const value = await fixture();
+        let release = () => {};
+        let notifyStarted = () => {};
+        const released = new Promise<void>(resolve => { release = resolve; });
+        const started = new Promise<void>(resolve => { notifyStarted = resolve; });
+        let uploaded = Buffer.alloc(0);
+        let publicBytes: Uint8Array | undefined;
+        let certifications = 0;
+        const transport: MatterhornWalrusEvidenceTransport = {
+          publish: async input => {
+            publicBytes = input.bytes;
+            uploaded = Buffer.from(input.bytes);
+            if (stage === "upload") { notifyStarted(); await released; }
+            return { blobId: "blob-testnet-1", suiObjectId: "0x1234", declaredEndEpoch: 110 };
+          },
+          readByObjectId: async () => {
+            if (stage === "readback") { notifyStarted(); await released; }
+            return Buffer.from(uploaded);
+          },
+        };
+        const publisher = new MatterhornTestnetWalrusEvidencePublisher(value.store, transport, async () => {
+          certifications += 1;
+          return certification();
+        });
+        const identity = { workspaceId: "workspace_walrus", ownerId: "owner_walrus", evidenceId: value.record.id, expectedRevision: 1 };
+        const pending = publisher.publish({ ...identity, signal: new AbortController().signal }).then(
+          () => "published", error => error instanceof Error ? error.message : "unknown_error",
+        );
+        try {
+          await started;
+          const deletingTarget = deletedWorkspace === identity.workspaceId;
+          const cleanup = await value.store.destroyWorkspaceForDeletion({ workspaceId: deletedWorkspace });
+          expect(cleanup.destroyed).toBe(0);
+          expect(cleanup.failures).toHaveLength(deletingTarget ? 1 : 0);
+          release();
+          expect(await pending).toBe(deletingTarget ? "crypto_evidence_workspace_deleted" : "published");
+          expect(value.store.get(identity)?.state).toBe(deletingTarget ? "sealed" : "published");
+          expect(publicBytes?.every(byte => byte === 0)).toBe(true);
+          expect(certifications).toBe(deletingTarget && stage === "upload" ? 0 : 1);
+          if (deletingTarget) {
+            await expect(publisher.publish({ ...identity, signal: new AbortController().signal })).rejects.toThrow("crypto_evidence_workspace_deleted");
+            expect(await value.store.destroyWorkspaceForDeletion({ workspaceId: deletedWorkspace })).toEqual({ checked: 1, destroyed: 1, failures: [] });
+          }
+        } finally {
+          release();
+          await pending;
+          uploaded.fill(0);
+          value.state.close();
+          await rm(value.directory, { recursive: true, force: true });
+        }
+      });
+    }
+  }
+
+  for (const stage of ["upload", "readback"]) {
+    for (const deletedWorkspace of ["workspace_walrus", "workspace_other"]) {
+      test(`Quilt rechecks ${deletedWorkspace} deletion after ${stage}`, async () => {
+        const value = await fixture();
+        const second = await addEvidence(value, "deletion-batch");
+        let release = () => {};
+        let notifyStarted = () => {};
+        const released = new Promise<void>(resolve => { release = resolve; });
+        const started = new Promise<void>(resolve => { notifyStarted = resolve; });
+        const patchBytes = new Map<string, Buffer>();
+        const publicBytes: Uint8Array[] = [];
+        let certifications = 0;
+        let readbacks = 0;
+        const transport: MatterhornWalrusEvidenceTransport = {
+          publish: async () => { throw new Error("single_publish_not_expected"); },
+          readByObjectId: async () => { throw new Error("object_read_not_expected"); },
+          publishQuilt: async ({ patches }) => {
+            const bindings = patches.map((patch, index) => {
+              const quiltPatchId = `deletion-patch-${index}`;
+              publicBytes.push(patch.bytes);
+              patchBytes.set(quiltPatchId, Buffer.from(patch.bytes));
+              return { ciphertextHash: patch.ciphertextHash, quiltPatchId };
+            });
+            if (stage === "upload") { notifyStarted(); await released; }
+            return { blobId: "blob-testnet-1", suiObjectId: "0x1234", declaredEndEpoch: 110, patches: bindings };
+          },
+          readByQuiltPatchId: async ({ quiltPatchId }) => {
+            readbacks += 1;
+            if (stage === "readback" && readbacks === 1) { notifyStarted(); await released; }
+            const bytes = patchBytes.get(quiltPatchId);
+            if (!bytes) throw new Error("test_patch_missing");
+            return Buffer.from(bytes);
+          },
+        };
+        const publisher = new MatterhornTestnetWalrusEvidencePublisher(value.store, transport, async () => {
+          certifications += 1;
+          return certification();
+        });
+        const identity = { workspaceId: "workspace_walrus", ownerId: "owner_walrus", coworkerId: "coworker_walrus" };
+        const pending = publisher.publishBatch({
+          ...identity,
+          evidence: [value.record, second].map(record => ({ evidenceId: record.id, expectedRevision: 1 })),
+          signal: new AbortController().signal,
+        }).then(() => "published", error => error instanceof Error ? error.message : "unknown_error");
+        try {
+          await started;
+          const deletingTarget = deletedWorkspace === identity.workspaceId;
+          const cleanup = await value.store.destroyWorkspaceForDeletion({ workspaceId: deletedWorkspace });
+          expect(cleanup.destroyed).toBe(0);
+          expect(cleanup.failures).toHaveLength(deletingTarget ? 2 : 0);
+          release();
+          expect(await pending).toBe(deletingTarget ? "crypto_evidence_workspace_deleted" : "published");
+          expect(value.store.list(identity).map(record => record.state)).toEqual(deletingTarget ? ["sealed", "sealed"] : ["published", "published"]);
+          expect(publicBytes.every(bytes => bytes.every(byte => byte === 0))).toBe(true);
+          expect(certifications).toBe(deletingTarget && stage === "upload" ? 0 : 1);
+          expect(readbacks).toBe(deletingTarget ? (stage === "upload" ? 0 : 1) : 2);
+          if (deletingTarget) {
+            expect(await value.store.destroyWorkspaceForDeletion({ workspaceId: deletedWorkspace })).toEqual({ checked: 2, destroyed: 2, failures: [] });
+          }
+        } finally {
+          release();
+          await pending;
+          for (const bytes of patchBytes.values()) bytes.fill(0);
+          value.state.close();
+          await rm(value.directory, { recursive: true, force: true });
+        }
+      });
+    }
+  }
+
   test("publishes only public ciphertext, verifies certification and exact readback, then attaches proof", async () => {
     const value = await fixture();
     try {
@@ -202,6 +411,20 @@ describe("testnet Walrus evidence publisher", () => {
         evidenceId: value.record.id,
         signal: new AbortController().signal,
       })).rejects.toThrow("crypto_evidence_not_found");
+      value.state.markWorkspaceDeleted("workspace_walrus");
+      const request = {
+        workspaceId: "workspace_walrus", ownerId: "owner_walrus", evidenceId: value.record.id,
+        signal: new AbortController().signal,
+      };
+      await expect(publisher.verify(request)).rejects.toThrow("crypto_evidence_workspace_deleted");
+      let liveChecks = 0;
+      const service = new MatterhornCryptoEvidenceVerificationService(value.store, async input => {
+        liveChecks += 1;
+        return publisher.verify(input);
+      });
+      await expect(service.verify(request)).rejects.toThrow("crypto_evidence_workspace_deleted");
+      await expect(service.verifyDue()).resolves.toEqual({ checked: 0, verified: 0, expired: 0, failed: 0 });
+      expect(liveChecks).toBe(0);
     } finally {
       value.state.close();
       await rm(value.directory, { recursive: true, force: true });

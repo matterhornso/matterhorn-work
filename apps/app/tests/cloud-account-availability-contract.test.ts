@@ -7,9 +7,6 @@ const accountSource = await Bun.file(
 const cloudProvidersSource = await Bun.file(
   new URL("../src/react-app/domains/settings/pages/cloud-providers-view.tsx", import.meta.url),
 ).text();
-const launchPolicySource = await Bun.file(
-  new URL("../src/app/lib/launch-features.ts", import.meta.url),
-).text();
 const settingsPageSource = await Bun.file(
   new URL("../src/react-app/domains/settings/shell/settings-page.tsx", import.meta.url),
 ).text();
@@ -31,10 +28,11 @@ describe("Matterhorn Cloud availability contract", () => {
     expect(accountSource).toContain("runtimeWorkspaceId?: string | null");
     expect(accountSource).toContain('const workspaceIdForBackend = runtimeWorkspaceId?.trim() ?? ""');
     expect(settingsRouteSource).toContain("runtimeWorkspaceId={runtimeWorkspaceId}");
-    expect(accountSource).toContain("{cloudAvailable ? <SettingsSection>");
+    expect(accountSource).toContain("{isSignedIn || cloudAvailable ? <SettingsSection>");
     expect(accountSource).toContain("{cloudAvailable ? <section");
-    expect(launchPolicySource).toContain('if (tab === "cloud-account" && options.allowLocalProfile) return true;');
-    expect(settingsRouteSource).toContain("{ allowLocalProfile: props.embedded }");
+    expect(accountSource.match(/showOrganizations=\{cloudAvailable\}/g)).toHaveLength(2);
+    expect(accountSource).toContain("if (!cloudAvailable || !isSignedIn || !session.needsOrgSelection) return;");
+    expect(settingsRouteSource).not.toContain("allowLocalProfile");
     expect(settingsPageSource).toContain("filterLaunchSettingsTabs");
   });
 

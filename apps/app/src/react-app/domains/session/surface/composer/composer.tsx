@@ -1,6 +1,7 @@
 /** @jsxImportSource react */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Agent } from "@opencode-ai/sdk/v2/client";
+import { CHAT_ATTACHMENT_MAX_BYTES } from "@matterhorn-work/types/chat-attachments";
 import { ArrowUp, Check, ChevronDown, FileText, LockKeyhole, Paperclip, Play, Plug, Puzzle, Settings, Square, Terminal, X, Zap } from "lucide-react";
 import { getMatterhornDeskAgentById } from "@matterhorn-work/types/desk-agents";
 import fuzzysort from "fuzzysort";
@@ -30,6 +31,7 @@ import {
 } from "./extension-readiness";
 import { ChatOptionsControl } from "./chat-options-control";
 import { MINIMAL_UI } from "@/app/lib/minimal-ui";
+import { captureAccountGeneration } from "@/app/lib/account-client-state";
 
 type MentionItem = {
   id: string;
@@ -91,6 +93,7 @@ type ComposerProps = {
   onModelChange: (model: ModelRef) => void;
   attachments: ComposerAttachment[];
   onAttachFiles: (files: File[]) => void;
+  onAttachmentPreparationChange?: (pending: boolean) => void;
   onRemoveAttachment: (id: string) => void;
   attachmentsEnabled: boolean;
   attachmentsDisabledReason: string | null;
@@ -145,7 +148,6 @@ type ComposerProps = {
 
 const FLUSH_PROMPT_EVENT = "matterhorn:flushPromptDraft";
 const FOCUS_PROMPT_EVENT = "matterhorn:focusPrompt";
-const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 const IMAGE_COMPRESS_MAX_PX = 2048;
 const IMAGE_COMPRESS_QUALITY = 0.82;
 const IMAGE_COMPRESS_TARGET_BYTES = 1_500_000;
@@ -178,9 +180,9 @@ function parseClipboardUriList(clipboard: DataTransfer) {
 }
 
 function formatBytes(size: number) {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  if (size < 1000) return `${size} B`;
+  if (size < 1_000_000) return `${Math.round(size / 1000)} KB`;
+  return `${(size / 1_000_000).toFixed(1)} MB`;
 }
 
 function isImageAttachment(attachment: ComposerAttachment) {
@@ -193,47 +195,49 @@ async function compressImageFile(file: File): Promise<File> {
   }
 
   const bitmap = await createImageBitmap(file);
-  const { width, height } = bitmap;
-  const maxDim = Math.max(width, height);
-  const scale = maxDim > IMAGE_COMPRESS_MAX_PX ? IMAGE_COMPRESS_MAX_PX / maxDim : 1;
-  const targetW = Math.round(width * scale);
-  const targetH = Math.round(height * scale);
+  try {
+    const { width, height } = bitmap;
+    const maxDim = Math.max(width, height);
+    const scale = maxDim > IMAGE_COMPRESS_MAX_PX ? IMAGE_COMPRESS_MAX_PX / maxDim : 1;
+    const targetW = Math.round(width * scale);
+    const targetH = Math.round(height * scale);
 
-  let blob: Blob | null = null;
+    let blob: Blob | null = null;
 
-  if (typeof OffscreenCanvas !== "undefined") {
-    const offscreen = new OffscreenCanvas(targetW, targetH);
-    const ctx = offscreen.getContext("2d");
-    if (ctx) {
-      ctx.drawImage(bitmap, 0, 0, targetW, targetH);
-      blob = await offscreen.convertToBlob({
-        type: "image/jpeg",
-        quality: IMAGE_COMPRESS_QUALITY,
-      });
+    if (typeof OffscreenCanvas !== "undefined") {
+      const offscreen = new OffscreenCanvas(targetW, targetH);
+      const ctx = offscreen.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(bitmap, 0, 0, targetW, targetH);
+        blob = await offscreen.convertToBlob({
+          type: "image/jpeg",
+          quality: IMAGE_COMPRESS_QUALITY,
+        });
+      }
     }
-  }
 
-  if (!blob) {
-    const canvas = document.createElement("canvas");
-    canvas.width = targetW;
-    canvas.height = targetH;
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      ctx.drawImage(bitmap, 0, 0, targetW, targetH);
-      blob = await new Promise<Blob | null>((resolve) =>
-        canvas.toBlob(resolve, "image/jpeg", IMAGE_COMPRESS_QUALITY),
-      );
+    if (!blob) {
+      const canvas = document.createElement("canvas");
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(bitmap, 0, 0, targetW, targetH);
+        blob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob(resolve, "image/jpeg", IMAGE_COMPRESS_QUALITY),
+        );
+      }
     }
+
+    if (!blob || blob.size >= file.size) {
+      return file;
+    }
+
+    const stem = file.name.replace(/\.[^.]+$/, "") || "image";
+    return new File([blob], `${stem}.jpg`, { type: "image/jpeg" });
+  } finally {
+    bitmap.close();
   }
-
-  bitmap.close();
-
-  if (!blob || blob.size >= file.size) {
-    return file;
-  }
-
-  const stem = file.name.replace(/\.[^.]+$/, "") || "image";
-  return new File([blob], `${stem}.jpg`, { type: "image/jpeg" });
 }
 
 function formatMcpStatusLabel(status: McpServerStatus | undefined) {
@@ -475,6 +479,23 @@ export function ReactSessionComposer(props: ComposerProps) {
   // compositionstart/compositionend events below.
   const imeComposingRef = useRef(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const isCurrentAccount = useRef(captureAccountGeneration()).current;
+  const [preparingAttachments, setPreparingAttachments] = useState(false);
+  const preparationChangeRef = useRef(props.onAttachmentPreparationChange);
+  useLayoutEffect(() => {
+    preparationChangeRef.current = props.onAttachmentPreparationChange;
+  }, [props.onAttachmentPreparationChange]);
+  const attachmentLifetimeRef = useRef<{ active: boolean; pending: number } | null>(null);
+  useLayoutEffect(() => {
+    const lifetime = { active: true, pending: 0 };
+    attachmentLifetimeRef.current = lifetime;
+    setPreparingAttachments(false);
+    // A return to the same chat or permission state must not revive old work.
+    return () => {
+      lifetime.active = false;
+      preparationChangeRef.current?.(false);
+    };
+  }, [props.draftScopeKey, props.attachmentsEnabled]);
   const draftRef = useRef(props.draft);
   useEffect(() => {
     draftRef.current = props.draft;
@@ -839,6 +860,11 @@ export function ReactSessionComposer(props: ComposerProps) {
     return readiness.visible ? [{ entry, readiness }] : [];
   });
   const canSend = props.draft.trim().length > 0 || props.attachments.length > 0;
+  const sendDisabled = preparingAttachments || (props.sendDisabled ?? props.disabled);
+  const sendPreparedDraft = () => {
+    if (attachmentLifetimeRef.current?.pending || !isCurrentAccount() || sendDisabled) return;
+    return props.onSend();
+  };
 
   useEffect(() => {
     if (!toolMenuSection.startsWith("plugin:")) return;
@@ -1015,7 +1041,9 @@ export function ReactSessionComposer(props: ComposerProps) {
   };
 
   const addAttachments = async (inputFiles: File[]) => {
-    if (!inputFiles.length) return;
+    const lifetime = attachmentLifetimeRef.current;
+    const isCurrent = () => Boolean(lifetime?.active) && isCurrentAccount();
+    if (!inputFiles.length || !lifetime || !isCurrent()) return;
     if (!props.attachmentsEnabled) {
       props.onNotice({
         title: props.attachmentsDisabledReason ?? t("composer.attachments_unavailable"),
@@ -1025,38 +1053,55 @@ export function ReactSessionComposer(props: ComposerProps) {
     }
 
     const accepted: File[] = [];
-    const oversize: string[] = [];
-
-    for (const original of inputFiles) {
-      const processed = original.type.startsWith("image/") ? await compressImageFile(original) : original;
-      if (processed.size > MAX_ATTACHMENT_BYTES) {
-        oversize.push(processed.name || original.name);
-        continue;
+    const warnings: string[] = [];
+    lifetime.pending++;
+    setPreparingAttachments(true);
+    preparationChangeRef.current?.(true);
+    try {
+      for (const original of inputFiles) {
+        if (!isCurrent()) return;
+        try {
+          const processed = original.type.startsWith("image/") ? await compressImageFile(original) : original;
+          if (!isCurrent()) return;
+          if (processed.size > CHAT_ATTACHMENT_MAX_BYTES) {
+            warnings.push(t("composer.file_exceeds_limit", {
+              name: processed.name || original.name, limit: CHAT_ATTACHMENT_MAX_BYTES / 1_000_000,
+            }));
+            continue;
+          }
+          accepted.push(processed);
+        } catch {
+          if (!isCurrent()) return;
+          warnings.push(t("composer.file_prepare_failed", { name: original.name }));
+        }
       }
-      accepted.push(processed);
-    }
 
-    if (accepted.length) {
-      props.onAttachFiles(accepted);
-      props.onNotice({
-        title:
-          accepted.length === 1
-            ? t("composer.uploaded_single_file", { name: accepted[0]?.name ?? t("composer.file_kind") })
-            : t("composer.uploaded_multiple_files", { count: accepted.length }),
-        tone: "success",
-      });
-    }
+      if (!isCurrent()) return;
+      if (accepted.length) {
+        props.onAttachFiles(accepted);
+        props.onNotice({
+          title:
+            accepted.length === 1
+              ? t("composer.uploaded_single_file", { name: accepted[0]?.name ?? t("composer.file_kind") })
+              : t("composer.uploaded_multiple_files", { count: accepted.length }),
+          tone: "success",
+        });
+      }
 
-    if (oversize.length) {
-      props.onNotice({
-        title:
-          oversize.length === 1
-            ? t("composer.file_exceeds_limit", { name: oversize[0] })
-            : `${oversize.length} files exceed the 8MB limit.`,
-        tone: "warning",
-      });
+      if (warnings.length) {
+        props.onNotice({
+          title: warnings[0],
+          description: warnings.length > 1 ? t("composer.more_files_skipped", { count: warnings.length - 1 }) : undefined,
+          tone: "warning",
+        });
+      }
+    } finally {
+      lifetime.pending--;
+      if (isCurrent()) {
+        setPreparingAttachments(lifetime.pending > 0);
+        preparationChangeRef.current?.(lifetime.pending > 0);
+      }
     }
-
   };
 
   const activeMcpItems = mcpServers.map((entry) => ({
@@ -1201,6 +1246,7 @@ export function ReactSessionComposer(props: ComposerProps) {
         >
           {props.topAccessory ? <div className="relative z-10 px-3 pt-3 sm:px-4">{props.topAccessory}</div> : null}
           <ReactComposerNotice notice={props.notice} />
+          {preparingAttachments ? <p role="status" className="px-3 pt-3 text-sm text-dls-text sm:px-4">{t("composer.preparing_attachments")}</p> : null}
 
           {renderMentionMenu()}
           {renderSlashMenu()}
@@ -1264,7 +1310,7 @@ export function ReactSessionComposer(props: ComposerProps) {
               disabled={props.disabled}
               placeholder={props.placeholder ?? t("composer.placeholder")}
               onChange={props.onDraftChange}
-              onSubmit={props.onSend}
+              onSubmit={sendPreparedDraft}
               onExpandPastedText={handleExpandPastedText}
               onPasteText={props.onPasteText}
               onPaste={(event) => {
@@ -1658,10 +1704,10 @@ export function ReactSessionComposer(props: ComposerProps) {
                 {!props.busy || (canSend && !props.sendDisabled && !props.disabled) ? (
                   <button
                     type="button"
-                    onClick={canSend ? () => props.onSend() : props.busy ? () => props.onStop() : undefined}
-                    disabled={(props.sendDisabled ?? props.disabled) || (!canSend && !props.busy)}
+                    onClick={canSend ? sendPreparedDraft : props.busy ? () => props.onStop() : undefined}
+                    disabled={sendDisabled || (!canSend && !props.busy)}
                     className={`inline-flex h-9 max-h-9 items-center gap-2 rounded-lg px-3.5 text-[13px] font-medium transition-colors ${
-                      !canSend || (props.sendDisabled ?? props.disabled)
+                      !canSend || sendDisabled
                         ? "bg-dls-hover/35 text-dls-secondary/65"
                         : "bg-[var(--dls-accent)] text-[var(--dls-accent-fg)] hover:bg-[var(--dls-accent-hover)]"
                     }`}

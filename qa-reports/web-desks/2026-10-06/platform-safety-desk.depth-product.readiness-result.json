@@ -1,0 +1,26 @@
+{
+  "version": "matterhorn.platform-safety-qa.v1",
+  "startedAt": "2026-10-06T00:56:30.649Z",
+  "completedAt": "2026-10-06T01:03:52.956Z",
+  "command": [
+    "pnpm",
+    "test:matterhorn-platform-safety",
+    "--only",
+    "desk.depth,product.readiness"
+  ],
+  "environment": {
+    "inheritedVariables": false,
+    "inheritedMatterhornOverrides": false,
+    "bunEnvAutoload": false,
+    "credentials": "none supplied",
+    "fixtureOverrides": "none"
+  },
+  "exitCode": 0,
+  "signal": null,
+  "finalStage": "[2/2] Product readiness",
+  "outputLines": 1525,
+  "omittedLines": 1419,
+  "retainedBytes": 5335,
+  "log": "platform-safety-desk.depth-product.readiness.log",
+  "note": "Only bounded sanitized stage/test summaries are retained; no raw payload log is saved. Gate assertions and commands are unchanged."
+}

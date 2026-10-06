@@ -626,6 +626,14 @@ export type MatterhornSessionSnapshot = {
     | { type: "retry"; attempt: number; message: string; next: number };
 };
 
+export type MatterhornSessionExecutionStatus = {
+  session: Session;
+  status: MatterhornSessionSnapshot["status"];
+  busy: boolean;
+  observedAt: number;
+  awaitingOperatorApproval: boolean;
+};
+
 export type MatterhornPluginItem = {
   spec: string;
   source: "config" | "dir.project" | "dir.global";
@@ -2431,6 +2439,12 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         { token, hostToken, timeoutMs: timeouts.sessionRead },
       );
     },
+    getSessionExecutionStatus: (workspaceId: string, sessionId: string) =>
+      requestJson<{ item: MatterhornSessionExecutionStatus }>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/status`,
+        { token, hostToken, timeoutMs: timeouts.sessionRead },
+      ),
     getSessionSnapshot: (workspaceId: string, sessionId: string, options?: { limit?: number }) => {
       const query = new URLSearchParams();
       if (typeof options?.limit === "number") query.set("limit", String(options.limit));
@@ -2530,9 +2544,9 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       `/workspace/${encodeURIComponent(workspaceId)}/agent-run-receipts/${encodeURIComponent(runId)}`,
       { token, hostToken, timeoutMs: timeouts.sessionRead },
     ),
-    listCryptoEvidence: (workspaceId: string, limit = 50) => requestJson<MatterhornEvidenceVerificationListResponse>(
+    listCryptoEvidence: (workspaceId: string, limit = 50, evidenceId?: string) => requestJson<MatterhornEvidenceVerificationListResponse>(
       baseUrl,
-      `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence?limit=${encodeURIComponent(String(limit))}`,
+      `/workspace/${encodeURIComponent(workspaceId)}/crypto-evidence?limit=${encodeURIComponent(String(limit))}${evidenceId === undefined ? "" : `&evidenceId=${encodeURIComponent(evidenceId)}`}`,
       { token, hostToken, timeoutMs: timeouts.sessionRead },
     ),
     publishCryptoEvidence: (

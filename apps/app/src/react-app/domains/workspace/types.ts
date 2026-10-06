@@ -29,6 +29,8 @@ export type CreateWorkspaceProgress = {
 export type CreateWorkspaceModalProps = {
   open: boolean;
   onClose: () => void;
+  /** Opens a known workflow directly while preserving the chooser as a back target. */
+  initialScreen?: CreateWorkspaceScreen;
   onConfirm: (preset: WorkspacePreset, folder: string | null) => void;
   onConfirmRemote?: (input: RemoteWorkspaceInput) => Promise<boolean> | boolean | void;
   onConfirmWorker?: (preset: WorkspacePreset, folder: string | null) => void;

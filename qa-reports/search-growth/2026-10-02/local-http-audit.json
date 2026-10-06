@@ -1,0 +1,174 @@
+{
+  "version": 2,
+  "generatedAt": "2026-10-02T18:11:35.725Z",
+  "origin": "http://127.0.0.1:53941",
+  "expectIndexable": false,
+  "scope": "Local Vite preview raw HTTP via injected fetch adapter; no hosted acceptance",
+  "pages": [
+    {
+      "pathname": "/",
+      "status": 200,
+      "contentType": "text/html",
+      "bytes": 38195,
+      "title": "Matterhorn Desks",
+      "h1": "Serious work deserves more than a chat.",
+      "canonical": null,
+      "description": "Matterhorn Desks is an AI workspace for crypto research, with Private AI, Bittensor, Hyperliquid, Polymarket and Sui desks. Choose a model and review the evidence.",
+      "robots": "noindex, follow",
+      "headerRobots": null,
+      "findings": []
+    },
+    {
+      "pathname": "/robots.txt",
+      "status": 200,
+      "contentType": "text/plain",
+      "bytes": 24,
+      "title": null,
+      "h1": null,
+      "canonical": null,
+      "description": null,
+      "robots": null,
+      "headerRobots": null,
+      "findings": []
+    },
+    {
+      "pathname": "/sitemap.xml",
+      "status": 200,
+      "contentType": "text/xml",
+      "bytes": 111,
+      "title": null,
+      "h1": null,
+      "canonical": null,
+      "description": null,
+      "robots": null,
+      "headerRobots": null,
+      "findings": []
+    },
+    {
+      "pathname": "/session",
+      "status": 200,
+      "contentType": "text/html",
+      "bytes": 38195,
+      "title": "Matterhorn Desks",
+      "h1": "Serious work deserves more than a chat.",
+      "canonical": null,
+      "description": "Matterhorn Desks is an AI workspace for crypto research, with Private AI, Bittensor, Hyperliquid, Polymarket and Sui desks. Choose a model and review the evidence.",
+      "robots": "noindex, follow",
+      "headerRobots": null,
+      "findings": []
+    },
+    {
+      "pathname": "/learn",
+      "status": 200,
+      "contentType": "text/html",
+      "bytes": 8392,
+      "title": "An AI workspace for crypto research | Matterhorn Desks",
+      "h1": "An AI workspace for crypto research",
+      "canonical": "https://desks.matterhorn.so/learn",
+      "description": "Understand Matterhorn Desks: choose your model, open a focused crypto desk, and check the evidence behind an answer before deciding what to do.",
+      "robots": "noindex, follow",
+      "headerRobots": null,
+      "findings": []
+    },
+    {
+      "pathname": "/learn/private-ai",
+      "status": 200,
+      "contentType": "text/html",
+      "bytes": 8357,
+      "title": "Private AI: choose a model and control your context | Matterhorn Desks",
+      "h1": "Private AI: choose a model and control your context",
+      "canonical": "https://desks.matterhorn.so/learn/private-ai",
+      "description": "Start general AI work in Matterhorn, understand which provider processes a prompt, and keep model choice, saved memory and optional Jev classification separate.",
+      "robots": "noindex, follow",
+      "headerRobots": null,
+      "findings": []
+    },
+    {
+      "pathname": "/learn/bittensor",
+      "status": 200,
+      "contentType": "text/html",
+      "bytes": 8208,
+      "title": "Research Bittensor subnets with an AI desk | Matterhorn Desks",
+      "h1": "Research Bittensor subnets with an AI desk",
+      "canonical": "https://desks.matterhorn.so/learn/bittensor",
+      "description": "A read-only Bittensor research workflow: specify a subnet, request public-chain evidence, check units and freshness, and recognize missing live-service access.",
+      "robots": "noindex, follow",
+      "headerRobots": null,
+      "findings": []
+    },
+    {
+      "pathname": "/learn/hyperliquid",
+      "status": 200,
+      "contentType": "text/html",
+      "bytes": 8083,
+      "title": "Inspect Hyperliquid markets without placing a trade | Matterhorn Desks",
+      "h1": "Inspect Hyperliquid markets without placing a trade",
+      "canonical": "https://desks.matterhorn.so/learn/hyperliquid",
+      "description": "Use the Hyperliquid desk for read-only market research: identify the instrument, examine order-book and funding evidence, and keep analysis separate from execution.",
+      "robots": "noindex, follow",
+      "headerRobots": null,
+      "findings": []
+    },
+    {
+      "pathname": "/learn/polymarket",
+      "status": 200,
+      "contentType": "text/html",
+      "bytes": 8014,
+      "title": "Research a Polymarket market with verifiable context | Matterhorn Desks",
+      "h1": "Research a Polymarket market with verifiable context",
+      "canonical": "https://desks.matterhorn.so/learn/polymarket",
+      "description": "Identify an exact Polymarket market, inspect outcomes and liquidity, and distinguish retrieved market data from an AI prediction or a trade recommendation.",
+      "robots": "noindex, follow",
+      "headerRobots": null,
+      "findings": []
+    },
+    {
+      "pathname": "/learn/sui",
+      "status": 200,
+      "contentType": "text/html",
+      "bytes": 7997,
+      "title": "Inspect Sui objects and addresses on the right network | Matterhorn Desks",
+      "h1": "Inspect Sui objects and addresses on the right network",
+      "canonical": "https://desks.matterhorn.so/learn/sui",
+      "description": "A read-only Sui workflow: provide a public identifier and network, inspect returned object or account data, and distinguish missing results from verified absence.",
+      "robots": "noindex, follow",
+      "headerRobots": null,
+      "findings": []
+    },
+    {
+      "pathname": "/learn/check-an-ai-crypto-answer",
+      "status": 200,
+      "contentType": "text/html",
+      "bytes": 8637,
+      "title": "How to check an AI crypto-research answer | Matterhorn Desks",
+      "h1": "How to check an AI crypto-research answer",
+      "canonical": "https://desks.matterhorn.so/learn/check-an-ai-crypto-answer",
+      "description": "A practical checklist for crypto AI research: verify identity, tool evidence, freshness, units and uncertainty before saving a conclusion or taking action.",
+      "robots": "noindex, follow",
+      "headerRobots": null,
+      "findings": []
+    }
+  ],
+  "assets": [
+    {
+      "path": "/learn.css",
+      "status": 200,
+      "type": "text/css"
+    },
+    {
+      "path": "/learn/retro.css",
+      "status": 200,
+      "type": "text/css"
+    },
+    {
+      "path": "/theme-bootstrap.js",
+      "status": 200,
+      "type": "text/javascript"
+    },
+    {
+      "path": "/matterhorn-logo-square.svg",
+      "status": 200,
+      "type": "image/svg+xml"
+    }
+  ]
+}

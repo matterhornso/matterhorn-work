@@ -31,7 +31,8 @@ describe("account lifecycle contract", () => {
     expect(accountSecuritySource).toContain("client.exportAccount()");
     expect(accountSecuritySource).toContain("Download account record");
     expect(accountSecuritySource).toContain("Preparing download…");
-    expect(accountSecuritySource).toContain("Account record downloaded.");
+    expect(accountSecuritySource).toContain("Account record download started.");
+    expect(accountSecuritySource).not.toContain("Account record downloaded.");
     expect(accountSecuritySource).toContain("Workspace chats and files are exported separately.");
     expect(accountSecuritySource).toContain("URL.revokeObjectURL");
   });
@@ -51,6 +52,13 @@ describe("account lifecycle contract", () => {
     expect(denSessionSource).toContain("onSessionEnded: (message?: string | null) => clearSignedInState(message)");
   });
 
+  test("all security requests and completion effects respect the mounted account scope", () => {
+    expect(accountSecuritySource.match(/runAccountScopedRequest\(\(\) => client\./g)).toHaveLength(5);
+    expect(accountSecuritySource.match(/if \(!isCurrent\(\)\) return;/g)).toHaveLength(4);
+    expect(accountSecuritySource).toContain("return () => { mounted.current = false; }");
+    expect(accountSecuritySource).toContain("mounted.current && accountCurrent.current()");
+  });
+
   test("requires reauthentication and explicit confirmation for destructive changes", () => {
     expect(accountSecuritySource).toContain('autoComplete="current-password"');
     expect(accountSecuritySource).toContain('autoComplete="new-password"');
@@ -58,6 +66,13 @@ describe("account lifecycle contract", () => {
     expect(accountSecuritySource).toContain("confirmationEmail.trim().toLowerCase() === user.email.toLowerCase()");
     expect(accountSecuritySource).toContain("deletionBlockers.length > 0");
     expect(accountSecuritySource).toContain('variant="destructive"');
+    expect(accountSecuritySource).toContain('result.workspaceDataDeletionComplete ? "account_deleted" : "deletion_pending"');
+    expect(accountSecuritySource).not.toContain("Account deleted, but");
+  });
+
+  test("persists only the fixed outcome after cleanup and before redirect", () => {
+    expect(accountSecuritySource).toContain('onSessionEnded(ACCOUNT_OUTCOME_MESSAGES.password_changed);\n      rememberAccountOutcome("password_changed");\n      window.location.assign("/");');
+    expect(accountSecuritySource).toContain('onSessionEnded(ACCOUNT_OUTCOME_MESSAGES[outcome]);\n      rememberAccountOutcome(outcome);\n      window.location.assign("/");');
   });
 
   test("keeps account actions accessible on touch screens and communicates progress", () => {
@@ -68,5 +83,7 @@ describe("account lifecycle contract", () => {
     expect(accountSecuritySource).toContain("Deleting account…");
     expect(accountSecuritySource).toContain("Preparing download…");
     expect(accountSecuritySource).toContain("aria-invalid=");
+    expect(accountSecuritySource.match(/<SettingsNotice tone="error" role="alert">/g)).toHaveLength(6);
+    expect(accountSecuritySource.match(/<SettingsNotice role="status">/g)).toHaveLength(2);
   });
 });

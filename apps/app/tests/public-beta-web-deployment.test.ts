@@ -89,8 +89,10 @@ describe("public Beta web deployment", () => {
     expect(sessionRoute).toContain("onConfirmRemote={publicBetaWeb ? undefined : handleCreateRemoteWorkspace}");
     expect(sessionRoute).toContain("onRecoverWorkspace: publicBetaWeb");
     expect(workspaceModal).toContain("{allowDirectWorkspaceConnections ? (");
-    expect(workspaceModal).toContain('window.location.assign("/onboarding")');
-    expect(workspaceModal).toContain("Additional cloud workers are not available in this beta.");
+    expect(workspaceModal).toContain("Your account workspace is managed by the Matterhorn server.");
+    expect(workspaceModal).toContain("Local folders need the desktop app");
+    expect(workspaceModal).not.toContain('window.location.assign("/onboarding")');
+    expect(workspaceModal).not.toContain("Additional cloud workers are not available in this beta.");
     expect(viteConfig).toContain('name: "matterhorn-public-auth-critical-render"');
     expect(viteConfig).toContain("data-matterhorn-static-auth");
     expect(viteConfig).toContain("publicAuthCriticalCss");

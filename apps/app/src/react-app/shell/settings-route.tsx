@@ -705,9 +705,8 @@ const UNSUPPORTED_HOSTED_SETTINGS_TABS: ReadonlySet<SettingsTab> = new Set([
 
 function applyLaunchSettingsRoutePolicy(
   route: ReturnType<typeof parseSettingsPath>,
-  options: { allowLocalProfile?: boolean } = {},
 ): ReturnType<typeof parseSettingsPath> {
-  if (isSettingsTabRouteEnabledAtLaunch(route.tab, undefined, options))
+  if (isSettingsTabRouteEnabledAtLaunch(route.tab))
     return route;
   return { tab: "overview", redirectPath: "overview" };
 }
@@ -741,7 +740,6 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     props.embedded
       ? parseSettingsPath(`/settings/${embeddedPath}`)
       : parseSettingsPath(location.pathname),
-    { allowLocalProfile: props.embedded },
   );
   const route: ReturnType<typeof parseSettingsPath> = publicBetaWeb
     && UNSUPPORTED_HOSTED_SETTINGS_TABS.has(launchRoute.tab)

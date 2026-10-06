@@ -65,11 +65,12 @@ export async function checkPublicCloudSession(
   config: PublicCloudConfig,
   signal?: AbortSignal,
 ): Promise<boolean> {
+  const timeout = AbortSignal.timeout(12_000);
   const response = await fetch(`${config.apiBaseUrl}/v1/session`, {
     method: "GET",
     credentials: "include",
     headers: { Accept: "application/json" },
-    signal,
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   });
 
   if (!response.ok) {

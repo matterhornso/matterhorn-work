@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "capturedAt": "2026-10-05T23:05:17.474Z",
+  "workspaceId": "ws_web_1e20b6f98f1f3f5b",
+  "sessionId": "ses_ef1b5f322ffegNJ35I0Nw6gwot",
+  "scope": "Normal-account GET-only snapshot of an isolated local runtime. Model completion is not proof that requested tool work succeeded.",
+  "snapshotStatus": "idle",
+  "messages": [
+    {
+      "role": "user",
+      "completed": false,
+      "tokens": {
+        "cache": {}
+      }
+    },
+    {
+      "role": "assistant",
+      "modelId": "asi1",
+      "completed": true,
+      "tokens": {
+        "total": 3826,
+        "input": 3706,
+        "output": 28,
+        "reasoning": 92,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      }
+    },
+    {
+      "role": "assistant",
+      "modelId": "asi1",
+      "completed": true,
+      "tokens": {
+        "total": 3915,
+        "input": 1290,
+        "output": 29,
+        "reasoning": 36,
+        "cache": {
+          "read": 2560,
+          "write": 0
+        }
+      }
+    },
+    {
+      "role": "assistant",
+      "modelId": "asi1",
+      "completed": true,
+      "tokens": {
+        "total": 4325,
+        "input": 739,
+        "output": 318,
+        "reasoning": 68,
+        "cache": {
+          "read": 3200,
+          "write": 0
+        }
+      }
+    }
+  ],
+  "tools": [
+    {
+      "name": "matterhorn-work_matterhorn_polymarket_search_markets",
+      "status": "completed"
+    },
+    {
+      "name": "matterhorn-work_matterhorn_polymarket_search_markets",
+      "status": "completed"
+    }
+  ],
+  "toolCounts": {
+    "total": 2,
+    "completed": 2,
+    "errors": 0
+  },
+  "receipts": [
+    {
+      "runId": "agent_run_cf069ebc-19cb-44e5-84a7-4d451c956352",
+      "status": "success",
+      "model": "asi1",
+      "usage": {
+        "inputTokens": 5735,
+        "outputTokens": 375,
+        "reasoningTokens": 196,
+        "cacheReadTokens": 5760,
+        "cacheWriteTokens": 0,
+        "estimatedCostUsd": 0
+      },
+      "privacyMode": "public_research",
+      "tools": [
+        {
+          "name": "matterhorn_polymarket_search_markets",
+          "status": "success"
+        },
+        {
+          "name": "matterhorn_polymarket_search_markets",
+          "status": "success"
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "pendingRequests": 0,
+    "daily": {
+      "usedTokens": 36376,
+      "reservedTokens": 0,
+      "chargedTokens": 36376,
+      "limit": 100000,
+      "remainingTokens": 63624
+    },
+    "monthly": {
+      "usedTokens": 36376,
+      "reservedTokens": 0,
+      "chargedTokens": 36376,
+      "limit": 100000,
+      "remainingTokens": 63624
+    }
+  },
+  "safety": {
+    "requestMethod": "GET",
+    "newModelRequests": 0,
+    "adminCredentialsUsed": false,
+    "rawContentPersisted": false
+  }
+}

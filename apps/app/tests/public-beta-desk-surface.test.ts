@@ -15,6 +15,20 @@ const PUBLIC_BETA_PROTOCOL_DESKS: CustomerProtocolDeskId[] = [
 ];
 
 describe("public Beta desk surfaces", () => {
+  test("describes watch planning and receipt guidance without implying a chat import or scheduler", () => {
+    for (const deskId of ["bittensor", "hyperliquid", "polymarket"]) {
+      const visual = getCustomerProtocolDeskVisualForLaunch(deskId, false);
+      const watch = visual?.secondaryActions.find((action) => action.actionId === "create_watch");
+      expect(watch?.label).toBe("Plan a watch");
+      expect(watch?.intent).toContain("chat does not save or schedule watches");
+      expect(visual?.railTitle).toContain("watch planning");
+    }
+    const sui = getCustomerProtocolDeskVisualForLaunch("sui", false);
+    expect(sui?.secondaryActions.find((action) => action.actionId === "import_public_receipts")?.label)
+      .toBe("Explain receipt verification");
+    expect(sui?.safetySummary).toContain("Chat cannot verify or import receipts");
+  });
+
   test("uses wallet-reviewed capability copy when the transactional launch flag is enabled", () => {
     const expectedStatus = new Map<CustomerProtocolDeskId, string>([
       ["bittensor", "Review in wallet"],

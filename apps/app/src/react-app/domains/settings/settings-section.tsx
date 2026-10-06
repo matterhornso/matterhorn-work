@@ -141,15 +141,18 @@ export function SettingsStatusBadge({ label, tone, className }: SettingsStatusBa
 
 export interface SettingsNoticeProps extends SettingsLayoutProps {
   tone?: "neutral" | "error";
+  role?: "alert" | "status";
 }
 
 export function SettingsNotice({
   children,
   tone = "neutral",
   className,
+  role,
 }: SettingsNoticeProps) {
   return (
     <div
+      role={role}
       className={cn(
         "rounded-lg bg-dls-hover/35 px-3 py-2 text-xs text-muted-foreground",
         tone === "error" && "bg-red-1/40 text-red-11",

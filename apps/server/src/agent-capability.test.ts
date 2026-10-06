@@ -125,6 +125,19 @@ function polymarketPrepareBroker(input: { appId?: string; country?: string; incl
 }
 
 describe("agent capability broker", () => {
+  test("authorizes the Sui object read in read-only modes without admitting transfer preparation", () => {
+    const broker = new MatterhornAgentCapabilityBroker("enforce");
+    const scope = { runId: "run_object", workspaceId: "ws_object", sessionId: "ses_object", agentId: "matterhorn-sui" };
+    broker.createRunGrant({ ...scope, executionMode: "discuss" });
+    const args = { objectId: "0x2", network: "testnet" };
+    const issued = broker.issue({ ...scope, callId: "call_object", toolName: "matterhorn-work_matterhorn_sui_get_object", args });
+    expect(issued.claims.access).toBe("read");
+    expect(broker.consume({ token: issued.token, toolName: "matterhorn_sui_get_object", args })).toMatchObject({ access: "read" });
+    expect(() => broker.issue({ ...scope, callId: "call_prepare", toolName: "matterhorn_sui_preview_transfer", args: {} })).toThrow();
+    expect(() => broker.issue({ ...scope, callId: "call_submit", toolName: "matterhorn_sui_submit", args: {} })).toThrow();
+    broker.close();
+  });
+
   test("bounds persisted run-grant expiry to the exact accepted run", () => {
     const root = mkdtempSync(join(tmpdir(), "matterhorn-capability-expiry-"));
     const state = new MatterhornGuardedRuntimeStateStore(join(root, "state.db"));

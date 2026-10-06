@@ -16,6 +16,7 @@ describe("general agent tool routing", () => {
     expect(sui).toEqual({
       "*": false,
       "matterhorn-work_matterhorn_sui_get_balance": true,
+      "matterhorn-work_matterhorn_sui_get_object": true,
       "matterhorn-work_matterhorn_sui_preview_transfer": true,
     });
   });

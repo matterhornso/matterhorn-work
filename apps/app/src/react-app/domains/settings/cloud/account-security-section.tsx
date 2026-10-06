@@ -13,6 +13,8 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type { DenClient, DenUser } from "../../../../app/lib/den";
 import { accountSecurityQueryKey } from "./account-security-scope";
+import { captureAccountGeneration, runAccountScopedRequest } from "../../../../app/lib/account-client-state";
+import { ACCOUNT_OUTCOME_MESSAGES, rememberAccountOutcome } from "../../../../app/lib/account-outcome";
 import {
   SettingsInset,
   SettingsNotice,
@@ -56,6 +58,13 @@ function ScopedAccountSecuritySection({
   onSessionEnded,
 }: AccountSecuritySectionProps) {
   const queryClient = useQueryClient();
+  const mounted = React.useRef(true);
+  const accountCurrent = React.useRef(captureAccountGeneration());
+  React.useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  const isCurrent = () => mounted.current && accountCurrent.current();
   const [passwordOpen, setPasswordOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [currentPassword, setCurrentPassword] = React.useState("");
@@ -67,35 +76,39 @@ function ScopedAccountSecuritySection({
 
   const securityQuery = useQuery({
     queryKey,
-    queryFn: () => client.getAccountSecurity(),
+    queryFn: () => runAccountScopedRequest(() => client.getAccountSecurity(), isCurrent),
     staleTime: 15_000,
   });
   const revokeMutation = useMutation({
-    mutationFn: () => client.revokeOtherSessions(),
+    mutationFn: () => runAccountScopedRequest(() => client.revokeOtherSessions(), isCurrent),
     onSuccess: async () => {
+      if (!isCurrent()) return;
       await queryClient.invalidateQueries({ queryKey });
     },
   });
   const exportMutation = useMutation({
-    mutationFn: () => client.exportAccount(),
+    mutationFn: () => runAccountScopedRequest(() => client.exportAccount(), isCurrent),
     onSuccess: (accountExport) => {
+      if (!isCurrent()) return;
       downloadAccountRecord(accountExport.filename, accountExport);
     },
   });
   const passwordMutation = useMutation({
-    mutationFn: () => client.changePassword(currentPassword, newPassword),
+    mutationFn: () => runAccountScopedRequest(() => client.changePassword(currentPassword, newPassword), isCurrent),
     onSuccess: () => {
-      onSessionEnded("Password changed. Sign in again on this device.");
+      if (!isCurrent()) return;
+      onSessionEnded(ACCOUNT_OUTCOME_MESSAGES.password_changed);
+      rememberAccountOutcome("password_changed");
       window.location.assign("/");
     },
   });
   const deleteMutation = useMutation({
-    mutationFn: () => client.deleteAccount(deletePassword, confirmationEmail),
+    mutationFn: () => runAccountScopedRequest(() => client.deleteAccount(deletePassword, confirmationEmail), isCurrent),
     onSuccess: (result) => {
-      const message = result.workspaceDataDeletionComplete
-        ? "Account and owned workspace data deleted."
-        : "Account deleted, but some workspace data still needs operator cleanup.";
-      onSessionEnded(message);
+      if (!isCurrent()) return;
+      const outcome = result.workspaceDataDeletionComplete ? "account_deleted" : "deletion_pending";
+      onSessionEnded(ACCOUNT_OUTCOME_MESSAGES[outcome]);
+      rememberAccountOutcome(outcome);
       window.location.assign("/");
     },
   });
@@ -124,7 +137,7 @@ function ScopedAccountSecuritySection({
       </SettingsSectionHeader>
 
       {securityQuery.isError || (!securityQuery.isPending && !securityKnown) ? (
-        <SettingsNotice tone="error">
+        <SettingsNotice tone="error" role="alert">
           {mutationMessage(securityQuery.error, "Account security status is unavailable.")}
           <Button variant="outline" disabled={securityQuery.isFetching} onClick={() => void securityQuery.refetch()}>
             {securityQuery.isFetching ? "Checking…" : "Retry security check"}
@@ -159,10 +172,10 @@ function ScopedAccountSecuritySection({
           </Button>
         </div>
         {revokeMutation.isSuccess ? (
-          <SettingsNotice>Other sessions have been signed out.</SettingsNotice>
+          <SettingsNotice role="status">Other sessions have been signed out.</SettingsNotice>
         ) : null}
         {revokeMutation.isError ? (
-          <SettingsNotice tone="error">
+          <SettingsNotice tone="error" role="alert">
             {mutationMessage(revokeMutation.error, "Other sessions could not be signed out.")}
           </SettingsNotice>
         ) : null}
@@ -189,9 +202,9 @@ function ScopedAccountSecuritySection({
             {exportMutation.isPending ? "Preparing download…" : "Download account record"}
           </Button>
         </div>
-        {exportMutation.isSuccess ? <SettingsNotice>Account record downloaded.</SettingsNotice> : null}
+        {exportMutation.isSuccess ? <SettingsNotice role="status">Account record download started.</SettingsNotice> : null}
         {exportMutation.isError ? (
-          <SettingsNotice tone="error">
+          <SettingsNotice tone="error" role="alert">
             {mutationMessage(exportMutation.error, "Account record could not be downloaded.")}
           </SettingsNotice>
         ) : null}
@@ -243,7 +256,7 @@ function ScopedAccountSecuritySection({
               </Field>
             </div>
             {passwordMutation.isError ? (
-              <SettingsNotice tone="error">
+              <SettingsNotice tone="error" role="alert">
                 {mutationMessage(passwordMutation.error, "Password could not be changed.")}
               </SettingsNotice>
             ) : null}
@@ -274,7 +287,7 @@ function ScopedAccountSecuritySection({
               </p>
             </div>
             {deletionBlockers.length > 0 ? (
-              <SettingsNotice tone="error">
+              <SettingsNotice tone="error" role="alert">
                 Transfer ownership or remove other members before deleting: {deletionBlockers.map((org) => org.name).join(", ")}.
               </SettingsNotice>
             ) : null}
@@ -300,7 +313,7 @@ function ScopedAccountSecuritySection({
               />
             </Field>
             {deleteMutation.isError ? (
-              <SettingsNotice tone="error">
+              <SettingsNotice tone="error" role="alert">
                 {mutationMessage(deleteMutation.error, "Account could not be deleted.")}
               </SettingsNotice>
             ) : null}

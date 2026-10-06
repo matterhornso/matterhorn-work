@@ -1,0 +1,227 @@
+{
+  "version": "matterhorn.product-hunt-deployment-probe.v1",
+  "ok": false,
+  "ready": false,
+  "metadata": {
+    "generatedAt": "2026-10-04T22:41:19.406Z",
+    "appUrl": "https://desks.matterhorn.so/",
+    "serverUrl": "https://desks.matterhorn.so/",
+    "healthPath": "/health/ready",
+    "expectedCommit": "e4342d6bef8d833d12e36bd8093a87c8dbe84856",
+    "expectedWebCommit": "e4342d6bef8d833d12e36bd8093a87c8dbe84856",
+    "expectedGuardedMode": "enforce",
+    "expectedSignupStatus": "open",
+    "allowedOrigin": "https://desks.matterhorn.so",
+    "untrustedOrigin": "https://untrusted.invalid",
+    "localContractRun": false
+  },
+  "checks": [
+    {
+      "id": "https",
+      "label": "HTTPS",
+      "status": "pass",
+      "summary": "The app and API use HTTPS."
+    },
+    {
+      "id": "app_response",
+      "label": "App response",
+      "status": "pass",
+      "summary": "App returned HTTP 200."
+    },
+    {
+      "id": "app_response_origin",
+      "label": "App response origin",
+      "status": "pass",
+      "summary": "The app response stays on the configured origin."
+    },
+    {
+      "id": "app_nosniff",
+      "label": "Content type protection",
+      "status": "pass",
+      "summary": "X-Content-Type-Options is nosniff."
+    },
+    {
+      "id": "app_referrer",
+      "label": "Referrer policy",
+      "status": "pass",
+      "summary": "Referrer-Policy prevents cross-origin path disclosure."
+    },
+    {
+      "id": "app_permissions",
+      "label": "Permissions policy",
+      "status": "pass",
+      "summary": "Camera and microphone access are disabled by policy."
+    },
+    {
+      "id": "app_framing",
+      "label": "Content security policy",
+      "status": "pass",
+      "summary": "CSP denies framing, base URI changes, and object embedding."
+    },
+    {
+      "id": "app_hsts",
+      "label": "Transport security",
+      "status": "pass",
+      "summary": "Strict-Transport-Security has a positive max-age."
+    },
+    {
+      "id": "web_build_commit",
+      "label": "Deployed web commit",
+      "status": "fail",
+      "summary": "Web build reports 9b74d923b8c999733fe698c29a6555dd2980460b."
+    },
+    {
+      "id": "app_workspace_proxy_origin",
+      "label": "Same-origin Matterhorn API proxy origin",
+      "status": "pass",
+      "summary": "Same-origin Matterhorn API proxy stays on the public application origin.",
+      "statusCode": 401
+    },
+    {
+      "id": "app_workspace_proxy",
+      "label": "Same-origin Matterhorn API proxy",
+      "status": "pass",
+      "summary": "/workspaces is routed and denies the unauthenticated probe with JSON (HTTP 401).",
+      "statusCode": 401
+    },
+    {
+      "id": "app_engine_proxy_origin",
+      "label": "Same-origin engine proxy origin",
+      "status": "pass",
+      "summary": "Same-origin engine proxy stays on the public application origin.",
+      "statusCode": 401
+    },
+    {
+      "id": "app_engine_proxy",
+      "label": "Same-origin engine proxy",
+      "status": "pass",
+      "summary": "/opencode/global/health is routed and denies the unauthenticated probe with JSON (HTTP 401).",
+      "statusCode": 401
+    },
+    {
+      "id": "api_health",
+      "label": "API health",
+      "status": "pass",
+      "summary": "API health returned HTTP 200."
+    },
+    {
+      "id": "api_response_origin",
+      "label": "API response origin",
+      "status": "pass",
+      "summary": "The API health response stays on the configured origin."
+    },
+    {
+      "id": "api_build_commit",
+      "label": "Deployed API commit",
+      "status": "fail",
+      "summary": "API reports 9b74d923b8c999733fe698c29a6555dd2980460b."
+    },
+    {
+      "id": "api_nosniff",
+      "label": "Content type protection",
+      "status": "pass",
+      "summary": "X-Content-Type-Options is nosniff."
+    },
+    {
+      "id": "api_referrer",
+      "label": "Referrer policy",
+      "status": "pass",
+      "summary": "Referrer-Policy prevents cross-origin path disclosure."
+    },
+    {
+      "id": "api_permissions",
+      "label": "Permissions policy",
+      "status": "pass",
+      "summary": "Camera and microphone access are disabled by policy."
+    },
+    {
+      "id": "api_framing",
+      "label": "Content security policy",
+      "status": "pass",
+      "summary": "CSP denies framing, base URI changes, and object embedding."
+    },
+    {
+      "id": "api_hsts",
+      "label": "Transport security",
+      "status": "pass",
+      "summary": "Strict-Transport-Security has a positive max-age."
+    },
+    {
+      "id": "guarded_runtime_mode",
+      "label": "Guarded runtime mode",
+      "status": "fail",
+      "summary": "API reports guarded runtime mode off with readiness true."
+    },
+    {
+      "id": "signup_config_origin",
+      "label": "Signup configuration origin",
+      "status": "pass",
+      "summary": "The public signup configuration stays on the application origin.",
+      "statusCode": 200
+    },
+    {
+      "id": "signup_status",
+      "label": "Public signup status",
+      "status": "pass",
+      "summary": "Public auth reports signup status open.",
+      "statusCode": 200
+    },
+    {
+      "id": "signup_security",
+      "label": "Public signup security dependencies",
+      "status": "pass",
+      "summary": "Email verification, password reset, legal acceptance, and Turnstile must all be available before signup opens."
+    },
+    {
+      "id": "launch_config_origin",
+      "label": "Launch readiness origin",
+      "status": "pass",
+      "summary": "The authoritative launch gate stays on the configured API origin.",
+      "statusCode": 200
+    },
+    {
+      "id": "launch_readiness",
+      "label": "Authoritative launch readiness",
+      "status": "pass",
+      "summary": "API launch gate reports ready.",
+      "statusCode": 200
+    },
+    {
+      "id": "cors_trusted_origin",
+      "label": "Trusted origin CORS",
+      "status": "pass",
+      "summary": "The API preflight echoes only the exact app origin.",
+      "statusCode": 204
+    },
+    {
+      "id": "cors_vary_origin",
+      "label": "CORS cache isolation",
+      "status": "pass",
+      "summary": "Trusted preflight varies caches by Origin."
+    },
+    {
+      "id": "cors_untrusted_origin",
+      "label": "Untrusted origin rejection",
+      "status": "pass",
+      "summary": "The API does not grant CORS access to the untrusted challenge origin.",
+      "statusCode": 204
+    }
+  ],
+  "failures": [
+    {
+      "id": "web_build_commit",
+      "label": "Deployed web commit",
+      "summary": "Web build reports 9b74d923b8c999733fe698c29a6555dd2980460b."
+    },
+    {
+      "id": "api_build_commit",
+      "label": "Deployed API commit",
+      "summary": "API reports 9b74d923b8c999733fe698c29a6555dd2980460b."
+    },
+    {
+      "id": "guarded_runtime_mode",
+      "label": "Guarded runtime mode",
+      "summary": "API reports guarded runtime mode off with readiness true."
+    }
+  ]
+}

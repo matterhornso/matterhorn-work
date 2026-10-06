@@ -1,5 +1,6 @@
 import { MATTERHORN_CRYPTO_COMPACTION_CONTEXT } from "../opencode-compaction-policy.js";
 import { resolveConfinedWorkspacePath } from "../workspace-path-boundary.js";
+import { MATTERHORN_COMPACTION_REQUEST } from "../opencode-compaction-request.js";
 
 type PluginContext = {
   directory?: string;
@@ -18,6 +19,7 @@ type ToolHookOutput = {
 
 type SystemHookInput = {
   sessionID: string;
+  messageID?: string;
   model: {
     providerID: string;
     id?: string;
@@ -38,6 +40,12 @@ type OpenCodeEvent = {
   properties?: Record<string, unknown>;
 };
 
+type MessageHookInput = { sessionID: string; messageID?: string };
+type MessageHookOutput = {
+  message: { id: string; sessionID: string; model: { providerID: string; modelID: string } };
+  parts: Array<Record<string, unknown>>;
+};
+
 type AssistantUsage = {
   inputTokens: number;
   outputTokens: number;
@@ -51,7 +59,6 @@ const CAPABILITY_CALL_ARGUMENT = "_matterhornCallId";
 const pendingUsage = new Map<string, Map<string, AssistantUsage>>();
 const runIdByAssistantMessage = new Map<string, string>();
 const runIdByCall = new Map<string, string>();
-const pendingCompactionSessions = new Set<string>();
 
 const PROVIDER_SYSTEM_MAX_BYTES = 256 * 1_024;
 const PROVIDER_MESSAGES_MAX_COUNT = 2_048;
@@ -231,14 +238,50 @@ async function bindAssistantMessage(input: ReturnType<typeof assistantUsage> & {
 export const MatterhornGuard = async (context: PluginContext) => {
   // OpenCode retries LLM.stream without repeating messages.transform. Keep only
   // a bounded, short-lived snapshot for that exact run; never persist its text.
-  const retryMessages = new Map<string, { serialized: string; messages: unknown[]; runId: string; expiresAt: number; used: boolean }>();
+  const pendingCompactionSessions = new Set<string>();
+  const retryMessages = new Map<string, { serialized: string; messages: unknown[]; runId: string; sessionId: string; expiresAt: number; used: boolean; purpose: "message" | "compaction" }>();
   return ({
-  "experimental.chat.messages.transform": async (_input: Record<string, never>, output: MessagesHookOutput) => {
+  "chat.message": async (input: MessageHookInput, output: MessageHookOutput) => {
+    const markers = output.parts.filter(part => {
+      const metadata = part.metadata;
+      return metadata !== null && typeof metadata === "object" && Object.hasOwn(metadata, MATTERHORN_COMPACTION_REQUEST);
+    });
+    if (!markers.length) return;
+    const part = markers[0];
+    const metadata = part.metadata;
+    const runId = metadata !== null && typeof metadata === "object" ? Reflect.get(metadata, MATTERHORN_COMPACTION_REQUEST) : undefined;
+    if (markers.length !== 1 || output.parts.length !== 1 || typeof runId !== "string" || !runId.trim()
+      || part.type !== "text" || part.text !== "" || part.synthetic !== true || part.ignored !== true
+      || typeof part.id !== "string" || !part.id || !input.messageID
+      || output.message.id !== input.messageID || output.message.sessionID !== input.sessionID
+      || part.messageID !== input.messageID || part.sessionID !== input.sessionID) {
+      throw new Error("Matterhorn could not validate this compaction request.");
+    }
+    // Never fall back to ordinary chat, even with guarded tools switched off.
+    // Failed or stale authorization must occur before the runtime saves a part.
+    const claimed = await postInternal("/internal/agent-runs/claim-compaction", {
+      workspaceDirectory: context.directory ?? null, runId, sessionId: input.sessionID,
+      messageId: input.messageID, providerId: output.message.model.providerID, modelId: output.message.model.modelID,
+    });
+    if (claimed.runId !== runId || claimed.messageId !== input.messageID) {
+      throw new Error("Matterhorn could not bind this compaction request.");
+    }
+    // OpenCode keeps the original array reference after this hook. Mutate it
+    // in place so its own compaction engine consumes the exact bound parent.
+    output.parts.splice(0, output.parts.length, { id: part.id, sessionID: input.sessionID,
+      messageID: input.messageID, type: "compaction", auto: false });
+  },
+  "experimental.chat.messages.transform": async (input: { sessionID?: string; messageID?: string }, output: MessagesHookOutput) => {
     if (!authoritativeMessageGatewayRequired()) return;
     if (!Array.isArray(output.messages)) {
       throw new Error("Matterhorn could not safely validate the final provider messages.");
     }
     const sessionId = providerMessageSessionId(output.messages);
+    const messageId = input.messageID;
+    if (input.sessionID !== sessionId || typeof messageId !== "string" || !messageId.trim()) {
+      throw new Error("The runtime cannot verify this request's identity. Ask the workspace owner to update it.");
+    }
+    const purpose = pendingCompactionSessions.delete(messageId) ? "compaction" : "message";
     let serialized = "";
     try {
       serialized = JSON.stringify(output.messages);
@@ -251,6 +294,7 @@ export const MatterhornGuard = async (context: PluginContext) => {
     const payload = await postInternal("/internal/agent-runs/provider-messages", {
       workspaceDirectory: context.directory ?? null,
       sessionId,
+      messageId,
       messages: output.messages,
     });
     if (
@@ -265,7 +309,7 @@ export const MatterhornGuard = async (context: PluginContext) => {
     for (const [id, entry] of retryMessages) {
       if (entry.expiresAt <= Date.now()) retryMessages.delete(id);
     }
-    retryMessages.delete(sessionId);
+    retryMessages.delete(messageId);
     // Limit retained context across sessions to two maximum-sized batches.
     while (retryMessages.size >= 32 || [...retryMessages.values()].reduce((size, entry) => size + Buffer.byteLength(entry.serialized), 0)
       + Buffer.byteLength(serialized) > 2 * PROVIDER_MESSAGES_MAX_BYTES) {
@@ -274,10 +318,10 @@ export const MatterhornGuard = async (context: PluginContext) => {
       retryMessages.delete(oldest);
     }
     const expiresAt = Date.now() + 120_000;
-    retryMessages.set(sessionId, { serialized, messages: output.messages, runId: payload.runId, expiresAt, used: false });
+    retryMessages.set(messageId, { serialized, messages: output.messages, runId: payload.runId, sessionId, expiresAt, used: false, purpose });
     // Capture only scalar keys: an evicted context must not stay alive in a timer.
     setTimeout(() => {
-      if (retryMessages.get(sessionId)?.expiresAt === expiresAt) retryMessages.delete(sessionId);
+      if (retryMessages.get(messageId)?.expiresAt === expiresAt) retryMessages.delete(messageId);
     }, 120_000).unref();
   },
   "experimental.chat.system.transform": async (input: SystemHookInput, output: SystemHookOutput) => {
@@ -285,22 +329,22 @@ export const MatterhornGuard = async (context: PluginContext) => {
     const sessionId = typeof input.sessionID === "string" ? input.sessionID.trim() : "";
     const providerId = input.model.providerID.trim();
     const modelId = (input.model.id ?? input.model.modelID ?? "").trim();
-    const purpose = pendingCompactionSessions.delete(sessionId) ? "compaction" : "message";
-    if (!sessionId || !providerId || !modelId) {
+    const messageId = input.messageID;
+    if (!sessionId || !providerId || !modelId || typeof messageId !== "string" || !messageId.trim()) {
       throw new Error("Matterhorn could not bind the provider request to an exact accepted run.");
     }
-    const retry = retryMessages.get(sessionId);
-    if (retry && JSON.stringify(retry.messages) !== retry.serialized) {
-      retryMessages.delete(sessionId);
+    const retry = retryMessages.get(messageId);
+    if (!retry || retry.sessionId !== sessionId || retry.expiresAt <= Date.now()) {
+      retryMessages.delete(messageId);
+      throw new Error("Provider message validation is missing or expired. Retry this message from the chat.");
+    }
+    if (JSON.stringify(retry.messages) !== retry.serialized) {
+      retryMessages.delete(messageId);
       throw new Error("The provider messages changed after validation. Retry this message from the chat.");
     }
-    if (retry?.used) {
-      if (retry.expiresAt <= Date.now()) {
-        retryMessages.delete(sessionId);
-        throw new Error("The provider retry expired. Retry this message from the chat.");
-      }
+    if (retry.used) {
       const validated = await postInternal("/internal/agent-runs/provider-messages", {
-        workspaceDirectory: context.directory ?? null, sessionId,
+        workspaceDirectory: context.directory ?? null, sessionId, messageId,
         expectedRunId: retry.runId, messages: JSON.parse(retry.serialized),
       });
       if (validated.accepted !== true || validated.runId !== retry.runId) {
@@ -312,7 +356,8 @@ export const MatterhornGuard = async (context: PluginContext) => {
       sessionId,
       providerId,
       modelId,
-      purpose,
+      purpose: retry.purpose,
+      expectedRunId: retry.runId,
     });
     const system = payload.system;
     const runId = payload.runId;
@@ -333,10 +378,8 @@ export const MatterhornGuard = async (context: PluginContext) => {
     if (await sha256Text(system[0]) !== systemHash) {
       throw new Error("Matterhorn provider system binding hash did not match its content.");
     }
-    if (retry) {
-      if (retry.runId !== runId) throw new Error("The provider context changed runs during validation.");
-      retry.used = true;
-    }
+    if (retry.runId !== runId) throw new Error("The provider context changed runs during validation.");
+    retry.used = true;
     // This hook runs last in the managed plugin list. Replace every late
     // OpenCode/provider addition with only the exact system bytes already
     // classified and authorized by the Matterhorn message gateway.
@@ -386,7 +429,9 @@ export const MatterhornGuard = async (context: PluginContext) => {
       steps.set(observed.assistantMessageId, observed.usage);
       pendingUsage.set(runId, steps);
       if (observed.completed || observed.failed) {
-        if (retryMessages.get(observed.sessionId)?.runId === runId) retryMessages.delete(observed.sessionId);
+        for (const [messageId, snapshot] of retryMessages) {
+          if (snapshot.runId === runId && snapshot.sessionId === observed.sessionId) retryMessages.delete(messageId);
+        }
         await completeRun(runId, observed.cancelled ? "cancelled" : observed.failed ? "error" : observed.finish === "stop" ? "success" : "partial");
       }
       return;
@@ -402,10 +447,13 @@ export const MatterhornGuard = async (context: PluginContext) => {
     }
   },
   "experimental.session.compacting": async (
-    input: { sessionID: string },
+    input: { sessionID: string; messageID?: string },
     output: { context: string[]; prompt?: string },
   ) => {
-    pendingCompactionSessions.add(input.sessionID);
+    if (authoritativeMessageGatewayRequired() && !input.messageID) {
+      throw new Error("The runtime cannot verify this summary request. Ask the workspace owner to update it.");
+    }
+    if (input.messageID) pendingCompactionSessions.add(input.messageID);
     output.context.push(MATTERHORN_CRYPTO_COMPACTION_CONTEXT);
   },
   });

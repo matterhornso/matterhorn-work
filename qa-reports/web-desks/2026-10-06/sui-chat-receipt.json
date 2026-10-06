@@ -1,0 +1,144 @@
+{
+  "version": 1,
+  "capturedAt": "2026-10-05T23:05:17.576Z",
+  "workspaceId": "ws_web_1e20b6f98f1f3f5b",
+  "sessionId": "ses_ef1b390fcffeYncndEqAYZxe1q",
+  "scope": "Normal-account GET-only snapshot of an isolated local runtime. Model completion is not proof that requested tool work succeeded.",
+  "snapshotStatus": "idle",
+  "messages": [
+    {
+      "role": "user",
+      "completed": false,
+      "tokens": {
+        "cache": {}
+      }
+    },
+    {
+      "role": "assistant",
+      "modelId": "asi1",
+      "completed": true,
+      "tokens": {
+        "total": 3000,
+        "input": 2042,
+        "output": 576,
+        "reasoning": 382,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      }
+    },
+    {
+      "role": "user",
+      "completed": false,
+      "tokens": {
+        "cache": {}
+      }
+    },
+    {
+      "role": "assistant",
+      "modelId": "asi1",
+      "completed": true,
+      "tokens": {
+        "total": 2717,
+        "input": 1388,
+        "output": 36,
+        "reasoning": 13,
+        "cache": {
+          "read": 1280,
+          "write": 0
+        }
+      }
+    },
+    {
+      "role": "assistant",
+      "modelId": "asi1",
+      "completed": true,
+      "tokens": {
+        "total": 3353,
+        "input": 999,
+        "output": 430,
+        "reasoning": 4,
+        "cache": {
+          "read": 1920,
+          "write": 0
+        }
+      }
+    }
+  ],
+  "tools": [
+    {
+      "name": "matterhorn-work_matterhorn_sui_get_balance",
+      "status": "completed",
+      "source": "sui.grpc",
+      "observedAt": "2026-10-05T23:02:34.374Z",
+      "network": "testnet"
+    }
+  ],
+  "toolCounts": {
+    "total": 1,
+    "completed": 1,
+    "errors": 0
+  },
+  "receipts": [
+    {
+      "runId": "agent_run_2279a46e-74cb-4c37-8fdb-ef193a36f5d1",
+      "status": "success",
+      "model": "asi1",
+      "usage": {
+        "inputTokens": 2387,
+        "outputTokens": 466,
+        "reasoningTokens": 17,
+        "cacheReadTokens": 3200,
+        "cacheWriteTokens": 0,
+        "estimatedCostUsd": 0
+      },
+      "privacyMode": "public_research",
+      "tools": [
+        {
+          "name": "matterhorn_sui_get_balance",
+          "status": "success",
+          "source": "sui.grpc"
+        }
+      ]
+    },
+    {
+      "runId": "agent_run_d016bd79-dca4-49f4-81c9-3c27dd40acb7",
+      "status": "success",
+      "model": "asi1",
+      "usage": {
+        "inputTokens": 2042,
+        "outputTokens": 576,
+        "reasoningTokens": 382,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "estimatedCostUsd": 0
+      },
+      "privacyMode": "public_research",
+      "tools": []
+    }
+  ],
+  "usage": {
+    "pendingRequests": 0,
+    "daily": {
+      "usedTokens": 36376,
+      "reservedTokens": 0,
+      "chargedTokens": 36376,
+      "limit": 100000,
+      "remainingTokens": 63624
+    },
+    "monthly": {
+      "usedTokens": 36376,
+      "reservedTokens": 0,
+      "chargedTokens": 36376,
+      "limit": 100000,
+      "remainingTokens": 63624
+    }
+  },
+  "safety": {
+    "requestMethod": "GET",
+    "newModelRequests": 0,
+    "adminCredentialsUsed": false,
+    "rawContentPersisted": false
+  }
+}

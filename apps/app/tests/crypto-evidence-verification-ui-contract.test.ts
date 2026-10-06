@@ -41,7 +41,9 @@ describe("encrypted evidence verification UI", () => {
     expect(source).toContain("item.walletLifecycleReady");
     expect(source).toContain("The Blob object will be assigned to your connected Sui wallet");
     expect(source).toContain("deleteCryptoEvidenceWalrusCopy");
-    expect(source).toContain("confirmCryptoEvidenceWalrusDeletion");
+    expect(source).toContain('runWalletAction(item, "evidence-deletion")');
+    const recovery = readFileSync(new URL("../src/app/lib/wallet-confirmation-recovery.ts", import.meta.url), "utf8");
+    expect(recovery).toContain("confirmCryptoEvidenceWalrusDeletion");
     expect(source).toContain("Delete encrypted copy");
     expect(source).toContain("Delete in wallet");
     expect(source).toContain("This cannot be undone.");

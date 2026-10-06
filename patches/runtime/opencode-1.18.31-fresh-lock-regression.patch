@@ -1,0 +1,42 @@
+diff --git a/packages/core/test/util/effect-flock.test.ts b/packages/core/test/util/effect-flock.test.ts
+index a0f737a..d703359 100644
+--- a/packages/core/test/util/effect-flock.test.ts
++++ b/packages/core/test/util/effect-flock.test.ts
+@@ -357,6 +357,37 @@ describe("util.effect-flock", () => {
+     60_000,
+   )
+
++  it.live(
++    "recovers a fresh lock after its owner exits without waiting for lease expiry",
++    () =>
++      Effect.promise(async () => {
++        const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "eflock-fresh-crash-"))
++        const dir = path.join(tmp, "locks")
++        const ready = path.join(tmp, "owner-ready")
++        const acquired = path.join(tmp, "contender-ready")
++        const owner = spawnWorker({ key: "eflock:fresh-crash", dir, ready, holdMs: 120_000 })
++        let contender: ReturnType<typeof spawnWorker> | undefined
++
++        try {
++          await waitForFile(ready, 5_000)
++          await stopWorker(owner)
++          const lockDir = lock(dir, "eflock:fresh-crash")
++          const meta = await readJson<{ pid: number }>(path.join(lockDir, "meta.json"))
++          expect(meta.pid).toBe(owner.pid)
++          expect(Date.now() - (await fs.stat(path.join(lockDir, "heartbeat"))).mtimeMs).toBeLessThan(5_000)
++          contender = spawnWorker({ key: "eflock:fresh-crash", dir, ready: acquired, holdMs: 120_000 })
++          // Keep real timestamps: backdating the heartbeat hides the restart failure.
++          await waitForFile(acquired, 5_000)
++          expect((await fs.readFile(acquired, "utf8")).trim()).toBe(String(contender.pid))
++        } finally {
++          await stopWorker(owner)
++          if (contender) await stopWorker(contender)
++          await fs.rm(tmp, { recursive: true, force: true })
++        }
++      }),
++    15_000,
++  )
++
+   it.live(
+     "recovers after a crashed lock owner",
+     () =>

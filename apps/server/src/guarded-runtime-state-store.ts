@@ -18,6 +18,7 @@ type SqliteDatabase = {
 type SqliteConstructor = new (path: string) => SqliteDatabase;
 
 export type GuardedRuntimeStateKind =
+  | "workspace_deletion_barrier"
   | "privacy_challenge"
   | "privacy_consent"
   | "run_grant"
@@ -29,6 +30,8 @@ export type GuardedRuntimeStateKind =
   | "session_privacy_floor"
   | "user_message_binding"
   | "assistant_message_binding"
+  | "run_completion_binding"
+  | "compaction_message_claim"
   | "crypto_app_reservation"
   | "crypto_app_consumed_dispatch"
   | "crypto_pending_intent"
@@ -37,6 +40,7 @@ export type GuardedRuntimeStateKind =
   | "crypto_evidence_publication_claim"
   | "crypto_evidence_operation_claim"
   | "crypto_evidence_finalization"
+  | "crypto_evidence_finalization_binding"
   | "crypto_evidence_audit"
   | "crypto_evidence_verification_status"
   | "crypto_evidence_renewal_intent"
@@ -45,6 +49,7 @@ export type GuardedRuntimeStateKind =
   | "agent_file_record"
   | "agent_file_operation_claim"
   | "agent_file_renewal_intent"
+  | "receipt_append_intent"
   | "receipt_index";
 
 type StateRow = {
@@ -386,6 +391,22 @@ export class MatterhornGuardedRuntimeStateStore {
     });
   }
 
+  markWorkspaceDeleted(workspaceId: string): void {
+    if (!workspaceId.trim()) throw new Error("workspace_identity_invalid");
+    this.putIfAbsent({
+      kind: "workspace_deletion_barrier", key: workspaceId, workspaceId,
+      value: { deleted: true }, expiresAtMs: null,
+    });
+  }
+
+  isWorkspaceDeleted(workspaceId: string): boolean {
+    // Presence only grants denial. Do not let mutable payload/expiry metadata
+    // turn a deletion marker into permission to recreate private data.
+    return Boolean(statement(this.db,
+      "SELECT 1 FROM guarded_state WHERE kind = 'workspace_deletion_barrier' AND state_key = ? LIMIT 1",
+    ).get(workspaceId));
+  }
+
   purgeWorkspace(
     workspaceId: string,
     kinds?: GuardedRuntimeStateKind[],
@@ -394,10 +415,11 @@ export class MatterhornGuardedRuntimeStateStore {
     let states = 0;
     if (kinds?.length) {
       for (const kind of kinds) {
+        if (kind === "workspace_deletion_barrier") continue;
         states += statement(this.db, "DELETE FROM guarded_state WHERE workspace_id = ? AND kind = ?").run(workspaceId, kind).changes ?? 0;
       }
     } else {
-      states = statement(this.db, "DELETE FROM guarded_state WHERE workspace_id = ?").run(workspaceId).changes ?? 0;
+      states = statement(this.db, "DELETE FROM guarded_state WHERE workspace_id = ? AND kind <> 'workspace_deletion_barrier'").run(workspaceId).changes ?? 0;
     }
     const capabilities = options.includeConsumedCapabilities === false
       ? 0
@@ -406,7 +428,16 @@ export class MatterhornGuardedRuntimeStateStore {
   }
 
   deleteExpired(nowMs = Date.now()): { states: number; capabilities: number } {
-    const states = statement(this.db, "DELETE FROM guarded_state WHERE expires_at IS NOT NULL AND expires_at <= ?").run(nowMs).changes ?? 0;
+    // A live append intent needs the exact predecessor index for authenticated
+    // recovery, even if that predecessor just reached its retention date.
+    // Retention grants no execution authority; ordinary reads still check expiry.
+    const states = statement(this.db, `DELETE FROM guarded_state
+      WHERE kind <> 'workspace_deletion_barrier' AND expires_at IS NOT NULL AND expires_at <= ?
+      AND NOT (kind = 'receipt_index' AND EXISTS (
+        SELECT 1 FROM guarded_state AS intent
+        WHERE intent.kind = 'receipt_append_intent' AND intent.state_key = guarded_state.workspace_id
+          AND intent.workspace_id = guarded_state.workspace_id AND intent.expires_at > ?
+      ))`).run(nowMs, nowMs).changes ?? 0;
     const capabilities = statement(this.db, "DELETE FROM consumed_capabilities WHERE expires_at <= ?").run(nowMs).changes ?? 0;
     return { states, capabilities };
   }

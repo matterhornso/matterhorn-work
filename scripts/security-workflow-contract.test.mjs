@@ -23,6 +23,12 @@ for (const required of [
   "pnpm audit:dependencies",
   "pnpm test:release-dependency-patches",
   "request-rate-limit-store.test.ts",
+  "auth-password-lifecycle.test.ts",
+  "auth-reset-concurrency.test.ts",
+  "auth-credential-concurrency.test.ts",
+  "auth-account-authority-concurrency.test.ts",
+  "auth-workspace-authority-concurrency.test.ts",
+  "hosted-mcp-access.test.ts",
 ]) {
   assert.ok(workflow.includes(required), `security workflow must include ${required}`);
 }

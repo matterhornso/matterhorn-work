@@ -20,6 +20,7 @@ const accountPrefixes = [
   "matterhorn.pending-desk-task.v1:", "matterhorn.pending-message.",
   "openwork.den.desktopConfig:", "matterhorn.jev.",
   "openwork.sessionModels.", "openwork.modelVariant.",
+  "matterhorn.wallet-confirmation.v1:",
 ];
 
 export class AccountStateChangedError extends Error {
@@ -108,6 +109,7 @@ export function createAccountClientState(local: StorageSource, session: StorageS
   }
 
   return {
+    owner: () => owner,
     generation: () => generation,
     isResetting: () => resetting,
     register(name: string, resetter: () => void, phase: ResetPhase = "clear") {
@@ -157,4 +159,21 @@ export const accountClientState = createAccountClientState(
 export function captureAccountGeneration() {
   const generation = accountClientState.generation();
   return () => generation === accountClientState.generation();
+}
+
+/** Discard obsolete results; this does not undo a mutation already sent. */
+export async function runAccountScopedRequest<T>(
+  request: () => Promise<T>,
+  isCurrent: () => boolean = captureAccountGeneration(),
+): Promise<T> {
+  const assertCurrent = () => { if (!isCurrent()) throw new AccountStateChangedError(); };
+  assertCurrent();
+  try {
+    const result = await request();
+    assertCurrent();
+    return result;
+  } catch (error) {
+    assertCurrent();
+    throw error;
+  }
 }

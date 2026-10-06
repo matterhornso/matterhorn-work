@@ -1,0 +1,546 @@
+{
+  "version": 1,
+  "checkedAt": "2026-10-05T22:49:28.263Z",
+  "appUrl": "http://desks-qa.localhost:50631",
+  "workspaceId": "ws_web_101b932cbdeab015",
+  "scope": "Authenticated read-only API probes against the isolated local runtime; public provider reads, not hosted/browser/inference/wallet acceptance.",
+  "safety": {
+    "requestMethod": "GET",
+    "inferenceRequests": 0,
+    "walletConnections": 0,
+    "transactionSubmissions": 0,
+    "privatePayloadsPersisted": false
+  },
+  "requestCount": 16,
+  "observations": [
+    {
+      "id": "capabilities",
+      "method": "GET",
+      "path": "/api/backend/capabilities",
+      "httpStatus": 200,
+      "elapsedMs": 23,
+      "status": "response_received",
+      "observed": {
+        "models": {
+          "status": "working"
+        },
+        "wallet": {},
+        "approvalMode": "manual"
+      }
+    },
+    {
+      "id": "workspace-readiness",
+      "method": "GET",
+      "path": "/workspace/ws_web_101b932cbdeab015/backend/readiness",
+      "httpStatus": 200,
+      "elapsedMs": 19,
+      "status": "response_received",
+      "observed": {
+        "summary": {
+          "status": "working",
+          "readyFeatures": 6,
+          "totalFeatures": 6,
+          "blockingChecks": []
+        },
+        "checks": {
+          "workspace_authorized": {
+            "status": "working"
+          },
+          "workspace_writable": {
+            "status": "working"
+          },
+          "opencode_connection": {
+            "status": "working"
+          },
+          "notes_store": {
+            "status": "working"
+          },
+          "memory_vault": {
+            "status": "working"
+          },
+          "outputs_folder": {
+            "status": "working"
+          },
+          "project_ledger": {
+            "status": "working"
+          }
+        }
+      }
+    },
+    {
+      "id": "models",
+      "method": "GET",
+      "path": "/workspace/ws_web_101b932cbdeab015/backend/models",
+      "httpStatus": 200,
+      "elapsedMs": 466,
+      "status": "response_received",
+      "observed": {
+        "serverFetched": true,
+        "providers": [
+          {
+            "id": "cudos",
+            "connected": true,
+            "modelCount": 12
+          },
+          {
+            "id": "opencode",
+            "connected": true,
+            "modelCount": 10
+          },
+          {
+            "id": "venice",
+            "connected": false,
+            "modelCount": 116
+          }
+        ],
+        "privacy": {
+          "providers": [
+            {
+              "providerId": "cudos",
+              "status": "unverified",
+              "allowed": false,
+              "trainingUse": "unknown",
+              "retentionDays": null
+            },
+            {
+              "providerId": "opencode",
+              "status": "unverified",
+              "allowed": false,
+              "trainingUse": "unknown",
+              "retentionDays": null
+            },
+            {
+              "providerId": "venice",
+              "status": "unverified",
+              "allowed": false,
+              "trainingUse": "unknown",
+              "retentionDays": null
+            }
+          ]
+        },
+        "providerCount": 227
+      }
+    },
+    {
+      "id": "bittensor-sidecar",
+      "method": "GET",
+      "path": "/api/bittensor/sidecar/health",
+      "httpStatus": 200,
+      "elapsedMs": 7,
+      "status": "response_received",
+      "observed": {
+        "configured": false,
+        "status": "unconfigured",
+        "canRead": false,
+        "canPrepare": false,
+        "network": "finney",
+        "message": "Subtensor sidecar is not configured. Matterhorn will use TAO.app analytics and local safe fallbacks."
+      }
+    },
+    {
+      "id": "market-readiness",
+      "method": "GET",
+      "path": "/api/crypto/market-execution-readiness",
+      "httpStatus": 200,
+      "elapsedMs": 8,
+      "status": "response_received",
+      "observed": {
+        "status": "review",
+        "venues": [
+          {
+            "venue": "hyperliquid",
+            "executionMode": "preview_only",
+            "liveSubmissionEnabled": false,
+            "canSubmit": false
+          },
+          {
+            "venue": "polymarket",
+            "executionMode": "reviewed_wallet_ticket",
+            "liveSubmissionEnabled": true,
+            "canSubmit": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "bittensor-subnets",
+      "method": "GET",
+      "path": "/api/bittensor/subnets",
+      "httpStatus": 200,
+      "elapsedMs": 394,
+      "status": "response_received",
+      "observed": {
+        "count": 3,
+        "sources": [
+          "curated-fallback"
+        ],
+        "samples": [
+          {
+            "netuid": 0,
+            "name": "Root Network",
+            "source": "curated-fallback"
+          },
+          {
+            "netuid": 1,
+            "name": "Subnet 1",
+            "source": "curated-fallback"
+          },
+          {
+            "netuid": 14,
+            "name": "TAOHash",
+            "source": "curated-fallback"
+          }
+        ]
+      }
+    },
+    {
+      "id": "hyperliquid-markets",
+      "method": "GET",
+      "path": "/api/hyperliquid/markets?limit=3",
+      "httpStatus": 200,
+      "elapsedMs": 164,
+      "status": "response_received",
+      "observed": {
+        "count": 3,
+        "samples": [
+          {
+            "asset": "BTC",
+            "markPx": 85937.5,
+            "source": {
+              "source": "hyperliquid.info",
+              "freshness": "live",
+              "fetchedAt": "2026-10-05T22:49:25.416Z"
+            }
+          },
+          {
+            "asset": "ETH",
+            "markPx": 2715.75,
+            "source": {
+              "source": "hyperliquid.info",
+              "freshness": "live",
+              "fetchedAt": "2026-10-05T22:49:25.416Z"
+            }
+          },
+          {
+            "asset": "ATOM",
+            "markPx": 1.8144,
+            "source": {
+              "source": "hyperliquid.info",
+              "freshness": "live",
+              "fetchedAt": "2026-10-05T22:49:25.416Z"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "hyperliquid-funding",
+      "method": "GET",
+      "path": "/api/hyperliquid/funding/BTC",
+      "httpStatus": 200,
+      "elapsedMs": 354,
+      "status": "response_received",
+      "observed": {
+        "asset": "BTC",
+        "fundingRate": 0.0000125,
+        "markPx": 85934,
+        "source": {
+          "source": "hyperliquid.info",
+          "freshness": "live",
+          "fetchedAt": "2026-10-05T22:49:25.607Z"
+        }
+      }
+    },
+    {
+      "id": "bittensor-readiness",
+      "method": "GET",
+      "path": "/api/bittensor/readiness",
+      "httpStatus": 200,
+      "elapsedMs": 1562,
+      "status": "response_received",
+      "observed": {
+        "status": "warning",
+        "checks": [
+          {
+            "id": "chat_intents",
+            "status": "pass",
+            "summary": "Core Bittensor chat intents classify into deterministic workflows."
+          },
+          {
+            "id": "chat_context",
+            "status": "pass",
+            "summary": "Bittensor chat returns reusable public context without signing-material fields."
+          },
+          {
+            "id": "subnet_discovery",
+            "status": "warning",
+            "summary": "Subnet discovery is available, but only reference metadata is loaded."
+          },
+          {
+            "id": "live_read_freshness",
+            "status": "warning",
+            "summary": "No provider-backed subnet freshness was available; Matterhorn will label reference data clearly."
+          },
+          {
+            "id": "capabilities",
+            "status": "pass",
+            "summary": "Capability manifests include universal Bittensor chat support, adapter readiness, examples, freshness labels, schemas, auth/cost metadata, and service safety notes."
+          },
+          {
+            "id": "subnet_adapter_doctor",
+            "status": "warning",
+            "summary": "No direct subnet service adapters are configured; universal Bittensor chat flows remain available."
+          },
+          {
+            "id": "subnet_adapter_conformance",
+            "status": "warning",
+            "summary": "No direct subnet service adapters are configured for metadata conformance probing."
+          },
+          {
+            "id": "subnet_adapter_preflight",
+            "status": "pass",
+            "summary": "Adapter manifest and result preflight checks pass before endpoint conformance or canary review."
+          },
+          {
+            "id": "subnet_adapter_marketplace",
+            "status": "warning",
+            "summary": "Subnet adapter marketplace is available, but no direct subnet service adapter is ready yet."
+          },
+          {
+            "id": "subnet_adapter_roadmap",
+            "status": "pass",
+            "summary": "Adapter roadmap has 2 prioritized next-step recommendations."
+          },
+          {
+            "id": "subnet_adapter_operator_handoff",
+            "status": "warning",
+            "summary": "Adapter operator handoff is available but blocked or incomplete until adapter verification, conformance, and dry-run gates are resolved."
+          },
+          {
+            "id": "subnet_adapter_canary_outcome",
+            "status": "pass",
+            "summary": "Canary outcome reports can validate result envelopes, prove request-hash continuity, and redact full hashes for operator review."
+          },
+          {
+            "id": "wallet_safety",
+            "status": "pass",
+            "summary": "Wallet reads reject invalid SS58 addresses without asking for secrets."
+          },
+          {
+            "id": "signing_safety",
+            "status": "pass",
+            "summary": "Extrinsic previews and handoffs stay unsigned, checksumed, and external-signature-only."
+          },
+          {
+            "id": "sidecar_status",
+            "status": "warning",
+            "summary": "Subtensor sidecar is not configured; Matterhorn will rely on provider data and safe fallbacks."
+          },
+          {
+            "id": "validator_comparison",
+            "status": "warning",
+            "summary": "Validator comparison works, but no validator candidates are available from the current provider sample."
+          },
+          {
+            "id": "monitoring",
+            "status": "pass",
+            "summary": "Watch creation and evaluation are wired for Bittensor monitoring."
+          }
+        ],
+        "blockers": [],
+        "warnings": [
+          "Subnet discovery: Subnet discovery is available, but only reference metadata is loaded.",
+          "Live-read freshness: No provider-backed subnet freshness was available; Matterhorn will label reference data clearly.",
+          "Subnet adapter registry doctor: No direct subnet service adapters are configured; universal Bittensor chat flows remain available.",
+          "Subnet adapter conformance: No direct subnet service adapters are configured for metadata conformance probing.",
+          "Subnet adapter marketplace: Subnet adapter marketplace is available, but no direct subnet service adapter is ready yet.",
+          "Subnet adapter operator handoff: Adapter operator handoff is available but blocked or incomplete until adapter verification, conformance, and dry-run gates are resolved.",
+          "Subtensor sidecar status: Subtensor sidecar is not configured; Matterhorn will rely on provider data and safe fallbacks.",
+          "Validator comparison: Validator comparison works, but no validator candidates are available from the current provider sample."
+        ]
+      }
+    },
+    {
+      "id": "hyperliquid-orderbook",
+      "method": "GET",
+      "path": "/api/hyperliquid/orderbook/BTC",
+      "httpStatus": 200,
+      "elapsedMs": 90,
+      "status": "response_received",
+      "observed": {
+        "asset": "BTC",
+        "bids": 20,
+        "asks": 20,
+        "source": {
+          "source": "hyperliquid.info",
+          "freshness": "live",
+          "fetchedAt": "2026-10-05T22:49:26.906Z"
+        },
+        "warnings": [
+          "Orderbook is read-only and limited to the levels returned by Hyperliquid info endpoint."
+        ]
+      }
+    },
+    {
+      "id": "polymarket-compliance",
+      "method": "GET",
+      "path": "/api/polymarket/compliance",
+      "httpStatus": 200,
+      "elapsedMs": 164,
+      "status": "response_received",
+      "observed": {
+        "status": "blocked",
+        "reason": "Polymarket geoblock reports this region is restricted from trading.",
+        "jurisdiction": "SG",
+        "checkedAt": "2026-10-05T22:49:26.979Z",
+        "source": "https://polymarket.com/api/geoblock"
+      }
+    },
+    {
+      "id": "sui-balance",
+      "method": "GET",
+      "path": "/api/sui/balance/0x0000000000000000000000000000000000000000000000000000000000000002?network=testnet",
+      "httpStatus": 200,
+      "elapsedMs": 481,
+      "status": "response_received",
+      "observed": {
+        "network": "testnet",
+        "balanceMist": "75842458738",
+        "balanceSui": "75.842458738",
+        "custody": false,
+        "canSubmit": false,
+        "source": {
+          "source": "sui.grpc",
+          "fetchedAt": "2026-10-05T22:49:27.298Z",
+          "network": "testnet"
+        },
+        "warnings": [
+          "Read-only Sui account data. Matterhorn does not hold keys, sign, or submit Sui transactions."
+        ],
+        "fixture": "Public 0x2 address from apps/server/src/tools/sui.test.ts; not a customer wallet."
+      }
+    },
+    {
+      "id": "sui-account",
+      "method": "GET",
+      "path": "/api/sui/account/0x0000000000000000000000000000000000000000000000000000000000000002?network=testnet",
+      "httpStatus": 200,
+      "elapsedMs": 18,
+      "status": "response_received",
+      "observed": {
+        "network": "testnet",
+        "balanceMist": "75842458738",
+        "balanceSui": "75.842458738",
+        "custody": false,
+        "canSubmit": false,
+        "source": {
+          "source": "sui.grpc",
+          "fetchedAt": "2026-10-05T22:49:27.316Z",
+          "network": "testnet"
+        },
+        "warnings": [
+          "Read-only Sui account data. Matterhorn does not hold keys, sign, or submit Sui transactions."
+        ],
+        "fixture": "Public 0x2 address from apps/server/src/tools/sui.test.ts; not a customer wallet."
+      }
+    },
+    {
+      "id": "polymarket-discovery",
+      "method": "GET",
+      "path": "/api/polymarket/markets?limit=3",
+      "httpStatus": 200,
+      "elapsedMs": 431,
+      "status": "response_received",
+      "observed": {
+        "count": 3,
+        "samples": [
+          {
+            "id": "4907970",
+            "question": "Martinique vs. El Salvador: Martinique 1st Half O/U 0.5",
+            "active": true,
+            "closed": false,
+            "source": {
+              "source": "https://gamma-api.polymarket.com/markets",
+              "freshness": "live",
+              "fetchedAt": "2026-10-05T22:49:27.741Z"
+            }
+          },
+          {
+            "id": "5067138",
+            "question": "Elche CF vs. RC Celta de Vigo: Both Teams to Score",
+            "active": true,
+            "closed": false,
+            "source": {
+              "source": "https://gamma-api.polymarket.com/markets",
+              "freshness": "live",
+              "fetchedAt": "2026-10-05T22:49:27.741Z"
+            }
+          },
+          {
+            "id": "4884516",
+            "question": "Spread: Vancouver Whitecaps FC (-4.5)",
+            "active": true,
+            "closed": false,
+            "source": {
+              "source": "https://gamma-api.polymarket.com/markets",
+              "freshness": "live",
+              "fetchedAt": "2026-10-05T22:49:27.741Z"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "polymarket-detail",
+      "method": "GET",
+      "path": "/api/polymarket/markets/4907970",
+      "httpStatus": 200,
+      "elapsedMs": 286,
+      "status": "response_received",
+      "observed": {
+        "id": "4907970",
+        "question": "Martinique vs. El Salvador: Martinique 1st Half O/U 0.5",
+        "active": true,
+        "closed": false,
+        "outcomes": [
+          "Over",
+          "Under"
+        ],
+        "source": {
+          "source": "https://gamma-api.polymarket.com/markets/4907970",
+          "freshness": "live",
+          "fetchedAt": "2026-10-05T22:49:28.033Z"
+        }
+      }
+    },
+    {
+      "id": "polymarket-orderbook",
+      "method": "GET",
+      "path": "/api/polymarket/orderbook/62263459329729297718649230190603049436908017644076282932155738750421561695892?marketId=4907970",
+      "httpStatus": 200,
+      "elapsedMs": 229,
+      "status": "response_received",
+      "observed": {
+        "marketId": "4907970",
+        "tokenId": "62263459329729297718649230190603049436908017644076282932155738750421561695892",
+        "bestBid": null,
+        "bestAsk": null,
+        "bids": 0,
+        "asks": 0,
+        "source": {
+          "source": "https://clob.polymarket.com/book",
+          "freshness": "live",
+          "fetchedAt": "2026-10-05T22:49:28.261Z"
+        },
+        "warnings": [
+          "Thin or one-sided orderbook."
+        ]
+      }
+    }
+  ],
+  "limitations": [
+    "HTTP 200 and readiness claims are not live-source proof; inspect freshness and fallback labels.",
+    "No owner-authorized wallet signing, browser connector, chat response, production endpoint, or paid resource was exercised.",
+    "Readiness endpoints may refresh internal caches or their diagnostic context; no user workflow mutation was requested."
+  ]
+}

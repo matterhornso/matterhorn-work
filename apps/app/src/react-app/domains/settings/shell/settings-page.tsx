@@ -40,6 +40,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import {
   DropdownMenu,
@@ -49,7 +50,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { t } from "../../../../i18n";
 import type { SettingsTab } from "../../../../app/types";
-import { filterLaunchSettingsTabs } from "../../../../app/lib/launch-features";
+import { filterLaunchSettingsTabs, MATTERHORN_LAUNCH_FEATURES } from "../../../../app/lib/launch-features";
 import { isPublicBetaWebDeployment } from "../../../../app/lib/matterhorn-deployment";
 import type {
   MatterhornCapabilityStatus,
@@ -190,7 +191,9 @@ export function getSettingsTabDescription(tab: SettingsTab) {
     case "privacy":
       return "Provider processing, storage, feedback, and retention";
     case "cloud-account":
-      return t("settings.tab_description_cloud_account");
+      return MATTERHORN_LAUNCH_FEATURES.cloud
+        ? t("settings.tab_description_cloud_account")
+        : "Manage your profile, sign-in, and account security.";
     case "cloud-marketplaces":
       return t("settings.tab_description_cloud_marketplaces");
     case "cloud-workers":
@@ -370,6 +373,7 @@ export function getWorkspaceSettingsTabs(developerMode = false): SettingsTab[] {
 export function getGlobalSettingsTabs(developerMode: boolean): SettingsTab[] {
   const tabs: SettingsTab[] = [
     "overview",
+    "cloud-account",
     "ai",
     ...(isPublicBetaWebDeployment() ? [] : ["shell" as const]),
     "appearance",
@@ -383,8 +387,8 @@ export function getGlobalSettingsTabs(developerMode: boolean): SettingsTab[] {
 export function getCloudSettingsTabs(developerMode = false): SettingsTab[] {
   return filterLaunchSettingsTabs(
     developerMode && !isPublicBetaWebDeployment()
-      ? ["cloud-account", "cloud-workers"]
-      : ["cloud-account"],
+      ? ["cloud-workers"]
+      : [],
   );
 }
 
@@ -465,7 +469,24 @@ export const MINIMAL_SETTINGS_GROUPS: { label: string; tabs: SettingsTab[] }[] =
   { label: "Privacy & appearance", tabs: ["privacy", "appearance"] },
 ];
 
+export function getMinimalSettingsGroups(developerMode = false) {
+  const primaryTabs = new Set(MINIMAL_SETTINGS_GROUPS.flatMap((group) => group.tabs));
+  const availableTabs: SettingsTab[] = [
+    "general",
+    ...getWorkspaceSettingsTabs(developerMode),
+    ...getGlobalSettingsTabs(developerMode),
+    ...getCloudSettingsTabs(developerMode),
+  ];
+  const moreTabs = [...new Set(availableTabs)].filter((tab) => !primaryTabs.has(tab));
+  return [...MINIMAL_SETTINGS_GROUPS, { label: "More settings", tabs: moreTabs }];
+}
+
 export function SettingsSidebar(props: SettingsSidebarProps) {
+  const { setOpenMobile } = useSidebar();
+  const selectTab = (tab: SettingsTab) => {
+    props.onSelectTab(tab);
+    setOpenMobile(false);
+  };
   const workspaceTabs = getWorkspaceSettingsTabs(props.developerMode);
   const globalTabs = getGlobalSettingsTabs(props.developerMode);
   const cloudTabs = getCloudSettingsTabs(props.developerMode);
@@ -526,11 +547,11 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        {MINIMAL_UI ? MINIMAL_SETTINGS_GROUPS.map((group) => <SidebarGroup key={group.label}>
+        {MINIMAL_UI ? getMinimalSettingsGroups(props.developerMode).map((group) => <SidebarGroup key={group.label}>
           <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
           <SidebarGroupContent><SidebarMenu>{group.tabs.map((tab) => {
             const Icon = getSettingsTabIcon(tab);
-            return <SidebarMenuItem key={tab}><SidebarMenuButton isActive={props.activeTab === tab} aria-current={props.activeTab === tab ? "page" : undefined} onClick={() => props.onSelectTab(tab)}><Icon /><span>{tab === "cloud-account" ? "Account" : getSettingsTabLabel(tab)}</span></SidebarMenuButton></SidebarMenuItem>;
+            return <SidebarMenuItem key={tab}><SidebarMenuButton isActive={props.activeTab === tab} aria-current={props.activeTab === tab ? "page" : undefined} onClick={() => selectTab(tab)}><Icon /><span>{tab === "cloud-account" ? "Account" : getSettingsTabLabel(tab)}</span></SidebarMenuButton></SidebarMenuItem>;
           })}</SidebarMenu></SidebarGroupContent>
         </SidebarGroup>) : <>
         {/* Top-level hub entry */}
@@ -543,7 +564,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                   isActive={props.activeTab === "general"}
                   aria-current={props.activeTab === "general" ? "page" : undefined}
                   className={SETTINGS_SIDEBAR_ITEM_CLASS}
-                  onClick={() => props.onSelectTab("general")}
+                  onClick={() => selectTab("general")}
                 >
                   <Cog />
                   <span>{getSettingsTabLabel("general")}</span>
@@ -566,7 +587,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                       isActive={props.activeTab === tab}
                       aria-current={props.activeTab === tab ? "page" : undefined}
                       className={SETTINGS_SIDEBAR_ITEM_CLASS}
-                      onClick={() => props.onSelectTab(tab)}
+                      onClick={() => selectTab(tab)}
                     >
                       <Icon />
                       <span>{getSettingsTabLabel(tab)}</span>
@@ -592,7 +613,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                       isActive={props.activeTab === tab}
                       aria-current={props.activeTab === tab ? "page" : undefined}
                       className={SETTINGS_SIDEBAR_ITEM_CLASS}
-                      onClick={() => props.onSelectTab(tab)}
+                      onClick={() => selectTab(tab)}
                     >
                       <Icon />
                       <span>{getSettingsTabLabel(tab)}</span>
@@ -619,7 +640,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                         isActive={props.activeTab === tab}
                         aria-current={props.activeTab === tab ? "page" : undefined}
                         className={SETTINGS_SIDEBAR_ITEM_CLASS}
-                        onClick={() => props.onSelectTab(tab)}
+                        onClick={() => selectTab(tab)}
                       >
                         <Icon />
                         <span>{getSettingsTabLabel(tab)}</span>

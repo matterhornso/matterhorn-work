@@ -28,7 +28,7 @@ describe("public web authentication errors", () => {
         minimumPasswordLength: 12,
         turnstileSiteKey: "site-key",
       }),
-    ).toContain("secure email delivery");
+    ).toContain("while setup is completed");
     expect(
       publicSignupAvailabilityMessage({
         signupsAvailable: false,
@@ -40,6 +40,15 @@ describe("public web authentication errors", () => {
         turnstileSiteKey: "site-key",
       }),
     ).toContain("temporarily paused");
+  });
+
+  test("a configuration lookup failure explains uncertainty and recovery, not email setup", () => {
+    const message = publicSignupAvailabilityMessage(null, true);
+    expect(message).toContain("could not be checked");
+    expect(message).toContain("still sign in");
+    expect(message).toContain("check again");
+    expect(message).not.toContain("email delivery");
+    expect(message).not.toContain("setup");
   });
 
   test("keeps safe signup pauses actionable for existing users", () => {

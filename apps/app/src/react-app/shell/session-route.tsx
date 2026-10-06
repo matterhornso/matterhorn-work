@@ -12,6 +12,7 @@ import {
 } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { AccountStateChangedError, captureAccountGeneration } from "../../app/lib/account-client-state";
+import { requireActiveChatSubmission } from "../../app/lib/chat-submission-control";
 import type {
   AgentPartInput,
   FilePartInput,
@@ -144,6 +145,8 @@ import {
 } from "../domains/session/sync/session-sync";
 import { CreateRemoteWorkspaceModal } from "../domains/workspace/create-remote-workspace-modal";
 import { CreateWorkspaceModal } from "../domains/workspace/create-workspace-modal";
+import { openLocalWorkspaceFolder } from "../domains/workspace/open-local-workspace";
+import type { CreateWorkspaceScreen } from "../domains/workspace/types";
 import { createProviderAuthStore, useProviderAuthStoreSnapshot } from "../domains/connections/provider-auth/store";
 import { useRemoteAccessRestart } from "../domains/workspace/remote-access-restart";
 import { RenameWorkspaceModal } from "../domains/workspace/rename-workspace-modal";
@@ -742,6 +745,13 @@ export function SessionRoute() {
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
   const [legacySelectedWorkspaceId, setLegacySelectedWorkspaceId] = useState<string>(() => readActiveWorkspaceId() ?? "");
   const selectedWorkspaceId = routeWorkspaceId || legacySelectedWorkspaceId;
+  // A late action must not restore old chat state after navigation or unmount.
+  // Returning to the same IDs creates a new scope; it does not revive the old one.
+  const sessionActionScope = useMemo(() => ({ current: true }), [selectedWorkspaceId, selectedSessionId]);
+  useEffect(() => {
+    sessionActionScope.current = true;
+    return () => { sessionActionScope.current = false; };
+  }, [sessionActionScope]);
   const handlePendingDeskTaskRestored = useCallback(() => {
     const workspaceId = selectedWorkspaceId || routeWorkspaceId;
     clearPendingDeskTask(workspaceId);
@@ -804,6 +814,8 @@ export function SessionRoute() {
   const [retryingWorkspaceIds, setRetryingWorkspaceIds] = useState<string[]>([]);
   const launchActivatedWorkspaceIdsRef = useRef(new Set<string>());
   const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
+  const [createWorkspaceInitialScreen, setCreateWorkspaceInitialScreen] =
+    useState<CreateWorkspaceScreen>("chooser");
   const [createWorkspaceBusy, setCreateWorkspaceBusy] = useState(false);
   const [createWorkspaceError, setCreateWorkspaceError] = useState<string | null>(null);
   const [createWorkspaceRemoteBusy, setCreateWorkspaceRemoteBusy] = useState(false);
@@ -2823,9 +2835,12 @@ export function SessionRoute() {
       onOpenSettingsSection: (section: "commands" | "skills" | "mcps" | "extensions" | "plugins") => {
         handleOpenSettings(section === "skills" ? "/settings/skills" : section === "mcps" || section === "extensions" ? "/settings/extensions/mcp" : section === "plugins" ? "/settings/extensions/plugins" : "/settings/general");
       },
-      onSendDraft: async (draft: ComposerDraft) => {
-        const requireCurrentAccount = () => { if (!isCurrentAccount()) throw new AccountStateChangedError(); };
-        requireCurrentAccount();
+      onSendDraft: async (draft: ComposerDraft, signal?: AbortSignal) => {
+        const requireCurrentPreparation = () => {
+          if (!isCurrentAccount()) throw new AccountStateChangedError();
+          requireActiveChatSubmission(signal);
+        };
+        requireCurrentPreparation();
         validatePrivacyConsentToken(draft.privacy?.consentToken);
         const text = (draft.resolvedText ?? draft.text).trim();
         if (!text && draft.attachments.length === 0) return;
@@ -2874,6 +2889,7 @@ export function SessionRoute() {
               agentId: selectedAgent ?? undefined,
               ...(draft.privacy?.mode ? { privacyMode: draft.privacy.mode } : {}),
             });
+            requireCurrentPreparation();
             if (privacyPreflight.decision !== "allow") {
               throw new Error(JSON.stringify({
                 code: privacyPreflight.decision === "blocked" ? "agent_privacy_blocked" : "agent_privacy_consent_required",
@@ -2894,7 +2910,7 @@ export function SessionRoute() {
             ...(draft.privacy?.mode ? { privacyMode: draft.privacy.mode } : {}),
             ...(draft.privacy?.consentToken ? { privacyConsentToken: draft.privacy.consentToken } : {}),
           };
-          requireCurrentAccount();
+          requireCurrentPreparation();
           const result = await opencodeClient.session.command(commandRequest);
           if (result.error) {
             throw new Error(serializeSDKError(result.error));
@@ -2918,7 +2934,7 @@ export function SessionRoute() {
             ? Promise.resolve(undefined)
             : buildSessionSystemContext(text, selectedSessionId, selectedAgent, executionMode),
         ]);
-        requireCurrentAccount();
+        requireCurrentPreparation();
         const executionModeTools = draft.answerOnly || draft.continuationOf ? { "*": false } : buildMatterhornPromptTools({
           mode: executionMode,
           agentId: selectedAgent,
@@ -2945,6 +2961,7 @@ export function SessionRoute() {
             } : {}),
             ...(draft.privacy?.memoryIds?.length ? { memoryIds: draft.privacy.memoryIds } : {}),
           }));
+          requireCurrentPreparation();
           if (draft.continuationOf) requireAnswerContinuationSupport(privacyPreflight, draft.continuationOf);
           if (!draft.privacy?.consentToken && privacyPreflight.decision !== "allow") {
             throw new Error(JSON.stringify({
@@ -2955,7 +2972,7 @@ export function SessionRoute() {
           }
         }
 
-        requireCurrentAccount();
+        requireCurrentPreparation();
         const dispatchStartedAt = performance.now();
         promptTimingRef.current.set(selectedSessionId, {
           startedAt: dispatchStartedAt,
@@ -3019,7 +3036,9 @@ export function SessionRoute() {
           promptTimingRef.current.delete(selectedSessionId);
           throw error;
         }
-        requireCurrentAccount();
+        // Cancellation gates preparation, not accepted upstream work. Throwing
+        // a local Stop here would misreport acceptance and trigger retry restore.
+        if (!isCurrentAccount()) throw new AccountStateChangedError();
         recordInspectorEvent("session.prompt.dispatch_accepted", {
           attemptId,
           dispatchDurationMs: Math.round(performance.now() - dispatchStartedAt),
@@ -3084,6 +3103,8 @@ export function SessionRoute() {
       isRemoteWorkspace: selectedWorkspace?.workspaceType === "remote",
       isSandboxWorkspace: selectedWorkspace ? isSandboxWorkspace(selectedWorkspace) : false,
       onRevertToMessage: async (messageId: string) => {
+        const isCurrent = () => isCurrentAccount() && sessionActionScope.current;
+        if (!isCurrent()) return;
         if (executionMode !== "work") {
           showToast({
             title: "Switch to Work mode to revert",
@@ -3099,13 +3120,16 @@ export function SessionRoute() {
           } catch {
             // The session may already be idle.
           }
+          if (!isCurrent()) return;
           await revertSession(opencodeClient, selectedSessionId, messageId);
+          if (!isCurrent()) return;
           if (selectedWorkspaceEndpoint) {
             const snapshot = await selectedWorkspaceEndpoint.client.getSessionSnapshot(
               selectedWorkspaceEndpoint.workspaceId,
               selectedSessionId,
               { limit: 140 },
             );
+            if (!isCurrent()) return;
             getReactQueryClient().setQueryData(
               ["react-session-snapshot", selectedWorkspaceId, selectedSessionId],
               snapshot.item,
@@ -3118,6 +3142,7 @@ export function SessionRoute() {
             durationMs: 2400,
           });
         } catch (error) {
+          if (!isCurrent()) return;
           showToast({
             title: "Could not revert conversation",
             description: describeRouteError(error),
@@ -3127,6 +3152,8 @@ export function SessionRoute() {
         }
       },
       onForkAtMessage: (messageId: string) => {
+        const isCurrent = () => isCurrentAccount() && sessionActionScope.current;
+        if (!isCurrent()) return;
         if (executionMode !== "work") {
           console.warn(`[fork] blocked in ${executionMode} mode; switch to Work mode first`);
           return;
@@ -3134,6 +3161,7 @@ export function SessionRoute() {
         void (async () => {
           try {
             const forked = await forkSession(opencodeClient, selectedSessionId, messageId);
+            if (!isCurrent()) return;
             let coworkerForkWarning = false;
             if (selectedWorkspaceEndpoint) {
               try {
@@ -3141,6 +3169,7 @@ export function SessionRoute() {
                   selectedWorkspaceEndpoint.workspaceId,
                   selectedSessionId,
                 );
+                if (!isCurrent()) return;
                 if (sourceBinding.binding) {
                   if (!sourceBinding.active) {
                     coworkerForkWarning = true;
@@ -3153,9 +3182,11 @@ export function SessionRoute() {
                   }
                 }
               } catch {
+                if (!isCurrent()) return;
                 coworkerForkWarning = true;
               }
             }
+            if (!isCurrent()) return;
             inheritStoredSessionModelChoice(selectedWorkspaceId, selectedSessionId, forked.id);
             writeLastSessionFor(selectedWorkspaceId, forked.id);
             rememberPendingCreatedSession(selectedWorkspaceId, forked.id);
@@ -3173,8 +3204,14 @@ export function SessionRoute() {
                 durationMs: 4200,
               });
             }
-          } catch (error) {
-            console.warn("[fork] failed", error);
+          } catch {
+            if (!isCurrent()) return;
+            showToast({
+              title: "Could not fork conversation",
+              description: "Check your recent chats before trying again; a fork may already have been created.",
+              tone: "error",
+              durationMs: 6000,
+            });
           }
         })();
       },
@@ -3219,6 +3256,7 @@ export function SessionRoute() {
     selectedSessionId,
     selectedSessionKnown,
     selectedSessionPending,
+    sessionActionScope,
     selectedModelUnavailable,
     selectedProviderPrivacyPolicy,
     selectedPrivateModeVerified,
@@ -3233,11 +3271,10 @@ export function SessionRoute() {
     token,
   ]);
 
-  const handleOpenCreateWorkspace = useCallback(() => {
+  const canAddWorkspace = useCallback(() => {
     // Respect the org-level `allowMultipleWorkspaces` restriction (dev
     // #1505). If the checker returns true, the admin has disabled
-    // adding further workspaces; surface a friendly notice instead of
-    // opening the modal.
+    // adding further workspaces; surface a friendly notice instead.
     if (
       workspaces.length > 0 &&
       checkDesktopRestriction({ restriction: "allowMultipleWorkspaces" })
@@ -3247,11 +3284,26 @@ export function SessionRoute() {
         message:
           "Your organization administrator has restricted access to adding additional workspaces.",
       });
-      return;
+      return false;
     }
+    return true;
+  }, [checkDesktopRestriction, restrictionNotice, workspaces.length]);
+
+  const openCreateWorkspaceModal = useCallback((screen: CreateWorkspaceScreen) => {
+    if (isDesktopRuntime() && !canAddWorkspace()) return;
+    setCreateWorkspaceInitialScreen(screen);
+    setCreateWorkspaceError(null);
     setCreateWorkspaceRemoteError(null);
     setCreateWorkspaceOpen(true);
-  }, [checkDesktopRestriction, restrictionNotice, workspaces.length]);
+  }, [canAddWorkspace]);
+
+  const handleOpenCreateWorkspace = useCallback(() => {
+    openCreateWorkspaceModal("chooser");
+  }, [openCreateWorkspaceModal]);
+
+  const handleOpenNewLocalWorkspace = useCallback(() => {
+    openCreateWorkspaceModal(isDesktopRuntime() ? "local" : "chooser");
+  }, [openCreateWorkspaceModal]);
 
   const handleOpenRenameWorkspace = useCallback((workspaceId: string) => {
     const workspace = workspaces.find((item) => item.id === workspaceId);
@@ -3637,8 +3689,40 @@ export function SessionRoute() {
     setWorkspaces((current) => orderRouteWorkspaces(current, nextOrderIds));
   }, []);
 
+  const handleSelectWorkspace = useCallback((workspaceId: string) => {
+    if (workspaceId === selectedWorkspaceId) return true;
+    setLegacySelectedWorkspaceId(workspaceId);
+    writeActiveWorkspaceId(workspaceId || null);
+    const workspace = workspaces.find((item) => item.id === workspaceId);
+    if (client && workspace && !sessionsByWorkspaceId[workspaceId]?.length) {
+      setRetryingWorkspaceIds((current) => Array.from(new Set([...current, workspaceId])));
+      void loadWorkspaceSessionsInBackground([workspace]);
+    }
+    // Bookkeeping should not stall workspace switches behind IPC roundtrips.
+    if (isDesktopRuntime()) {
+      void workspaceSetSelected(workspaceId).catch(() => undefined);
+      void workspaceSetRuntimeActive(workspaceId).catch(() => undefined);
+    }
+    // Activate the workspace so the engine reloads its existing configuration.
+    if (!publicBetaWeb && workspaceId && client) {
+      const endpoint = endpointForWorkspace(workspace ?? null);
+      if (endpoint) {
+        void endpoint.client.activateWorkspace(endpoint.workspaceId).catch(() => undefined);
+      }
+    }
+    const remembered = readLastSessionFor(workspaceId);
+    if (remembered && remembered !== selectedSessionId &&
+      sessionsByWorkspaceId[workspaceId]?.some((session) => session.id === remembered)) {
+      navigateToWorkspaceSession(workspaceId, remembered);
+    } else {
+      navigateToWorkspaceSession(workspaceId);
+    }
+    return true;
+  }, [client, endpointForWorkspace, loadWorkspaceSessionsInBackground, navigateToWorkspaceSession,
+    publicBetaWeb, selectedSessionId, selectedWorkspaceId, sessionsByWorkspaceId, workspaces]);
+
   const handleCreateWorkspace = useCallback(async (preset: WorkspacePreset, folder: string | null) => {
-    if (!folder || !isDesktopRuntime()) return;
+    if (!folder || !isDesktopRuntime()) return false;
     setCreateWorkspaceBusy(true);
     setCreateWorkspaceError(null);
     try {
@@ -3699,12 +3783,41 @@ export function SessionRoute() {
         navigateToWorkspaceSession(targetWorkspaceId, session?.id ?? null, { replace: true });
         if (session?.id) focusPromptSoon();
       }
+      return true;
     } catch (error) {
       setCreateWorkspaceError(describeWorkspaceCreateError(error));
+      return false;
     } finally {
       setCreateWorkspaceBusy(false);
     }
   }, [baseUrl, client, local, navigateToWorkspaceSession, publicBetaWeb, refreshRouteState, rememberPendingCreatedSession, token]);
+
+  const handleOpenLocalWorkspace = useCallback(async () => {
+    if (!isDesktopRuntime()) {
+      openCreateWorkspaceModal("chooser");
+      return;
+    }
+    if (!canAddWorkspace()) return;
+
+    setCreateWorkspaceError(null);
+    try {
+      const folder = await pickDirectory({ title: "Open a local workspace" });
+      if (typeof folder !== "string" || !folder.trim()) return;
+      const opened = await openLocalWorkspaceFolder(folder, {
+        workspaces: workspacesRef.current,
+        selectWorkspace: handleSelectWorkspace,
+        createWorkspace: (path) => handleCreateWorkspace("starter", path),
+      });
+      if (!opened) {
+        setCreateWorkspaceInitialScreen("local");
+        setCreateWorkspaceOpen(true);
+      }
+    } catch (error) {
+      setCreateWorkspaceError(describeWorkspaceCreateError(error));
+      setCreateWorkspaceInitialScreen("local");
+      setCreateWorkspaceOpen(true);
+    }
+  }, [canAddWorkspace, handleCreateWorkspace, handleSelectWorkspace, openCreateWorkspaceModal]);
 
   const handleCreateRemoteWorkspace = useCallback(async (input: {
     matterhornHostUrl?: string | null;
@@ -3868,49 +3981,7 @@ export function SessionRoute() {
         newTaskDisabled: !canCreateTask,
         sidebarHydratedFromCache: Object.values(sessionsByWorkspaceId).some((list) => list.length > 0),
         startupPhase: effectiveLoading ? "nativeInit" : "ready",
-        onSelectWorkspace: async (workspaceId) => {
-          if (workspaceId === selectedWorkspaceId) return true;
-          setLegacySelectedWorkspaceId(workspaceId);
-          writeActiveWorkspaceId(workspaceId || null);
-          const workspace = workspaces.find((item) => item.id === workspaceId);
-          if (client && workspace && !sessionsByWorkspaceId[workspaceId]?.length) {
-            setRetryingWorkspaceIds((current) => Array.from(new Set([...current, workspaceId])));
-            void loadWorkspaceSessionsInBackground([workspace]);
-          }
-          // Fire Tauri updates but don't await them — they're bookkeeping and
-          // awaiting 2 IPC roundtrips on every click used to stall rapid
-          // workspace switches behind a queue.
-          if (isDesktopRuntime()) {
-            void workspaceSetSelected(workspaceId).catch(() => undefined);
-            void workspaceSetRuntimeActive(workspaceId).catch(() => undefined);
-          }
-          // Tell the Matterhorn Desks server this workspace is now active so it can
-          // emit a config reload event that the OpenCode engine picks up.
-          // Without this, the permissions from opencode.jsonc are never
-          // applied on the workspace the user is already on at launch. See
-          // issue #870.
-          if (!publicBetaWeb && workspaceId && client) {
-            const workspace = workspaces.find((item) => item.id === workspaceId) ?? null;
-            const endpoint = endpointForWorkspace(workspace);
-            if (endpoint) {
-              void endpoint.client.activateWorkspace(endpoint.workspaceId).catch(() => undefined);
-            }
-          }
-          // If we remember what the user last opened here and that session
-          // still exists in our local list, navigate. Otherwise stay put.
-          const remembered = readLastSessionFor(workspaceId);
-          if (remembered && remembered !== selectedSessionId) {
-            const known = sessionsByWorkspaceId[workspaceId];
-            if (known?.some((session: any) => session?.id === remembered)) {
-              navigateToWorkspaceSession(workspaceId, remembered);
-            } else {
-              navigateToWorkspaceSession(workspaceId);
-            }
-          } else {
-            navigateToWorkspaceSession(workspaceId);
-          }
-          return true;
-        },
+        onSelectWorkspace: handleSelectWorkspace,
         onOpenWorkspaceHome: (workspaceId) => {
           writeActiveWorkspaceId(workspaceId || null);
           navigateToWorkspaceSession(workspaceId, null);
@@ -4224,6 +4295,8 @@ export function SessionRoute() {
           : (workspaceId) => runRemoteWorkspaceConnectionCheck(workspaceId, "test"),
         onEditWorkspaceConnection: publicBetaWeb ? undefined : remoteWorkspaceConnectionEditor.open,
         onForgetWorkspace: (id) => void handleForgetWorkspace(id),
+        onOpenLocalWorkspace: () => void handleOpenLocalWorkspace(),
+        onOpenNewLocalWorkspace: handleOpenNewLocalWorkspace,
         onOpenCreateWorkspace: handleOpenCreateWorkspace,
         onReorderWorkspaces: handleReorderWorkspaces,
       }}
@@ -4311,6 +4384,7 @@ export function SessionRoute() {
     </Suspense>
     <CreateWorkspaceModal
       open={createWorkspaceOpen}
+      initialScreen={createWorkspaceInitialScreen}
       onClose={() => {
         setCreateWorkspaceOpen(false);
         setCreateWorkspaceError(null);
@@ -4322,9 +4396,12 @@ export function SessionRoute() {
       localDisabledReason={
         isDesktopRuntime()
           ? undefined
-          : "Create local projects in the desktop app. Matterhorn Cloud provides projects for public web."
+          : "Local folders require Matterhorn Desks for desktop. Browser workspaces are managed by the connected Matterhorn server."
       }
-      onPickFolder={() => pickDirectory({ title: t("onboarding.authorize_folder") }) as Promise<string | null>}
+      onPickFolder={async () => {
+        const folder = await pickDirectory({ title: "Choose or create a folder for the workspace" });
+        return typeof folder === "string" ? folder : null;
+      }}
       submitting={createWorkspaceBusy}
       localError={createWorkspaceError}
       remoteSubmitting={createWorkspaceRemoteBusy}

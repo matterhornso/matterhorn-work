@@ -68,6 +68,33 @@ try {
   assert.ok(JSON.parse(pythonBlocked.stdout).findings.some(finding => finding.path === "src/bridge.py"));
   assert.ok(!pythonBlocked.stdout.includes(fakeProviderToken));
 
+  write("src/provider.ts", "export const safe = true;\n");
+  write("src/bridge.py", "safe = True\n");
+  const catalogPrefix = " ".repeat(3 * 1024 * 1024);
+  write("src/catalog.json", `${catalogPrefix}${JSON.stringify({ credential: fakeProviderToken })}`);
+  const largeSecret = run(["--json"]);
+  assert.equal(largeSecret.status, 1);
+  const largeSecretReport = JSON.parse(largeSecret.stdout);
+  assert.equal(largeSecretReport.skippedLarge.length, 0);
+  assert.deepEqual(largeSecretReport.findings, [
+    { path: "src/catalog.json", line: 1, rule: "provider-secret-token" },
+  ]);
+  assert.ok(!largeSecret.stdout.includes(fakeProviderToken));
+
+  write("src/catalog.json", `${catalogPrefix}{}`);
+  const largeSafe = run(["--json"]);
+  assert.equal(largeSafe.status, 0, largeSafe.stderr);
+  assert.equal(JSON.parse(largeSafe.stdout).skippedLarge.length, 0);
+
+  write("src/catalog.json", " ".repeat(8 * 1024 * 1024 + 1));
+  const oversized = run(["--json"]);
+  assert.equal(oversized.status, 1);
+  const oversizedReport = JSON.parse(oversized.stdout);
+  assert.equal(oversizedReport.ready, false);
+  assert.deepEqual(oversizedReport.skippedLarge, [
+    { path: "src/catalog.json", bytes: 8 * 1024 * 1024 + 1 },
+  ]);
+
   console.log("Release secret scan contract passed.");
 } finally {
   rmSync(temp, { recursive: true, force: true });

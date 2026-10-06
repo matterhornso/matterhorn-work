@@ -317,7 +317,7 @@ export class MatterhornAgentFileWalrusRenewalService {
 
   constructor(
     private readonly store: MatterhornAgentFileStore,
-    stateStore: MatterhornGuardedRuntimeStateStore,
+    private readonly stateStore: MatterhornGuardedRuntimeStateStore,
     authority: MatterhornDurableStateAuthority,
     private readonly buildTransaction: MatterhornWalrusRenewalTransactionBuilder,
     private readonly verifyTransaction: MatterhornSuiTransactionStatusVerifier,
@@ -347,6 +347,7 @@ export class MatterhornAgentFileWalrusRenewalService {
     now?: Date;
   }): Promise<MatterhornAgentFileWalrusRenewalPrepareResponse> {
     if (input.signal.aborted) fail("agent_file_walrus_aborted");
+    this.store.assertWorkspaceWritable(input.workspaceId);
     const signer = canonicalSigner(input.signer);
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) fail("agent_file_time_invalid");
@@ -391,6 +392,7 @@ export class MatterhornAgentFileWalrusRenewalService {
         suiObjectId: publication.suiObjectId,
         signal: input.signal,
       });
+      this.store.assertWorkspaceWritable(input.workspaceId);
       if (certification.network !== "testnet"
         || certification.blobId !== publication.blobId
         || certification.suiObjectId !== publication.suiObjectId
@@ -416,6 +418,7 @@ export class MatterhornAgentFileWalrusRenewalService {
         extensionEpochs: this.extensionEpochs,
         signal: input.signal,
       });
+      this.store.assertWorkspaceWritable(input.workspaceId);
       const transactionBytes = canonicalTransactionBytes(built.transactionBytesBase64);
       try {
         if (TransactionDataBuilder.getDigestFromBytes(transactionBytes)
@@ -461,13 +464,21 @@ export class MatterhornAgentFileWalrusRenewalService {
         claimId: candidate.claimId,
         preview,
       };
-      if (!this.intentState.putIfAbsent({
-        key: input.fileId,
-        workspaceId: input.workspaceId,
-        value: record,
-        expiresAtMs: Date.parse(preview.expiresAt),
-        nowMs: now.getTime(),
-      })) fail("agent_file_walrus_renewal_in_progress");
+      const finalizedAt = input.now ?? new Date();
+      this.stateStore.transaction(() => {
+        this.store.assertWorkspaceWritable(input.workspaceId);
+        if (!this.store.hasWalrusRenewalClaim({ ...input, claimId: candidate.claimId, now: finalizedAt })) {
+          fail("agent_file_walrus_renewal_expired_or_replayed");
+        }
+        if (this.store.get(input)?.revision !== input.expectedRevision) fail("agent_file_revision_conflict");
+        if (!this.intentState.putIfAbsent({
+          key: input.fileId,
+          workspaceId: input.workspaceId,
+          value: record,
+          expiresAtMs: Date.parse(preview.expiresAt),
+          nowMs: finalizedAt.getTime(),
+        })) fail("agent_file_walrus_renewal_in_progress");
+      });
       retainedClaim = true;
       return this.prepareResponse(preview);
     } finally {
@@ -494,6 +505,7 @@ export class MatterhornAgentFileWalrusRenewalService {
     now?: Date;
   }): Promise<MatterhornAgentFileWalrusRenewalConfirmResponse> {
     if (input.signal.aborted) fail("agent_file_walrus_aborted");
+    this.store.assertWorkspaceWritable(input.workspaceId);
     const now = input.now ?? new Date();
     if (!Number.isFinite(now.getTime())) fail("agent_file_time_invalid");
     const record = this.intentState.get<RenewalIntentRecord>(input.fileId, now.getTime());
@@ -518,6 +530,7 @@ export class MatterhornAgentFileWalrusRenewalService {
       signer: preview.signer,
       signal: input.signal,
     });
+    this.store.assertWorkspaceWritable(input.workspaceId);
     if (transaction.digest !== preview.transactionDigest
       || canonicalSigner(transaction.signer) !== preview.signer) {
       fail("agent_file_walrus_renewal_transaction_mismatch");
@@ -529,6 +542,7 @@ export class MatterhornAgentFileWalrusRenewalService {
       suiObjectId: preview.suiObjectId,
       signal: input.signal,
     });
+    this.store.assertWorkspaceWritable(input.workspaceId);
     if (certification.network !== "testnet"
       || certification.blobId !== preview.blobId
       || certification.suiObjectId !== preview.suiObjectId

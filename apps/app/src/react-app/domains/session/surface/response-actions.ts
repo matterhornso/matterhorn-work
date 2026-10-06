@@ -1,15 +1,16 @@
 import type { UIMessage } from "ai";
 import type { MatterhornAgentPrivacyPreflightResponse } from "@matterhorn-work/types/guarded-agent-runtime";
-import { MATTERHORN_CONTINUE_ANSWER_TEXT } from "@matterhorn-work/types/guarded-agent-runtime";
 import { AccountStateChangedError, captureAccountGeneration } from "../../../../app/lib/account-client-state";
+import type { ComposerAttachment } from "../../../../app/types";
+import { CHAT_ATTACHMENT_MAX_BYTES } from "@matterhorn-work/types/chat-attachments";
+import { requireActiveChatSubmission } from "../../../../app/lib/chat-submission-control";
 
-export function failedContinuationResponseId(
-  failure: { id: string; retryMessage: string } | null,
+export function failedResponseId(
+  responseMessageId: string | undefined,
   messages: readonly UIMessage[],
 ): string | null {
   const latest = messages.at(-1);
-  return failure?.retryMessage === MATTERHORN_CONTINUE_ANSWER_TEXT
-    && latest?.role === "assistant" && latest.id === failure.id ? failure.id : null;
+  return responseMessageId && latest?.role === "assistant" && latest.id === responseMessageId ? responseMessageId : null;
 }
 
 export function requireAnswerContinuationSupport(preflight: Pick<MatterhornAgentPrivacyPreflightResponse, "continuation">, messageId: string) {
@@ -22,9 +23,44 @@ export type AssistantResponseRetryTurn = {
   responseIndex: number;
   promptMessageId: string;
   prompt: string;
+  attachments: Extract<UIMessage["parts"][number], { type: "file" }>[];
 };
 
+export class ResponseRetryAttachmentError extends Error {
+  constructor() {
+    super("The original attachments cannot be restored. Attach the files again in the composer and send a new message. The original conversation is unchanged.");
+  }
+}
+
+/** Replay saved bytes only; never fetch remote, expired blob, or mutable file URLs. */
+export function restoreResponseRetryAttachments(turn: AssistantResponseRetryTurn): ComposerAttachment[] {
+  const unavailable = () => new ResponseRetryAttachmentError();
+  if (turn.attachments.length > 64) throw unavailable();
+  // Bound allocations before decoding. The gateway independently enforces its
+  // decoded aggregate and encoded request limits again on submission.
+  let remaining = CHAT_ATTACHMENT_MAX_BYTES * 2;
+  return turn.attachments.map((part, index): ComposerAttachment => {
+    if (part.url.length > Math.ceil(CHAT_ATTACHMENT_MAX_BYTES / 3) * 4 + 1024) throw unavailable();
+    const match = /^data:([^,]*);base64,([A-Za-z0-9+/]*={0,2})$/.exec(part.url);
+    if (!match || match[2].length % 4 !== 0) throw unavailable();
+    if (match[1].split(";")[0].toLowerCase() !== part.mediaType.split(";")[0].toLowerCase()) throw unavailable();
+    const encoded = match[2];
+    const size = encoded.length / 4 * 3 - (encoded.endsWith("==") ? 2 : encoded.endsWith("=") ? 1 : 0);
+    if (size > CHAT_ATTACHMENT_MAX_BYTES || size > remaining) throw unavailable();
+    remaining -= size;
+    let decoded: string;
+    try { decoded = atob(encoded); } catch { throw unavailable(); }
+    const bytes = Uint8Array.from(decoded, character => character.charCodeAt(0));
+    const name = part.filename || "attachment";
+    const file = new File([bytes], name, { type: part.mediaType });
+    return { id: `retry:${turn.promptMessageId}:${index}`, name, mimeType: part.mediaType,
+      size: file.size, kind: part.mediaType.startsWith("image/") ? "image" : "file", file };
+  });
+}
+
 export type AssistantResponseRetryTransaction<T> = {
+  isCurrent: () => boolean;
+  signal: AbortSignal;
   prepare: () => Promise<T>;
   abort: () => Promise<void>;
   revert: () => Promise<unknown>;
@@ -32,23 +68,39 @@ export type AssistantResponseRetryTransaction<T> = {
   restore: () => Promise<unknown>;
 };
 
+export class ResponseRetrySupersededError extends Error {
+  constructor() {
+    super("A newer request replaced this retry.");
+  }
+}
+
 export async function runAssistantResponseRetry<T>(
   transaction: AssistantResponseRetryTransaction<T>,
 ): Promise<void> {
   const isCurrentAccount = captureAccountGeneration();
-  const requireCurrentAccount = () => { if (!isCurrentAccount()) throw new AccountStateChangedError(); };
+  const requireCurrent = () => {
+    if (!isCurrentAccount()) throw new AccountStateChangedError();
+    if (!transaction.isCurrent()) throw new ResponseRetrySupersededError();
+  };
   // Classification/consent preparation can be cancelled. Do not change the
   // existing conversation until it finishes successfully.
+  requireCurrent();
+  requireActiveChatSubmission(transaction.signal);
   const prepared = await transaction.prepare();
-  requireCurrentAccount();
+  requireCurrent();
+  requireActiveChatSubmission(transaction.signal);
   await transaction.abort();
-  requireCurrentAccount();
+  requireCurrent();
+  requireActiveChatSubmission(transaction.signal);
   await transaction.revert();
-  requireCurrentAccount();
   try {
+    requireCurrent();
+    requireActiveChatSubmission(transaction.signal);
     await transaction.dispatch(prepared);
   } catch (dispatchError) {
-    requireCurrentAccount();
+    // Never compensate an older retry over newer work. This guards local
+    // ownership, not mutations already accepted by the server or other clients.
+    requireCurrent();
     try {
       await transaction.restore();
     } catch {
@@ -87,6 +139,7 @@ export function resolveAssistantResponseRetryTurn(
       responseIndex,
       promptMessageId: candidate.id,
       prompt: retryPromptText(candidate),
+      attachments: candidate.parts.filter(part => part.type === "file"),
     };
   }
   return null;

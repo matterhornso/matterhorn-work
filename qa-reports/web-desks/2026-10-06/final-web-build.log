@@ -1,0 +1,4 @@
+(!) outDir /private/tmp/matterhorn-final-verification-F2ptlr/web-build is not inside project root and will not be emptied.
+✓ 7383 modules transformed.
+(!) Some chunks are larger than 500 kB after minification. Consider:
+✓ built in 15.96s

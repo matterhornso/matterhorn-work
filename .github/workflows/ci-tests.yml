@@ -15,6 +15,7 @@ jobs:
   openwork-tests:
     name: openwork-tests (${{ matrix.check_name }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
 
     strategy:
       fail-fast: false
@@ -41,7 +42,12 @@ jobs:
         with:
           version: 10.27.0
 
-      - name: Install OpenCode CLI
+      - name: Setup pinned runtime build toolchain
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Build and install maintained OpenCode runtime
         shell: bash
         run: |
           set -euo pipefail
@@ -52,18 +58,19 @@ jobs:
       - name: Verify OpenCode
         run: opencode --version
 
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts --prefer-offline
+
+      - name: Build Crypto App SDK for native runtime acceptance
+        run: pnpm --dir packages/crypto-app-sdk build
+
+      - name: Validate native runtime verifier
+        run: node --test scripts/build-pinned-opencode.test.mjs scripts/verify-opencode-native-contract.test.mjs
+
       - name: Validate OpenWork and OpenCode runtime compatibility
         env:
           MATTERHORN_REQUIRE_OPENCODE_BINARY: "1"
         run: node scripts/opencode-runtime-compatibility.test.mjs
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts --prefer-offline
-
-      - name: Setup Bun for local secret-launch boundary
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.11
 
       - name: Verify STM launcher on supported and unsupported OS
         run: bun test apps/server/src/stm-runtime.test.ts apps/server/src/stm-mcp-launch.e2e.test.ts
@@ -139,7 +146,7 @@ jobs:
   public-beta-container-build:
     name: public-beta-container-build
     runs-on: ubuntu-22.04
-    timeout-minutes: 20
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -252,11 +259,17 @@ jobs:
       - name: Run full web app test suite
         run: pnpm --filter @matterhorn-work/app test
 
+      - name: Validate public discovery and preview indexing boundaries
+        run: node --test scripts/search-discovery-audit.test.mjs apps/app/scripts/build-public-guides.test.mjs
+
       - name: Install composer test browser
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Test real composer interactions
         run: pnpm --filter @matterhorn-work/app test:composer-browser
+
+      - name: Test mounted session navigation and logout lifetimes
+        run: bun test apps/app/scripts/session-route-lifetime.browser.test.ts --timeout 120000
 
       - name: Test optional Jev consent and chat fallback
         run: bun test apps/app/scripts/jev-chat.browser.test.ts

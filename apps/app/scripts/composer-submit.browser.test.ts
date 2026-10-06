@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { chromium, type Browser } from "playwright";
+import { delayImagePreparation, delayedImage, releaseImagePreparation } from "./fixtures/attachment-preparation";
 import { build } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import { mkdir, readFile } from "node:fs/promises";
@@ -75,6 +76,233 @@ async function fixturePage() {
   page.setDefaultTimeout(3_000);
   return page;
 }
+
+for (const action of ["click", "Enter"]) {
+  for (const corrupt of [false, true]) {
+    test(`preparing attachments blocks ${action} until ${corrupt ? "failure" : "success"} without auto-send`, async () => {
+      const page = await fixturePage();
+      try {
+        await page.goto(`${server.url}?attachments`);
+        await delayImagePreparation(page);
+        await page.locator('input[type="file"]').setInputFiles(await delayedImage(page, corrupt));
+        await page.waitForFunction(() => document.documentElement.dataset.imagePreparing === "true");
+        const editor = page.getByRole("textbox", { name: "Test prompt" });
+        const send = page.getByRole("button", { name: "Ask", exact: true });
+        if (action === "click") await send.evaluate(element => { if (element instanceof HTMLButtonElement) element.click(); });
+        else await editor.press("Enter");
+        expect(await page.getByTestId("result").textContent()).toBe("");
+        expect(await send.isDisabled()).toBe(true);
+        await page.getByRole("status").filter({ hasText: "Preparing attachments" }).waitFor();
+        const directory = process.env.PREPARATION_QA_CAPTURES;
+        if (directory && action === "click" && !corrupt) {
+          await mkdir(directory, { recursive: true });
+          await page.emulateMedia({ reducedMotion: "reduce" });
+          for (const theme of ["light", "dark"]) {
+            await page.locator("html").evaluate((element, value) => element.setAttribute("data-theme", value), theme);
+            for (const width of [390, 768, 1280]) {
+              await page.setViewportSize({ width, height: 900 });
+              await page.screenshot({ path: `${directory}/preparing-${theme}-${width}.png`, fullPage: true });
+              expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+            }
+          }
+        }
+        await editor.fill("Keep this edited draft");
+        await releaseImagePreparation(page);
+        expect(await page.getByTestId("result").textContent()).toBe("");
+        expect(await editor.innerText()).toBe("Keep this edited draft");
+        expect(await send.isEnabled()).toBe(true);
+        if (corrupt) await page.getByRole("alert").filter({ hasText: "Could not prepare pending.png" }).waitFor();
+        else await page.getByText("pending.jpg", { exact: true }).waitFor();
+        await send.click();
+        expect(JSON.parse(await page.getByTestId("result").textContent() ?? "null")).toEqual({ parts: [
+          { type: "text", text: "Keep this edited draft" },
+          ...(corrupt ? [] : [{ type: "file", filename: "pending.jpg" }]),
+        ] });
+      } finally { await page.close(); }
+    });
+  }
+}
+
+test("preparing attachments leaves Stop available during an active response", async () => {
+  const page = await fixturePage();
+  try {
+    await page.goto(`${server.url}?attachments&busy`);
+    await delayImagePreparation(page);
+    await page.locator('input[type="file"]').setInputFiles(await delayedImage(page));
+    await page.waitForFunction(() => document.documentElement.dataset.imagePreparing === "true");
+    await page.getByRole("button", { name: "Stop generating", exact: true }).click();
+    expect(await page.getByTestId("result").textContent()).toBe("stopped");
+    await releaseImagePreparation(page);
+    expect(await page.getByTestId("result").textContent()).toBe("stopped");
+  } finally { await page.close(); }
+});
+
+test("preparing attachments waits for every overlapping selection", async () => {
+  const page = await fixturePage();
+  try {
+    await page.goto(`${server.url}?attachments`);
+    await delayImagePreparation(page);
+    const input = page.locator('input[type="file"]');
+    await input.setInputFiles(await delayedImage(page));
+    await page.waitForFunction(() => document.documentElement.dataset.imagePreparing === "true");
+    await page.evaluate(() => { delete document.documentElement.dataset.imagePreparing; });
+    await input.setInputFiles({ ...await delayedImage(page), name: "second.png" });
+    await page.waitForFunction(() => document.documentElement.dataset.imagePreparing === "true");
+    await releaseImagePreparation(page, "pending.png");
+    const send = page.getByRole("button", { name: "Ask", exact: true });
+    expect(await send.isDisabled()).toBe(true);
+    await page.getByRole("textbox", { name: "Test prompt" }).press("Enter");
+    expect(await page.getByTestId("result").textContent()).toBe("");
+    await page.getByText("pending.jpg", { exact: true }).waitFor();
+    await releaseImagePreparation(page, "second.png");
+    expect(await send.isEnabled()).toBe(true);
+    expect(await page.getByTestId("result").textContent()).toBe("");
+    await send.click();
+    expect(JSON.parse(await page.getByTestId("result").textContent() ?? "null")).toMatchObject({ parts: expect.arrayContaining([
+      { type: "file", filename: "pending.jpg" }, { type: "file", filename: "second.jpg" },
+    ]) });
+  } finally { await page.close(); }
+});
+
+for (const boundary of ["chat", "chat-return", "permission", "permission-return", "unmount", "account"]) {
+  for (const corrupt of [false, true]) {
+    test(`attachment lifetime ignores ${corrupt ? "failed" : "successful"} preparation after ${boundary}`, async () => {
+      const page = await fixturePage();
+      try {
+        await page.goto(`${server.url}?attachments&attachmentLifetime`);
+        await delayImagePreparation(page);
+        await page.locator('input[type="file"]').setInputFiles([
+          await delayedImage(page, corrupt), { name: "sibling.txt", mimeType: "text/plain", buffer: Buffer.from("Unsent sibling") },
+        ]);
+        await page.waitForFunction(() => document.documentElement.dataset.imagePreparing === "true");
+        if (boundary.startsWith("chat")) await page.getByRole("button", { name: "Change fixture chat", exact: true }).click();
+        if (boundary === "chat-return") await page.getByRole("button", { name: "Return to fixture chat", exact: true }).click();
+        if (boundary.startsWith("permission")) await page.getByRole("button", { name: "Disable fixture attachments", exact: true }).click();
+        if (boundary === "permission-return") await page.getByRole("button", { name: "Enable fixture attachments", exact: true }).click();
+        if (boundary === "unmount") await page.getByRole("button", { name: "Unmount fixture composer", exact: true }).click();
+        if (boundary === "account") await page.getByRole("button", { name: "Clear fixture account", exact: true }).click();
+        await releaseImagePreparation(page);
+        expect(await page.getByTestId("attachment-callbacks").textContent()).toBe("0");
+        expect(await page.getByTestId("notice-callbacks").textContent()).toBe("0");
+        expect(await page.getByTestId("attachments").textContent()).toBe("[]");
+        if (boundary === "chat" || boundary === "chat-return" || boundary === "permission-return") {
+          await page.locator('input[type="file"]').setInputFiles({ name: "fresh.txt", mimeType: "text/plain", buffer: Buffer.from("Fresh") });
+          await page.getByText("Attached fresh.txt to your draft.", { exact: true }).waitFor();
+          expect(await page.getByTestId("attachment-callbacks").textContent()).toBe("1");
+          expect(await page.getByTestId("attachments").textContent()).toBe('[{"name":"fresh.txt","size":5}]');
+        }
+      } finally { await page.close(); }
+    });
+  }
+}
+
+test("attachment lifetime accepts independent selections in the unchanged chat", async () => {
+  const page = await fixturePage();
+  try {
+    await page.goto(`${server.url}?attachments&attachmentLifetime`);
+    await delayImagePreparation(page);
+    const input = page.locator('input[type="file"]');
+    await input.setInputFiles(await delayedImage(page));
+    await page.waitForFunction(() => document.documentElement.dataset.imagePreparing === "true");
+    await input.setInputFiles({ name: "new.txt", mimeType: "text/plain", buffer: Buffer.from("New") });
+    await releaseImagePreparation(page);
+    expect(await page.getByTestId("attachment-callbacks").textContent()).toBe("2");
+    expect(await page.getByTestId("attachments").textContent()).toContain("new.txt");
+    expect(await page.getByTestId("attachments").textContent()).toContain("pending.jpg");
+    expect(await page.getByRole("alert").count()).toBe(0);
+  } finally { await page.close(); }
+});
+
+test("attachment selection respects the server limit without changing the draft", async () => {
+  const page = await fixturePage();
+  try {
+    await page.goto(`${server.url}?attachments`);
+    const input = page.locator('input[type="file"]');
+    await input.setInputFiles({ name: "at-limit.txt", mimeType: "text/plain", buffer: Buffer.alloc(5_000_000, 97) });
+    await page.waitForFunction(() => document.querySelector('[data-testid="attachments"]')?.textContent === '[{"name":"at-limit.txt","size":5000000}]');
+    expect(await page.getByText("5.0 MB", { exact: true }).count()).toBe(1);
+    await input.setInputFiles({ name: "too-large.txt", mimeType: "text/plain", buffer: Buffer.alloc(5_000_001, 98) });
+    await page.getByText("too-large.txt exceeds the 5 MB limit.", { exact: true }).waitFor();
+    expect(await page.getByRole("alert").count()).toBe(1);
+    expect(await page.getByTestId("attachments").textContent()).toBe('[{"name":"at-limit.txt","size":5000000}]');
+    expect(await page.getByRole("textbox", { name: "Test prompt" }).innerText()).toBe("Explain a blockchain in one sentence.");
+    await page.getByRole("button", { name: "Remove", exact: true }).click();
+    expect(await page.getByTestId("attachments").textContent()).toBe("[]");
+  } finally { await page.close(); }
+});
+
+test("attachment success only claims draft attachment", async () => {
+  const page = await fixturePage();
+  try {
+    await page.goto(`${server.url}?attachments`);
+    await page.locator('input[type="file"]').setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("Disposable notes") });
+    const directory = process.env.ATTACHMENT_QA_CAPTURES;
+    if (directory) {
+      await mkdir(directory, { recursive: true });
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      for (const theme of ["light", "dark"]) {
+        await page.locator("html").evaluate((el, value) => el.setAttribute("data-theme", value), theme);
+        for (const width of [390, 768, 1280]) {
+          await page.setViewportSize({ width, height: 900 });
+          await page.screenshot({ path: `${directory}/attachment-${theme}-${width}.png`, fullPage: true });
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        }
+      }
+    }
+    await page.getByText("Attached notes.txt to your draft.", { exact: true }).waitFor();
+    expect(await page.getByRole("status").filter({ hasText: "Attached notes.txt to your draft." }).count()).toBe(1);
+    expect(await page.getByText(/shared folder/).count()).toBe(0);
+  } finally { await page.close(); }
+});
+
+test("unreadable image does not discard other selected files or the draft", async () => {
+  const page = await fixturePage();
+  try {
+    await page.goto(`${server.url}?attachments`);
+    await page.locator('input[type="file"]').setInputFiles([
+      { name: "broken.png", mimeType: "image/png", buffer: Buffer.alloc(1_600_000) },
+      { name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("Disposable notes") },
+    ]);
+    await page.getByText("Could not prepare broken.png. Try another file.", { exact: true }).waitFor();
+    expect(await page.getByTestId("attachments").textContent()).toBe('[{"name":"notes.txt","size":16}]');
+    expect(await page.getByRole("textbox", { name: "Test prompt" }).innerText()).toBe("Explain a blockchain in one sentence.");
+    expect(await page.getByTestId("result").textContent()).toBe("");
+  } finally { await page.close(); }
+});
+
+test("mixed rejected files remain recoverable with bounded feedback", async () => {
+  const page = await fixturePage();
+  try {
+    await page.goto(`${server.url}?attachments`);
+    await page.locator('input[type="file"]').setInputFiles([
+      { name: "too-large.txt", mimeType: "text/plain", buffer: Buffer.alloc(5_000_001) },
+      { name: "broken.png", mimeType: "image/png", buffer: Buffer.alloc(1_600_000) },
+      { name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("Disposable notes") },
+    ]);
+    await page.getByText("Other files not attached: 1.", { exact: true }).waitFor();
+    expect(await page.getByRole("alert").innerText()).toContain("too-large.txt exceeds the 5 MB limit.");
+    expect(await page.getByTestId("attachments").textContent()).toBe('[{"name":"notes.txt","size":16}]');
+    const directory = process.env.ATTACHMENT_QA_CAPTURES;
+    if (directory) {
+      await mkdir(directory, { recursive: true });
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      for (const theme of ["light", "dark"]) {
+        await page.locator("html").evaluate((el, value) => el.setAttribute("data-theme", value), theme);
+        for (const width of [390, 768, 1280]) {
+          await page.setViewportSize({ width, height: 900 });
+          await page.screenshot({ path: `${directory}/attachment-error-${theme}-${width}.png`, fullPage: true });
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        }
+      }
+    }
+    await page.getByRole("button", { name: "Remove", exact: true }).focus();
+    await page.keyboard.press("Enter");
+    expect(await page.getByTestId("attachments").textContent()).toBe("[]");
+    await page.locator('input[type="file"]').setInputFiles({ name: "retry.txt", mimeType: "text/plain", buffer: Buffer.from("Retry") });
+    await page.getByText("Attached retry.txt to your draft.", { exact: true }).waitFor();
+    expect(await page.getByRole("textbox", { name: "Test prompt" }).innerText()).toBe("Explain a blockchain in one sentence.");
+  } finally { await page.close(); }
+});
 
 test("header picker labels search and selection while retaining the unsent draft", async () => {
   const page = await fixturePage();

@@ -31,7 +31,7 @@ export const MATTERHORN_RECOMMENDED_DESK_TASK_IDS: Record<
   bittensor: ["discover-subnets", "compare-validators", "review-subnet-emissions"],
   hyperliquid: ["market-overview", "orderbook", "compare-funding"],
   polymarket: ["compare-venues", "discover-markets", "check-compliance"],
-  sui: ["read-wallet", "validate-recipient", "review-transfer-fees"],
+  sui: ["read-wallet", "inspect-objects", "read-testnet-balance"],
   wellness: ["client-intake", "define-goals", "strength-plan"],
 };
 
@@ -43,8 +43,8 @@ const DESK_TASK_STARTER_GROUPS = [
   },
   {
     id: "evidence",
-    label: "Watches & receipts",
-    description: "Track public changes or save public receipts without signing.",
+    label: "Watch & receipt help",
+    description: "Plan watches and understand receipts. Chat does not schedule watches or import receipts.",
   },
   {
     id: "wallet",
@@ -168,9 +168,9 @@ export const MATTERHORN_DESK_TASK_STARTERS = {
     },
     {
       id: "create-watch",
-      title: "Create a subnet or validator watch",
-      detail: "Track public emissions or validator changes without signing.",
-      prompt: "Create a read-only Bittensor watch for a subnet or validator. Ask for the public target and optional threshold, then explain what the watch can observe. Never schedule or submit any on-chain action.",
+      title: "Plan a subnet or validator watch",
+      detail: "Choose a public target and thresholds; chat does not save or schedule watches.",
+      prompt: "Plan a read-only Bittensor watch for a subnet or validator. Ask for the public target and optional threshold, then explain what a configured watch could observe. This chat does not save or schedule watches; explain that setup requires the separate monitoring API or CLI. Do not claim a watch was created. Never schedule or submit any on-chain action.",
     },
     {
       id: "stake-preview",
@@ -201,9 +201,9 @@ export const MATTERHORN_DESK_TASK_STARTERS = {
     },
     {
       id: "import-receipt",
-      title: "Import a receipt",
-      detail: "Save the public transaction receipt after it is signed elsewhere.",
-      prompt: "Import a Bittensor receipt from this public transaction digest: <paste public transaction digest>. Use public receipt details only and save the receipt without collecting signing material.",
+      title: "Understand transaction receipts",
+      detail: "Explain public receipt fields; chat does not verify or import receipts.",
+      prompt: "Explain how to inspect a public Bittensor transaction receipt and which fields identify its network, status, and transaction. This chat cannot verify or import a receipt. Explain that saving verified receipt evidence requires the separate receipt workflow or API; do not claim it was saved or verified. Never request signing material.",
     },
   ],
   hyperliquid: [
@@ -239,15 +239,15 @@ export const MATTERHORN_DESK_TASK_STARTERS = {
     },
     {
       id: "price-watch",
-      title: "Create a price watch",
-      detail: "Track public price or orderbook changes without execution.",
-      prompt: "Create a read-only Hyperliquid price or orderbook watch for BTC. Ask for an optional threshold and direction. The watch must never submit, sign, or auto-execute a trade.",
+      title: "Plan a price watch",
+      detail: "Choose price or depth thresholds; chat does not save or schedule watches.",
+      prompt: "Plan a read-only Hyperliquid price or orderbook watch for BTC. Ask for an optional threshold and direction. This chat does not save or schedule watches; explain that setup requires the separate monitoring API or CLI. Do not claim a watch was created. The watch must never submit, sign, or auto-execute a trade.",
     },
     {
       id: "funding-watch",
-      title: "Create a funding watch",
-      detail: "Track funding changes without execution.",
-      prompt: "Create a read-only Hyperliquid funding watch for BTC. Ask for an optional threshold and direction. The watch must never submit, sign, or auto-execute a trade.",
+      title: "Plan a funding watch",
+      detail: "Choose funding thresholds; chat does not save or schedule watches.",
+      prompt: "Plan a read-only Hyperliquid funding watch for BTC. Ask for an optional threshold and direction. This chat does not save or schedule watches; explain that setup requires the separate monitoring API or CLI. Do not claim a watch was created. The watch must never submit, sign, or auto-execute a trade.",
     },
     {
       id: "order-preview",
@@ -293,9 +293,9 @@ export const MATTERHORN_DESK_TASK_STARTERS = {
     },
     {
       id: "import-receipt",
-      title: "Import a receipt",
-      detail: "Save the public trade receipt after a wallet-approved action.",
-      prompt: "Import a public Hyperliquid trade receipt after a wallet-approved order is completed. Use public receipt metadata only and never request API secrets, private keys, raw signatures, or signed payloads.",
+      title: "Understand trade receipts",
+      detail: "Explain public trade metadata; chat does not verify or import receipts.",
+      prompt: "Explain how to inspect public Hyperliquid trade receipt metadata after a wallet-approved order. This chat cannot verify or import a receipt; completed wallet actions save evidence through the separate reviewed ticket. Do not claim a receipt was saved or verified. Never request API secrets, private keys, raw signatures, or signed payloads.",
     },
   ],
   polymarket: [
@@ -337,15 +337,15 @@ export const MATTERHORN_DESK_TASK_STARTERS = {
     },
     {
       id: "create-watch",
-      title: "Create a market watch",
-      detail: "Track public probability, liquidity, or compliance changes.",
-      prompt: "Create a read-only watch for the Polymarket market matching this request: <describe market or trade, or paste a Polymarket URL>. Explain which public changes it can track. Never place or auto-execute a bet from a watch.",
+      title: "Plan a market watch",
+      detail: "Choose probability or liquidity thresholds; chat does not save or schedule watches.",
+      prompt: "Plan a read-only Polymarket market watch. Ask which public market and changes to track. This chat does not save or schedule watches; explain that setup requires the separate monitoring API or CLI. Do not claim a watch was created. Never place or auto-execute a bet from a watch.",
     },
     {
       id: "review-watch-alerts",
-      title: "Review market changes",
-      detail: "Summarize recent watch signals and their public context.",
-      prompt: "Review recent read-only watch signals for the Polymarket market matching this request: <describe market or trade, or paste a Polymarket URL>. Summarize probability, liquidity, or compliance changes with source and freshness. Do not place a bet.",
+      title: "Explain watch signals",
+      detail: "Discuss public signals you provide; chat cannot load saved watch alerts.",
+      prompt: "Help interpret public Polymarket watch signals that I provide. Ask for the public observations, source, and timestamps. This chat cannot load saved watch alerts or infer historical changes from one current snapshot. Distinguish supplied observations from live tool evidence. Do not place a bet.",
     },
     {
       id: "preview-trade",
@@ -376,9 +376,9 @@ export const MATTERHORN_DESK_TASK_STARTERS = {
     },
     {
       id: "import-receipt",
-      title: "Import a receipt",
-      detail: "Save the public transaction receipt from an external wallet flow.",
-      prompt: "Import a Polymarket receipt from this public receipt or transaction reference: <paste public receipt or transaction reference>. Use public receipt metadata only and do not collect signing material.",
+      title: "Understand market receipts",
+      detail: "Explain public order evidence; chat does not verify or import receipts.",
+      prompt: "Explain the public receipt metadata from a Polymarket wallet-approved action. This chat cannot verify or import a receipt; completed wallet actions save evidence through the separate reviewed ticket. Do not claim a receipt was saved or verified. Never collect signing material.",
     },
   ],
   sui: [
@@ -387,6 +387,12 @@ export const MATTERHORN_DESK_TASK_STARTERS = {
       title: "Read Sui wallet",
       detail: "View a public address, network, and SUI balance without custody.",
       prompt: "Show my Sui wallet for this public address: <paste public Sui address>. Use public account and balance context only. Never ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
+    },
+    {
+      id: "inspect-objects",
+      title: "Inspect objects",
+      detail: "Read one public object's owner, type, version, and digest.",
+      prompt: "Inspect this public Sui object: <paste public Sui object ID>. Ask whether to use mainnet or testnet if I have not specified it. Use matterhorn_sui_get_object for bounded metadata only, including owner, type, version, digest, package status, and source freshness. Do not request a wallet address, wallet connection, secrets, or signing for this read.",
     },
     {
       id: "read-testnet-balance",
@@ -451,8 +457,11 @@ export const MATTERHORN_DESK_TASK_STARTERS = {
     {
       id: "review-transfer-fees",
       title: "Review transfer fees",
-      detail: "Use a preview to discuss network and gas considerations.",
-      prompt: "Help me review Sui transfer network and gas considerations before signing. Ask for the public sender, recipient, network, amount, and coin type if needed, then keep the result as a non-custodial preview.",
+      detail: "Review native SUI fees in the separate transfer ticket; wallet actions must be available.",
+      prompt: "Help me review native SUI transfer network and gas considerations in the separate reviewed transfer ticket. Ask for public sender, recipient, network, and amount. Use only the returned non-custodial preview; do not invent gas or bypass unavailable wallet actions.",
+      reviewedAction: "sui",
+      reviewedActionOperation: "transfer_sui",
+      reviewedActionLabel: "Open transfer ticket",
     },
     {
       id: "review-signing-handoff",
@@ -462,9 +471,9 @@ export const MATTERHORN_DESK_TASK_STARTERS = {
     },
     {
       id: "import-receipt",
-      title: "Import transaction receipt",
-      detail: "Save public transaction metadata after signing elsewhere.",
-      prompt: "Import a Sui transaction receipt from this public transaction digest: <paste transaction digest>. Use public receipt details only and save the receipt in project history.",
+      title: "Find receipt verification",
+      detail: "Learn where a public digest can be verified; chat does not import it.",
+      prompt: "Explain how to verify a public Sui transaction digest using the separate Sui tools Import receipt section and Verify receipt button, when those tools are available. This chat cannot verify or import a receipt. If the tools are unavailable in Public Beta, say so rather than claiming the receipt was saved or verified. Never request signing material.",
     },
   ],
   wellness: [

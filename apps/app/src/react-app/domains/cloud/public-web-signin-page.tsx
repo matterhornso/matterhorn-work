@@ -2,7 +2,9 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
 } from "react";
@@ -19,6 +21,9 @@ import {
 import { publicWebAuthErrorMessage } from "./public-web-auth-errors";
 import { PublicTurnstile } from "./public-turnstile";
 import { RETRO_UI } from "../../../app/lib/retro-ui";
+import { accountClientState, captureAccountGeneration } from "../../../app/lib/account-client-state";
+import { createPublicAuthMutationScope } from "../../../app/lib/public-auth-mutation";
+import { AccountOutcomeNotice } from "./account-outcome-notice";
 
 type PublicWebSigninPageProps = {
   config: PublicCloudConfig;
@@ -47,9 +52,11 @@ const AUTH_CONFIG_FAIL_CLOSED: DenPublicAuthConfig = {
 const AUTH_CONFIG_RETRY_BACKOFF_MS = [400, 1_200];
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.resolve();
   return new Promise((resolve) => {
     const done = () => {
       globalThis.clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
       resolve();
     };
     const timer = globalThis.setTimeout(done, ms);
@@ -67,11 +74,12 @@ export async function loadPublicAuthConfig(
   signal?: AbortSignal,
 ): Promise<DenPublicAuthConfig> {
   for (const backoffMs of [...AUTH_CONFIG_RETRY_BACKOFF_MS, null]) {
+    if (signal?.aborted) break;
     try {
       return await load();
     } catch (error) {
       // A 4xx is the service answering, not failing; a retry cannot change it.
-      if (backoffMs === null || (error instanceof DenApiError && error.status < 500)) break;
+      if (signal?.aborted || backoffMs === null || (error instanceof DenApiError && error.status < 500)) break;
       await sleep(backoffMs, signal);
       if (signal?.aborted) break;
     }
@@ -81,10 +89,12 @@ export async function loadPublicAuthConfig(
 
 export function publicSignupAvailabilityMessage(
   config: DenPublicAuthConfig | null,
+  lookupFailed = false,
 ): string | null {
+  if (lookupFailed) return "Account creation and password recovery could not be checked. You can still sign in, or check again.";
   if (!config || config.signupsAvailable) return null;
   return config.signupStatus === "setup_required"
-    ? "Account creation is temporarily unavailable while secure email delivery is being configured. Existing users can still sign in."
+    ? "Account creation is temporarily unavailable while setup is completed. Existing users can still sign in."
     : "Account creation is temporarily paused. Existing users can still sign in.";
 }
 
@@ -120,7 +130,7 @@ export function PublicWebSigninPage({
   const [legalAccepted, setLegalAccepted] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileResetSignal, setTurnstileResetSignal] = useState(0);
-  const [resetToken] = useState(initialResetToken);
+  const [resetToken, setResetToken] = useState(initialResetToken);
   const [resetRequested, setResetRequested] = useState(false);
   const [sessionBusy, setSessionBusy] = useState(true);
   const [submitBusy, setSubmitBusy] = useState(false);
@@ -129,8 +139,47 @@ export function PublicWebSigninPage({
   >(null);
   const [publicAuthConfig, setPublicAuthConfig] =
     useState<DenPublicAuthConfig | null>(null);
+  const [authConfigUnavailable, setAuthConfigUnavailable] = useState(false);
+  const accessCheck = useRef<AbortController | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const scopeId = useId();
+  const mutations = useRef(createPublicAuthMutationScope());
+  const liveConfig = useRef(config);
+  liveConfig.current = config;
+  const priorConnection = useRef(JSON.stringify([config.baseUrl, config.apiBaseUrl]));
+
+  useEffect(() => {
+    const clearForm = () => {
+      mutations.current.cancel();
+      accessCheck.current?.abort();
+      setEmail("");
+      setPassword("");
+      setConfirmPassword("");
+      setVerificationCode("");
+      setLegalAccepted(false);
+      setTurnstileToken(null);
+      setTurnstileResetSignal((value) => value + 1);
+      setResetToken("");
+      setResetRequested(false);
+      setMode("sign-in");
+      setSubmitBusy(false);
+      setSessionBusy(false);
+      setAuthError(null);
+      setStatusMessage(null);
+    };
+    const key = JSON.stringify([config.baseUrl, config.apiBaseUrl]);
+    if (priorConnection.current !== key) clearForm();
+    priorConnection.current = key;
+    const unregister = accountClientState.register(`public-auth:${scopeId}`, clearForm, "stop");
+    return () => { mutations.current.cancel(); unregister(); };
+  }, [config.baseUrl, config.apiBaseUrl, scopeId]);
+
+  const beginMutation = () => {
+    const accountCurrent = captureAccountGeneration();
+    return mutations.current.begin(() => accountCurrent()
+      && liveConfig.current.baseUrl === config.baseUrl && liveConfig.current.apiBaseUrl === config.apiBaseUrl);
+  };
 
   const client = useMemo(
     () =>
@@ -138,11 +187,19 @@ export function PublicWebSigninPage({
     [config],
   );
 
-  const refreshSession = useCallback(async (signal?: AbortSignal) => {
+  const refreshSession = useCallback(async () => {
+    accessCheck.current?.abort();
+    const controller = new AbortController();
+    accessCheck.current = controller;
+    const { signal } = controller;
     setSessionBusy(true);
     setAuthError(null);
+    setStatusMessage(null);
+    setPublicAuthConfig(null);
+    setAuthConfigUnavailable(false);
     try {
       const signedIn = await checkPublicCloudSession(config, signal);
+      if (signal.aborted) return;
       setAccountServiceAvailable(true);
       if (signedIn) {
         onSignedIn();
@@ -151,24 +208,26 @@ export function PublicWebSigninPage({
       // Keep established accounts usable during a rolling deployment, but
       // never infer that signup or recovery is safe from a missing config.
       const authConfig = await loadPublicAuthConfig(
-        () => client.getPublicAuthConfig(),
+        () => client.getPublicAuthConfig(signal),
         signal,
       );
       if (signal?.aborted) return;
       setPublicAuthConfig(authConfig);
+      // Only exhausted lookup failures return this private sentinel. A valid
+      // server-configured pause must remain distinct from unavailable config.
+      setAuthConfigUnavailable(authConfig === AUTH_CONFIG_FAIL_CLOSED);
     } catch {
       if (signal?.aborted) return;
       setAccountServiceAvailable(false);
-      setAuthError("Account access is temporarily unavailable on this preview.");
+      setAuthError("Account access could not be checked. Check your connection and try again.");
     } finally {
       if (!signal?.aborted) setSessionBusy(false);
     }
   }, [client, config, onSignedIn]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    void refreshSession(controller.signal);
-    return () => controller.abort();
+    void refreshSession();
+    return () => accessCheck.current?.abort();
   }, [refreshSession]);
 
   useEffect(() => {
@@ -194,8 +253,14 @@ export function PublicWebSigninPage({
   useEffect(() => {
     if (mode !== "sign-up" || publicAuthConfig?.signupsAvailable !== false) return;
     setMode("sign-in");
-    setStatusMessage(publicSignupAvailabilityMessage(publicAuthConfig));
+    setStatusMessage(null);
   }, [mode, publicAuthConfig]);
+
+  useEffect(() => {
+    if (mode !== "request-reset" || publicAuthConfig?.passwordResetAvailable !== false) return;
+    setMode("sign-in");
+    setStatusMessage(authConfigUnavailable ? null : "Password recovery is temporarily unavailable. You can still sign in.");
+  }, [mode, publicAuthConfig, authConfigUnavailable]);
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -233,11 +298,12 @@ export function PublicWebSigninPage({
   }, []);
 
   const selectMode = (nextMode: AuthMode) => {
-    if (nextMode === "sign-up" && publicAuthConfig?.signupsAvailable === false) {
+    if (sessionBusy || submitBusy || accountServiceAvailable === false) return;
+    if (nextMode === "sign-up" && publicAuthConfig?.signupsAvailable !== true) {
       setAuthError(null);
-      setStatusMessage(publicSignupAvailabilityMessage(publicAuthConfig));
       return;
     }
+    if (nextMode === "request-reset" && publicAuthConfig?.passwordResetAvailable !== true) return;
     setMode(nextMode);
     setAuthError(null);
     setStatusMessage(null);
@@ -250,8 +316,11 @@ export function PublicWebSigninPage({
     setResetRequested(false);
   };
 
-  const finishSignIn = async () => {
-    if (!(await checkPublicCloudSession(config))) {
+  const finishSignIn = async (operation: NonNullable<ReturnType<typeof beginMutation>>) => {
+    if (!operation.current()) return;
+    const signedIn = await checkPublicCloudSession(config, operation.signal);
+    if (!operation.current()) return;
+    if (!signedIn) {
       throw new Error("Session cookie was not accepted.");
     }
     onSignedIn();
@@ -259,12 +328,16 @@ export function PublicWebSigninPage({
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (submitBusy || accountServiceAvailable === false) return;
+    if (sessionBusy || submitBusy || accountServiceAvailable === false) return;
+    if (mode === "sign-up" && publicAuthConfig?.signupsAvailable !== true) return;
+    if (mode === "request-reset" && publicAuthConfig?.passwordResetAvailable !== true) return;
     if (mode === "sign-up" && !turnstileToken) {
       setAuthError("Complete the security check before creating your account.");
       return;
     }
     const submittingSignup = mode === "sign-up";
+    const operation = beginMutation();
+    if (!operation) return;
     setSubmitBusy(true);
     setAuthError(null);
     setStatusMessage(null);
@@ -275,7 +348,9 @@ export function PublicWebSigninPage({
           password,
           legalAccepted,
           turnstileToken ?? undefined,
+          operation.signal,
         );
+        if (!operation.current()) return;
         if (result.verificationRequired) {
           setEmail(result.email ?? email.trim());
           setPassword("");
@@ -283,21 +358,22 @@ export function PublicWebSigninPage({
           setStatusMessage("Your account is ready for verification. Check your email, or request a new code if delivery is delayed.");
           return;
         }
-        await finishSignIn();
+        await finishSignIn(operation);
         return;
       }
       if (mode === "sign-in") {
-        await client.signInEmail(email, password);
-        await finishSignIn();
+        await client.signInEmail(email, password, operation.signal);
+        await finishSignIn(operation);
         return;
       }
       if (mode === "verify-email") {
-        await client.verifyEmail(email, verificationCode);
-        await finishSignIn();
+        await client.verifyEmail(email, verificationCode, operation.signal);
+        await finishSignIn(operation);
         return;
       }
       if (mode === "request-reset") {
-        await client.requestPasswordReset(email);
+        await client.requestPasswordReset(email, operation.signal);
+        if (!operation.current()) return;
         setResetRequested(true);
         setStatusMessage(
           "If an account exists for that email, a secure reset link is on its way.",
@@ -312,13 +388,15 @@ export function PublicWebSigninPage({
         setAuthError("Passwords do not match.");
         return;
       }
-      await client.confirmPasswordReset(resetToken, password);
+      await client.confirmPasswordReset(resetToken, password, operation.signal);
+      if (!operation.current()) return;
       window.history.replaceState({}, "", `${window.location.pathname}?mode=sign-in`);
       setPassword("");
       setConfirmPassword("");
       setMode("sign-in");
       setStatusMessage("Password updated. Sign in with your new password.");
     } catch (error) {
+      if (!operation.current()) return;
       if (
         mode === "sign-in" &&
         error instanceof DenApiError &&
@@ -331,38 +409,45 @@ export function PublicWebSigninPage({
         setAuthError(publicWebAuthErrorMessage(error));
       }
     } finally {
-      if (submittingSignup) {
-        setTurnstileToken(null);
-        setTurnstileResetSignal((value) => value + 1);
+      if (operation.current()) {
+        if (submittingSignup) {
+          setTurnstileToken(null);
+          setTurnstileResetSignal((value) => value + 1);
+        }
+        setSubmitBusy(false);
       }
-      setSubmitBusy(false);
+      operation.finish();
     }
   };
 
   const resendVerification = async () => {
-    if (submitBusy || !email.trim()) return;
+    if (sessionBusy || submitBusy || accountServiceAvailable === false || !email.trim()) return;
+    const operation = beginMutation();
+    if (!operation) return;
     setSubmitBusy(true);
     setAuthError(null);
     setStatusMessage(null);
     try {
-      await client.resendVerification(email);
+      await client.resendVerification(email, operation.signal);
+      if (!operation.current()) return;
       setVerificationCode("");
       setStatusMessage("A verification email is queued. You can safely try again later if it does not arrive.");
     } catch (error) {
-      setAuthError(publicWebAuthErrorMessage(error));
+      if (operation.current()) setAuthError(publicWebAuthErrorMessage(error));
     } finally {
-      setSubmitBusy(false);
+      if (operation.current()) setSubmitBusy(false);
+      operation.finish();
     }
   };
 
   const signingUp = mode === "sign-up";
   const primaryMode = mode === "sign-in" || mode === "sign-up";
   const accountUnavailable = accountServiceAvailable === false;
-  const signupsPaused = publicAuthConfig?.signupsAvailable === false;
+  const signupsPaused = publicAuthConfig?.signupsAvailable !== true;
   const signupAvailabilityMessage =
-    publicSignupAvailabilityMessage(publicAuthConfig);
+    publicSignupAvailabilityMessage(publicAuthConfig, authConfigUnavailable);
   const passwordResetUnavailable =
-    publicAuthConfig?.passwordResetAvailable === false;
+    publicAuthConfig?.passwordResetAvailable !== true;
   const accessDisabled = sessionBusy || submitBusy || accountUnavailable;
   const formTitle =
     mode === "verify-email"
@@ -382,6 +467,8 @@ export function PublicWebSigninPage({
             <span>Matterhorn Desks</span>
           </div>
 
+          <AccountOutcomeNotice key={JSON.stringify([config.baseUrl, config.apiBaseUrl])}
+            scope={JSON.stringify([config.baseUrl, config.apiBaseUrl])} className="public-auth-status" />
           {!RETRO_UI && <p className="public-auth-kicker">Public beta</p>}
           <h1 id="public-auth-title" className="public-auth-title">
             Serious work deserves more than a chat.
@@ -398,7 +485,7 @@ export function PublicWebSigninPage({
               aria-pressed={mode === "sign-in"}
               className={mode === "sign-in" ? "is-active" : ""}
               onClick={() => selectMode("sign-in")}
-              disabled={sessionBusy || accountUnavailable}
+              disabled={sessionBusy || submitBusy || accountUnavailable}
             >
               Sign in
             </button>
@@ -411,7 +498,7 @@ export function PublicWebSigninPage({
               }
               className={signingUp ? "is-active" : ""}
               onClick={() => selectMode("sign-up")}
-              disabled={sessionBusy || accountUnavailable}
+              disabled={sessionBusy || submitBusy || accountUnavailable}
               title={signupAvailabilityMessage ?? undefined}
             >
               Create account
@@ -576,19 +663,19 @@ export function PublicWebSigninPage({
               <button
                 type="button"
                 onClick={() => selectMode("request-reset")}
-                disabled={sessionBusy || accountUnavailable || passwordResetUnavailable}
+                disabled={sessionBusy || submitBusy || accountUnavailable || passwordResetUnavailable}
                 title={accountUnavailable || passwordResetUnavailable ? "Password recovery is temporarily unavailable." : undefined}
               >
                 Forgot password?
               </button>
             ) : null}
             {mode === "verify-email" ? (
-              <button type="button" onClick={() => void resendVerification()} disabled={submitBusy}>
+              <button type="button" onClick={() => void resendVerification()} disabled={accessDisabled}>
                 Resend verification code
               </button>
             ) : null}
             {!primaryMode ? (
-              <button type="button" onClick={() => selectMode("sign-in")}>
+              <button type="button" onClick={() => selectMode("sign-in")} disabled={sessionBusy || submitBusy}>
                 Back to sign in
               </button>
             ) : null}
@@ -603,17 +690,18 @@ export function PublicWebSigninPage({
               {authError ??
                 statusMessage ??
                 (accountUnavailable
-                  ? "Account access is temporarily unavailable on this preview."
+                  ? "Account access could not be checked. Check your connection and try again."
                   : "Your workspace stays private to your account.")}
             </span>
-            {accountUnavailable && !sessionBusy ? (
-              <button type="button" onClick={() => void refreshSession()}>
+            {(accountUnavailable || authConfigUnavailable) && !sessionBusy ? (
+              <button type="button" onClick={() => void refreshSession()} disabled={submitBusy}>
                 Check again
               </button>
             ) : null}
           </div>
 
-          <nav className="public-auth-trust" aria-label="Security and privacy">
+          <nav className="public-auth-trust" aria-label="Product guides and trust">
+            <a href="/learn">Explore the desks</a>
             <a href="/security">Security</a>
             <a href="/privacy">Privacy</a>
           </nav>

@@ -102,13 +102,17 @@ describe("AI provider UI contract", () => {
 
   test("keeps one primary model choice and progressively discloses expert settings", () => {
     const viewSource = readReactSource("domains/settings/pages/ai-view.tsx");
+    const minimalSource = readReactSource("domains/settings/pages/minimal-models.tsx");
     const summarySource = readReactSource(
       "domains/settings/state/model-readiness-summary.ts",
     );
     const routeSource = readReactSource("shell/settings-route.tsx");
 
     expect(viewSource).toContain("isMatterhornManagedProvider");
-    expect(viewSource).toContain("<LayoutSectionTitle>Choose a model</LayoutSectionTitle>");
+    expect(viewSource).toContain('<LayoutSectionTitle>{MINIMAL_UI ? "Model defaults" : "Choose a model"}</LayoutSectionTitle>');
+    expect(minimalSource).toContain('>Choose a model</h2>');
+    expect(viewSource).toContain("Advanced model and provider settings</summary>");
+    expect(viewSource).toContain('<div className="pt-6">{detailedSettings}</div>');
     expect(viewSource).toContain(
       "Pick the AI that answers your chats. You can change it any time.",
     );

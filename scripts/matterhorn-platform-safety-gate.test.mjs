@@ -65,6 +65,7 @@ for (const required of [
   "wallet-security-log-reporter.test.ts",
   "wallet-address-book-contract.test.ts",
   "transaction-simulation-safety.test.ts",
+  "agent-run-completion-recovery.test.ts",
   "wallet-safety-policy-routes.e2e.test.ts",
   "backend-security.e2e.test.ts",
   "notes-routes.e2e.test.ts",
@@ -87,6 +88,13 @@ for (const required of [
   "alpha-macos-tester-artifact.test.mjs",
   "deep-link-runtime-contract.test.ts",
   "managed-opencode.test.ts",
+  "managed-opencode-lifecycle.test.ts",
+  "embedded-lifecycle.e2e.test.ts",
+  "server-resource-scope.test.ts",
+  "env-routes.e2e.test.ts",
+  "tokens.test.ts",
+  "token-authority.e2e.test.ts",
+  "voice-credential.test.ts",
   "app-error-boundary-contract.test.ts",
   "app-observability-contract.test.ts",
   "shared-primitives-ui-contract.test.ts",
@@ -113,6 +121,12 @@ for (const required of [
   "production-cors-readiness.mjs",
   "generated-media-diagnostics.test.ts",
   "apps/server/src/auth-email-outbox.test.ts",
+  "apps/server/src/auth-password-lifecycle.test.ts",
+  "apps/server/src/auth-reset-concurrency.test.ts",
+  "apps/server/src/auth-credential-concurrency.test.ts",
+  "apps/server/src/auth-account-authority-concurrency.test.ts",
+  "apps/server/src/auth-workspace-authority-concurrency.test.ts",
+  "apps/server/src/hosted-mcp-access.test.ts",
   "apps/server/src/memory-routes.e2e.test.ts",
   "apps/server/src/legacy-memory-cleanup.test.ts",
   "apps/server/src/email-outbox.test.ts",
@@ -120,6 +134,8 @@ for (const required of [
   "apps/server/src/public-launch-readiness.test.ts",
   "packages/email/src/send-email.test.ts",
   "apps/server/src/session-read-model.e2e.test.ts",
+  "apps/server/src/session-preparation.test.ts",
+  "apps/server/src/workspace-file-snapshot.test.ts",
   "apps/server/src/agent-token-budget.test.ts",
   "apps/server/src/agent-tool-routing.test.ts",
   "apps/server/src/provider-privacy.test.ts",
@@ -201,6 +217,18 @@ assert.deepEqual(report.stages.map((stage) => stage.id), [
   "product.readiness",
 ]);
 assert.ok(report.stages.every((stage) => Array.isArray(stage.command) && stage.command.length > 0));
+const moneyPath = report.stages.find((stage) => stage.id === "money.path.security");
+const runtimePerimeter = report.stages.find((stage) => stage.id === "daemon.electron.perimeter");
+assert.ok(runtimePerimeter.command.includes("scripts/verify-opencode-native-contract.test.mjs"),
+  "runtime perimeter must test the isolated native release verifier");
+for (const suite of [
+  "apps/server/src/agent-run-receipts.test.ts",
+  "apps/server/src/guarded-agent-runtime.test.ts",
+  "apps/server/src/opencode-plugins/matterhorn-guard.test.ts",
+  "apps/server/src/model-usage-store.test.ts",
+]) {
+  assert.ok(moneyPath.command.includes(suite), `money-path gate must execute ${suite}`);
+}
 assert.ok(
   report.stages.every((stage) => Array.isArray(stage.themes) && stage.themes.length >= 2),
   "every platform safety stage should declare assessment-theme coverage",

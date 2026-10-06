@@ -47,10 +47,10 @@ describe("responsive accessibility regressions", () => {
     const statusBar = readAppSource("domains/session/chat/status-bar.tsx");
     const settingsShell = readAppSource("domains/settings/shell/settings-shell.tsx");
 
-    expect(sessionPage).toContain('SidebarTrigger className="size-11 md:size-8');
+    expect(sessionPage).toContain('SidebarTrigger className={cn("size-11 shrink-0 md:size-8');
     expect(sessionPage).toContain("size-11 shrink-0 text-dls-secondary");
     expect(statusBar.match(/min-h-11 min-w-11/g)?.length).toBeGreaterThanOrEqual(4);
-    expect(settingsShell).toContain('SidebarTrigger className="size-11');
+    expect(settingsShell).toContain('SidebarTrigger className="h-11 w-auto shrink-0');
     expect(settingsShell).toContain('className="flex size-11 items-center');
   });
 
@@ -127,9 +127,11 @@ describe("responsive accessibility regressions", () => {
     const signin = readAppSource("domains/cloud/public-web-signin-page.tsx");
     const signinStyles = readAppSource("domains/cloud/public-web-signin.css");
 
-    expect(signin).toContain('aria-label="Security and privacy"');
-    expect(signin).toContain('<a href="/security">Security</a>');
-    expect(signin).toContain('<a href="/privacy">Privacy</a>');
+    const trustNav = signin.match(/<nav className="public-auth-trust" aria-label="Product guides and trust">[\s\S]*?<\/nav>/)?.[0];
+    if (!trustNav) throw new Error("Public entry needs a labelled product and trust navigation group");
+    expect(trustNav).toContain('<a href="/learn">Explore the desks</a>');
+    expect(trustNav).toContain('<a href="/security">Security</a>');
+    expect(trustNav).toContain('<a href="/privacy">Privacy</a>');
     expect(signin).toContain("window.visualViewport");
     expect(signin).toContain('active.closest(".public-auth-form")');
     expect(signin).toContain("active.scrollIntoView({");
@@ -162,12 +164,14 @@ describe("responsive accessibility regressions", () => {
     expect(signin).toContain("turnstileToken ?? undefined");
     expect(signin).toContain("<PublicTurnstile");
     expect(signin).toContain("resetSignal={turnstileResetSignal}");
-    expect(signin).toContain("client.getPublicAuthConfig()");
+    expect(signin).toContain("client.getPublicAuthConfig(signal)");
     expect(signin).toContain("AUTH_CONFIG_FAIL_CLOSED");
     expect(signin).toContain("never infer that signup or recovery is safe");
     expect(signin).toContain('signupsPaused ? "public-auth-signup-availability" : undefined');
     expect(signin).toContain('id="public-auth-signup-availability"');
-    expect(signin).toContain("publicSignupAvailabilityMessage(publicAuthConfig)");
+    expect(signin).toContain("publicSignupAvailabilityMessage(publicAuthConfig, authConfigUnavailable)");
+    expect(signin).toContain("(accountUnavailable || authConfigUnavailable) && !sessionBusy");
+    expect(signin).toContain("return () => accessCheck.current?.abort()");
     expect(den).toContain('"/api/auth/config"');
     expect(den).toContain('"/api/auth/verify-email"');
     expect(den).toContain('"/api/auth/resend-verification"');

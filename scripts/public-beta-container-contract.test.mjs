@@ -18,6 +18,7 @@ for (const required of [
   "MATTERHORN_ACCOUNT_MESSAGE_GATEWAY_REQUIRED=1",
   "pnpm --dir packages/crypto-app-sdk build",
   "gosu",
+  "gosu node node scripts/verify-opencode-native-contract.mjs",
   "/health/live",
 ]) {
   assert.ok(dockerfile.includes(required), `public Beta image must include ${required}`);

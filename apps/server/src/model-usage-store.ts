@@ -236,20 +236,21 @@ export function modelUsageAssistantMessages(value: unknown): ModelUsageAssistant
     const cacheReadTokens = finiteInteger(cache?.read);
     const cacheWriteTokens = finiteInteger(cache?.write);
     const reportedTotal = finiteInteger(tokens.total);
+    const failedWithoutUsage = typeof recordValue(info.error)?.name === "string"
+      && inputTokens + outputTokens + reasoningTokens + cacheReadTokens + cacheWriteTokens + reportedTotal === 0;
     messages.push({
       id,
       sessionId: typeof info.sessionID === "string" ? info.sessionID : undefined,
       parentId: typeof info.parentID === "string" ? info.parentID : undefined,
-      // A terminal error/cancellation may retain the previous tool-step finish
-      // marker and parts. Its completed timestamp and recorded usage still
-      // settle this request; do not leave its full reservation held forever.
-      terminal: typeof recordValue(info.error)?.name === "string" || (info.finish !== "tool-calls" && info.finish !== "unknown"
+      // Cancellation can finish before the provider reports usage. Native
+      // default zero counters are not evidence that the request was free.
+      terminal: !failedWithoutUsage && (typeof recordValue(info.error)?.name === "string" || (info.finish !== "tool-calls" && info.finish !== "unknown"
         && !(Array.isArray(message?.parts) && message.parts.some((entry) => {
           const part = recordValue(entry);
           const state = recordValue(part?.state);
           return part?.type === "tool" && !recordValue(part.metadata)?.providerExecuted
             && !(state?.status === "error" && recordValue(state.metadata)?.interrupted === true);
-        }))),
+        })))),
       createdAt,
       completedAt,
       providerId: typeof info.providerID === "string" ? info.providerID.trim() : "unknown",
@@ -386,6 +387,7 @@ export class MatterhornModelUsageStore {
     sessionId: string;
     providerId: string;
     modelId: string;
+    messageId?: string;
     now?: Date;
   }): ModelUsageReservation {
     return this.withImmediateTransaction(() => this.reserveUnlocked(input));
@@ -397,6 +399,7 @@ export class MatterhornModelUsageStore {
     sessionId: string;
     providerId: string;
     modelId: string;
+    messageId?: string;
     now?: Date;
   }): ModelUsageReservation {
     const now = input.now ?? new Date();
@@ -424,8 +427,8 @@ export class MatterhornModelUsageStore {
     statement(this.db, `
       INSERT INTO model_usage_operations (
         id, subject_id, workspace_id, session_id, provider_id, model_id,
-        weight_milli, status, reserved_tokens, charged_tokens, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+        weight_milli, status, reserved_tokens, charged_tokens, created_at, user_message_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
     `).run(
       id,
       input.subject.id,
@@ -437,6 +440,7 @@ export class MatterhornModelUsageStore {
       this.config.reservationTokens,
       chargedTokens,
       now.getTime(),
+      input.messageId ?? null,
     );
     return { allowed: true, reservationId: id, status: this.status(input.subject, now) };
   }
@@ -497,6 +501,7 @@ export class MatterhornModelUsageStore {
     workspaceId: string;
     sessionId: string;
     messages: unknown;
+    unusedMessageIds?: string[];
   }): number {
     return this.withImmediateTransaction(() => this.reconcileUnlocked(input));
   }
@@ -506,6 +511,7 @@ export class MatterhornModelUsageStore {
     workspaceId: string;
     sessionId: string;
     messages: unknown;
+    unusedMessageIds?: string[];
   }): number {
     const pending = statement(this.db, `
       SELECT id, provider_id, model_id, weight_milli, created_at, user_message_id
@@ -550,7 +556,15 @@ export class MatterhornModelUsageStore {
         (operation.provider_id === "unknown" || message.providerId === operation.provider_id) &&
         (operation.model_id === "unknown" || message.modelId === operation.model_id)
       ));
-      if (messageIndex < 0) continue;
+      if (messageIndex < 0) {
+        // Only the gateway may supply exact, revoked, never-released dispatch
+        // evidence. Never let that evidence override a completed usage report.
+        if (operation.user_message_id && input.unusedMessageIds?.includes(operation.user_message_id)) {
+          this.cancel(operation.id);
+          reconciled += 1;
+        }
+        continue;
+      }
       const [message] = messages.splice(messageIndex, 1);
       const weight = operation.weight_milli / 1000;
       statement(this.db, `

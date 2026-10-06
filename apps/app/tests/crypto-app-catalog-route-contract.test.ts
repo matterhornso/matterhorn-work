@@ -52,7 +52,8 @@ describe("invite-only crypto app catalog route", () => {
     expect(route).toContain("client.verifyCryptoEvidence(workspaceId, item.evidenceId)");
     expect(route).toContain("client.destroyCryptoEvidenceRecoveryKey(workspaceId, item.evidenceId, item.revision)");
     expect(route).toContain("active.client.renewCryptoEvidence(workspaceId, item.evidenceId");
-    expect(route).toContain("active.client.confirmCryptoEvidenceRenewal(workspaceId, item.evidenceId");
+    expect(route).toContain('runWalletAction(item, "evidence-renewal")');
+    expect(readAppSource("app/lib/wallet-confirmation-recovery.ts")).toContain("input.client.confirmCryptoEvidenceRenewal(input.workspaceId, pending.resourceId");
     expect(route).toContain("only your connected wallet can sign and submit it");
     expect(route).toContain("Only encrypted bytes go to the public Walrus test network");
     expect(route).toContain("I understand that the encrypted public bytes may remain.");

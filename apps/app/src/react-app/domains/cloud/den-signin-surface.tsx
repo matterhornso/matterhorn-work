@@ -9,6 +9,7 @@ import {
 import { t } from "../../../i18n";
 import { Button } from "@/components/ui/button";
 import { TextInput } from "../../design-system/text-input";
+import { AccountOutcomeNotice } from "./account-outcome-notice";
 
 const DEFAULT_MATTERHORN_CLOUD_URL = "https://app.matterhorn.work";
 
@@ -202,6 +203,7 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
       {props.statusMessage && !props.authError ? (
         <div className={softNoticeClass}>{props.statusMessage}</div>
       ) : null}
+      <AccountOutcomeNotice key={props.baseUrl} scope={props.baseUrl} className={softNoticeClass} />
 
       <div className="space-y-2">
         <div className="max-w-[54ch] text-sm text-dls-secondary">
@@ -372,6 +374,7 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
               {props.statusMessage && !props.authError ? (
                 <div className={softNoticeClass}>{props.statusMessage}</div>
               ) : null}
+              <AccountOutcomeNotice key={props.baseUrl} scope={props.baseUrl} className={softNoticeClass} />
 
               {props.authError ? (
                 <div className={errorBannerClass}>{props.authError}</div>

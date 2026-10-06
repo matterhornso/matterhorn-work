@@ -94,7 +94,7 @@ const input = {
     openworkCommit: upstream.openwork.commit,
     opencodeVersion: constants.opencodeVersion,
     opencodeCommit: upstream.opencode.commit,
-    opencodeSdkVersion: constants.opencodeVersion.replace(/^v/, ""),
+    opencodeSdkVersion: upstream.opencode.sdkVersion,
     permissionDenyByDefault: true,
     evidence: evidence("runtime"),
   },

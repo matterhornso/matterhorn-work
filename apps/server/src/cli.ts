@@ -17,6 +17,7 @@ import {
   startManagedVenicePrivateModelRegistryRefresh,
 } from "./venice-provider.js";
 import pkg from "../package.json" with { type: "json" };
+import { ServerResourceScope } from "./server-resource-scope.js";
 
 const args = parseCliArgs(process.argv.slice(2));
 
@@ -35,6 +36,9 @@ const logger = createServerLogger(config);
 const serverUrl = `http://${config.host === "0.0.0.0" ? "127.0.0.1" : config.host}:${config.port}`;
 let managedOpencode: ManagedOpencodeServer | null = null;
 let stopVenicePrivateModelRefresh: () => void = () => undefined;
+const resources = new ServerResourceScope();
+resources.onStop(() => stopVenicePrivateModelRefresh());
+resources.onStop(() => managedOpencode?.close());
 
 function logManagedOpencodeEvent(event: ManagedOpencodeEvent) {
   if (event.type === "health_failure" && event.consecutiveFailures < event.threshold) return;
@@ -53,59 +57,63 @@ function logManagedOpencodeEvent(event: ManagedOpencodeEvent) {
   logger.log("warn", `Managed OpenCode restart failed after ${event.reason}; retrying`);
 }
 
-if (!config.readOnly) {
-  for (const workspace of config.workspaces) {
-    await ensureWorkspaceFiles(workspace.path, workspace.preset ?? "starter");
-  }
-}
-
-if (!config.opencodeBaseUrl && process.env.OPENWORK_MANAGE_OPENCODE === "1") {
-  const workspace = config.workspaces[0];
-  if (workspace?.path) {
-    const venicePrivateModels = await resolveManagedVenicePrivateModels();
-    const cudosCatalog = await resolveManagedCudosModelCatalog();
-    stopVenicePrivateModelRefresh = startManagedVenicePrivateModelRegistryRefresh().stop;
-    const managedRuntimeConfig = buildManagedOpencodeRuntimeConfig({
-      serverUrl,
-      clientToken: config.token,
-      enableCudosProvider: Boolean(process.env.CUDOS_API_KEY?.trim()),
-      cudosModels: cudosCatalog.models,
-      venicePrivateModels,
-    });
-    const managedOpencodeCwd = process.env.OPENWORK_MANAGED_OPENCODE_CWD?.trim() || workspace.path;
-    await mkdir(managedOpencodeCwd, { recursive: true });
-    managedOpencode = await createManagedOpencodeServer({
-      bin: process.env.OPENWORK_OPENCODE_BIN,
-      cwd: managedOpencodeCwd,
-      env: {
-        ...(process.env.OPENWORK_DEV_MODE ? { OPENWORK_DEV_MODE: process.env.OPENWORK_DEV_MODE } : {}),
-        OPENWORK_SERVER_URL: serverUrl,
-        OPENWORK_SERVER_TOKEN: config.token,
-        OPENCODE_CONFIG_CONTENT: managedRuntimeConfig,
-        ...(process.env.MATTERHORN_MODELS_URL?.trim()
-          ? { OPENCODE_MODELS_URL: process.env.MATTERHORN_MODELS_URL.trim() }
-          : {}),
-      },
-      onEvent: logManagedOpencodeEvent,
-    });
-    config.opencodeBaseUrl = managedOpencode.url;
-    config.managedOpencodeMcp = true;
-    config.opencodeUsername = managedOpencode.username;
-    config.opencodePassword = managedOpencode.password;
-    for (const entry of config.workspaces) {
-      entry.baseUrl ??= managedOpencode.url;
-      entry.opencodeUsername ??= managedOpencode.username;
-      entry.opencodePassword ??= managedOpencode.password;
-      entry.directory ??= entry.path;
-    }
-    logger.log("info", `Managed OpenCode listening on ${managedOpencode.url}`);
-    if (process.env.CUDOS_API_KEY?.trim()) {
-      logger.log("info", `Managed CUDOS catalog loaded ${cudosCatalog.models.length} models from ${cudosCatalog.source}`);
+async function startHost() {
+  if (!config.readOnly) {
+    for (const workspace of config.workspaces) {
+      await ensureWorkspaceFiles(workspace.path, workspace.preset ?? "starter");
     }
   }
-}
 
-const server = await startServer(config);
+  if (!config.opencodeBaseUrl && process.env.OPENWORK_MANAGE_OPENCODE === "1") {
+    const workspace = config.workspaces[0];
+    if (workspace?.path) {
+      const venicePrivateModels = await resolveManagedVenicePrivateModels();
+      const cudosCatalog = await resolveManagedCudosModelCatalog();
+      stopVenicePrivateModelRefresh = startManagedVenicePrivateModelRegistryRefresh().stop;
+      const managedRuntimeConfig = buildManagedOpencodeRuntimeConfig({
+        serverUrl,
+        clientToken: config.token,
+        enableCudosProvider: Boolean(process.env.CUDOS_API_KEY?.trim()),
+        cudosModels: cudosCatalog.models,
+        venicePrivateModels,
+      });
+      const managedOpencodeCwd = process.env.OPENWORK_MANAGED_OPENCODE_CWD?.trim() || workspace.path;
+      await mkdir(managedOpencodeCwd, { recursive: true });
+      managedOpencode = await createManagedOpencodeServer({
+        bin: process.env.OPENWORK_OPENCODE_BIN,
+        cwd: managedOpencodeCwd,
+        env: {
+          ...(process.env.OPENWORK_DEV_MODE ? { OPENWORK_DEV_MODE: process.env.OPENWORK_DEV_MODE } : {}),
+          OPENWORK_SERVER_URL: serverUrl,
+          OPENWORK_SERVER_TOKEN: config.token,
+          OPENCODE_CONFIG_CONTENT: managedRuntimeConfig,
+          ...(process.env.MATTERHORN_MODELS_URL?.trim()
+            ? { OPENCODE_MODELS_URL: process.env.MATTERHORN_MODELS_URL.trim() }
+            : {}),
+        },
+        onEvent: logManagedOpencodeEvent,
+      });
+      config.opencodeBaseUrl = managedOpencode.url;
+      config.managedOpencodeMcp = true;
+      config.opencodeUsername = managedOpencode.username;
+      config.opencodePassword = managedOpencode.password;
+      for (const entry of config.workspaces) {
+        entry.baseUrl ??= managedOpencode.url;
+        entry.opencodeUsername ??= managedOpencode.username;
+        entry.opencodePassword ??= managedOpencode.password;
+        entry.directory ??= entry.path;
+      }
+      logger.log("info", `Managed OpenCode listening on ${managedOpencode.url}`);
+      if (process.env.CUDOS_API_KEY?.trim()) {
+        logger.log("info", `Managed CUDOS catalog loaded ${cudosCatalog.models.length} models from ${cudosCatalog.source}`);
+      }
+    }
+  }
+
+  return startServer(config);
+}
+const server = await startHost().catch(error => resources.fail(error));
+resources.onStop(() => server.stop());
 
 const url = `http://${config.host}:${server.port}`;
   logger.log("info", `Matterhorn Desks server listening on ${url}`);
@@ -134,11 +142,7 @@ if (args.verbose) {
   logger.log("info", `Host token source: ${config.hostTokenSource}`);
 }
 
-const shutdown = async () => {
-  stopVenicePrivateModelRefresh();
-  await managedOpencode?.close();
-  (server as { stop?: (closeActiveConnections?: boolean) => void }).stop?.(true);
-};
+const shutdown = () => resources.close();
 
 process.once("SIGINT", async () => {
   await shutdown();

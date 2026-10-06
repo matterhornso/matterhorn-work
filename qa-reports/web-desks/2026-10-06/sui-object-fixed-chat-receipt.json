@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "capturedAt": "2026-10-05T23:37:19.132Z",
+  "workspaceId": "ws_web_efd40f975cf546d8",
+  "sessionId": "ses_ef193f584ffeyiK7ZGFEYUZa1P",
+  "scope": "Normal-account GET-only snapshot of an isolated local runtime. Model completion is not proof that requested tool work succeeded.",
+  "snapshotStatus": "idle",
+  "messages": [
+    {
+      "role": "user",
+      "completed": false,
+      "tokens": {
+        "cache": {}
+      }
+    },
+    {
+      "role": "assistant",
+      "modelId": "asi1",
+      "completed": true,
+      "finish": "tool-calls",
+      "tokens": {
+        "total": 2268,
+        "input": 2228,
+        "output": 29,
+        "reasoning": 11,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      }
+    },
+    {
+      "role": "assistant",
+      "modelId": "asi1",
+      "completed": true,
+      "finish": "stop",
+      "tokens": {
+        "total": 2590,
+        "input": 1108,
+        "output": 198,
+        "reasoning": 4,
+        "cache": {
+          "read": 1280,
+          "write": 0
+        }
+      }
+    }
+  ],
+  "tools": [
+    {
+      "name": "matterhorn-work_matterhorn_sui_get_object",
+      "status": "completed",
+      "source": "sui.grpc",
+      "observedAt": "2026-10-05T23:36:15.095Z",
+      "network": "testnet"
+    }
+  ],
+  "toolCounts": {
+    "total": 1,
+    "completed": 1,
+    "errors": 0
+  },
+  "receipts": [
+    {
+      "runId": "agent_run_3ad4179d-a139-4c57-bffd-8afdd0e6c42f",
+      "status": "success",
+      "model": "asi1",
+      "usage": {
+        "inputTokens": 3336,
+        "outputTokens": 227,
+        "reasoningTokens": 15,
+        "cacheReadTokens": 1280,
+        "cacheWriteTokens": 0,
+        "estimatedCostUsd": 0
+      },
+      "privacyMode": "public_research",
+      "tools": [
+        {
+          "name": "matterhorn_sui_get_object",
+          "status": "success",
+          "source": "sui.grpc"
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "pendingRequests": 0,
+    "daily": {
+      "usedTokens": 11650,
+      "reservedTokens": 0,
+      "chargedTokens": 11650,
+      "limit": 100000,
+      "remainingTokens": 88350
+    },
+    "monthly": {
+      "usedTokens": 11650,
+      "reservedTokens": 0,
+      "chargedTokens": 11650,
+      "limit": 100000,
+      "remainingTokens": 88350
+    }
+  },
+  "safety": {
+    "requestMethod": "GET",
+    "newModelRequests": 0,
+    "adminCredentialsUsed": false,
+    "rawContentPersisted": false
+  }
+}

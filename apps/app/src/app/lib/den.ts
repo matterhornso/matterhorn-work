@@ -37,7 +37,8 @@ import type {
   MatterhornExtensionSourceFormat,
 } from "../extensions";
 import { DenApiError } from "./den-api-error";
-import { accountClientState, captureAccountGeneration } from "./account-client-state";
+import { accountClientState, captureAccountGeneration, runAccountScopedRequest } from "./account-client-state";
+import { verifiedAccountResponse, isAccountSecuritySummary, isAccountExport, isSessionRevocation, isPasswordChange, isAccountDeletion } from "./account-security-response";
 export { DenApiError } from "./den-api-error";
 
 const STORAGE_BASE_URL = "matterhorn.den.baseUrl";
@@ -1881,34 +1882,34 @@ export function createDenClient(options: { baseUrl: string; apiBaseUrl?: string 
     },
 
     async getAccountSecurity(): Promise<DenAccountSecuritySummary> {
-      return requestJson<DenAccountSecuritySummary>(
+      return verifiedAccountResponse(await runAccountScopedRequest(() => requestJson<unknown>(
         baseUrls,
         "/api/auth/account/security",
         { method: "GET", token },
-      );
+      )), isAccountSecuritySummary);
     },
 
     async exportAccount(): Promise<DenAccountExport> {
-      return requestJson<DenAccountExport>(
+      return verifiedAccountResponse(await runAccountScopedRequest(() => requestJson<unknown>(
         baseUrls,
         "/api/auth/account/export",
         { method: "GET", token },
-      );
+      )), isAccountExport);
     },
 
     async revokeOtherSessions(): Promise<{ revokedSessions: number }> {
-      return requestJson<{ revokedSessions: number }>(
+      return verifiedAccountResponse(await runAccountScopedRequest(() => requestJson<unknown>(
         baseUrls,
         "/api/auth/account/revoke-other-sessions",
         { method: "POST", token, body: {} },
-      );
+      )), isSessionRevocation);
     },
 
     async changePassword(
       currentPassword: string,
       newPassword: string,
     ): Promise<void> {
-      await requestJson<unknown>(
+      verifiedAccountResponse(await runAccountScopedRequest(() => requestJson<unknown>(
         baseUrls,
         "/api/auth/account/change-password",
         {
@@ -1916,14 +1917,14 @@ export function createDenClient(options: { baseUrl: string; apiBaseUrl?: string 
           token,
           body: { currentPassword, newPassword },
         },
-      );
+      )), isPasswordChange);
     },
 
     async deleteAccount(
       password: string,
       confirmationEmail: string,
     ): Promise<DenAccountDeletionResult> {
-      return requestJson<DenAccountDeletionResult>(
+      return verifiedAccountResponse(await runAccountScopedRequest(() => requestJson<unknown>(
         baseUrls,
         "/api/auth/account",
         {
@@ -1931,7 +1932,7 @@ export function createDenClient(options: { baseUrl: string; apiBaseUrl?: string 
           token,
           body: { password, confirmationEmail: confirmationEmail.trim() },
         },
-      );
+      )), isAccountDeletion);
     },
 
     async getSession(): Promise<DenUser> {

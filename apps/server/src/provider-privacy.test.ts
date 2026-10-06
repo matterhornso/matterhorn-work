@@ -59,6 +59,21 @@ describe("provider privacy policy", () => {
     });
   });
 
+  test("coming-soon policy and an owner-declared training opt-out do not verify CUDOS", () => {
+    for (const policyUrl of [undefined, "coming soon"]) {
+      const policy = resolveProviderPrivacyPolicy("cudos", "ASI:Cloud", {
+        MATTERHORN_PROVIDER_PRIVACY_MODE: "verified-only",
+        MATTERHORN_CUDOS_TRAINING_OPTED_IN: "false",
+        MATTERHORN_CUDOS_PRIVACY_POLICY_URL: policyUrl,
+      });
+      expect(policy.allowed).toBe(false);
+      expect(policy.status).toBe("unverified");
+      expect(policy.policyUrl).toBeNull();
+      expect(policy.verifiedAt).toBeNull();
+      expect(policy.description).toContain("Provider privacy policy coming soon");
+    }
+  });
+
   test("allows reviewed opt-in-only terms when training opt-in is explicitly disabled", () => {
     const policy = resolveProviderPrivacyPolicy(
       "cudos",

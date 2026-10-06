@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { startServer } from "./server.js";
+import { handleManagedOpencodeMcp, MANAGED_MCP_MODEL_READ_CONTENT_MAX_CHARS } from "./managed-opencode-mcp.js";
 import type { ServerConfig } from "./types.js";
 
 type Served = {
@@ -197,11 +198,55 @@ test("read-only Bittensor dispatch never routes stake, watch or service text int
   expect(upstreamPaths.filter(path => !allowedReads.has(path))).toEqual([]);
 });
 
+test("lists bounded public subnets for the exact model request with an omitted netuid", async () => {
+  const { base } = await boot();
+  process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = "http://matterhorn-route-list-sidecar.test";
+  const configuredFetch = globalThis.fetch;
+  const upstreamPaths: string[] = [];
+  globalThis.fetch = Object.assign(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    if (!url.startsWith(base)) upstreamPaths.push(new URL(url).pathname);
+    if (url.endsWith("/subnets")) return json({ subnets: [10, 11, 12, 13, 14].map(netuid => ({
+      netuid, name: `Public Subnet ${netuid}`, description: "Long display metadata. ".repeat(200),
+      source: "bittensor-python-sdk", block: 9219867, updatedAt: "2026-10-06T00:00:00Z", freshness: "live",
+    })) });
+    return configuredFetch(input, init);
+  }, { preconnect: nativeFetch.preconnect });
+  const args = { message: "List three current Bittensor subnets with subnet IDs, names, network, observed block/timestamp, freshness, and limitations. Read-only research.", readOperation: "subnet", limit: 3 };
+  const result = await handleManagedOpencodeMcp({
+    payload: { jsonrpc: "2.0", id: "browser-list-reproduction", method: "tools/call", params: {
+      name: "matterhorn_bittensor_chat", arguments: args,
+    } }, serverUrl: base, clientToken: TOKEN,
+  });
+  expect(result.body).toMatchObject({ result: { structuredContent: { result: {
+    success: true, execution: "answered", data: { omittedSubnets: 2, subnets: [
+      { netuid: 10 }, { netuid: 11 }, { netuid: 12 },
+    ] },
+  } } } });
+  const body: { result: { content: Array<{ text: string }>; structuredContent: { result: unknown } } } = JSON.parse(JSON.stringify(result.body));
+  for (const channel of [body.result.content[0]!.text, JSON.stringify(body.result.structuredContent.result)]) {
+    expect(channel.length).toBeLessThanOrEqual(MANAGED_MCP_MODEL_READ_CONTENT_MAX_CHARS);
+    for (const evidence of ["Public Subnet 10", "Public Subnet 11", "Public Subnet 12", "9219867", "live", "bittensor-python-sdk"]) expect(channel).toContain(evidence);
+    expect(channel).not.toContain("Long display metadata");
+    expect(channel).not.toContain("Result exceeded");
+  }
+  const direct = await postExecute(base, { ...args, readOnly: true, limit: 1 });
+  expect(direct.data.subnets).toHaveLength(1);
+  expect(direct.data.omittedSubnets).toBe(4);
+  expect(upstreamPaths.length).toBeGreaterThan(0);
+  expect(upstreamPaths.every(path => path === "/subnets")).toBe(true);
+});
+
 test.each([
   { readOperation: "prepare", netuid: 14 },
   { readOperation: "subnet", netuid: -1 },
   { readOperation: "subnet", netuid: "14" },
+  { readOperation: "subnet", netuid: null },
+  { readOperation: "subnet", netuid: "" },
+  { readOperation: "subnet", netuid: 1.5 },
+  { readOperation: "subnet", netuid: {} },
   { readOperation: "validators" },
+  { readOperation: "validators", netuid: null },
   { readOperation: "wallet", ss58Address: "not-an-address" },
   { readOperation: "discovery", limit: 1000 },
   { readOperation: "subnet", netuid: 14, privateKey: "fixture-credential-never-echo" },

@@ -30,6 +30,26 @@ const managedAgents = Object.values(MATTERHORN_DESK_AGENT_MANIFESTS)
   .filter((agent) => agent.toolPolicy.runtimeKind === "managed_desk");
 
 describe("Matterhorn desk agent architecture", () => {
+  test("allows a bounded Sui network comparison without widening read-only or preview authority", () => {
+    const agent = MATTERHORN_DESK_AGENT_MANIFESTS.sui;
+    expect(agent.verificationPolicy.maxToolCalls).toBe(2);
+    expect(agent.instructions).toContain("Default to one specific read");
+    expect(agent.instructions).toContain("Only when the user asks to compare mainnet and testnet balances");
+    expect(agent.instructions).toContain("exactly once for each network using the same public address");
+    expect(agent.instructions).toContain("Do not prepare a transfer for a balance comparison");
+    expect(agent.instructions).toContain("Call the Sui transfer preview tool once. If it fails");
+    expect(buildMatterhornDeskReadOnlyTools(agent)).toEqual({
+      "*": false,
+      "matterhorn-work_matterhorn_sui_get_balance": true,
+      "matterhorn-work_matterhorn_sui_get_object": true,
+    });
+    expect(agent.capabilityPolicy.agentMaySign).toBe(false);
+    expect(agent.capabilityPolicy.agentMaySubmit).toBe(false);
+    expect(evaluateMatterhornDeskResponseEvidence(agent, { toolCalls: 2 })).toEqual([]);
+    expect(evaluateMatterhornDeskResponseEvidence(agent, { toolCalls: 3 })).toContain("tool_call_budget_exceeded");
+    expect(buildMatterhornDeskAgentSystemPrompt(agent)).toContain("Tool-call budget: at most 2 calls");
+  });
+
   test("keeps every specialized desk on an exact deny-by-default tool contract", () => {
     expect(managedAgents).toHaveLength(7);
 

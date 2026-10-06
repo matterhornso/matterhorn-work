@@ -2,6 +2,8 @@
 import * as React from "react";
 import {
   AlertCircle,
+  ArrowDown,
+  ArrowUp,
   ChevronRight,
   Loader2,
   MoreHorizontal,
@@ -27,6 +29,7 @@ import {
   isRemoteConnectionErrorMessage,
   getWorkspaceTaskLoadErrorDisplay,
   isRemoteConnectionWorkspace,
+  isDesktopRuntime,
   isWindowsPlatform,
 } from "../../../../app/utils";
 import { t } from "../../../../i18n";
@@ -199,9 +202,14 @@ type WorkspaceActionsMenuProps = {
   isConnectionActionBusy: boolean;
   canRecover: boolean;
   className: string;
+  reorder?: {
+    canMoveUp: boolean;
+    canMoveDown: boolean;
+    onMove: (direction: -1 | 1) => void;
+  };
 };
 
-function WorkspaceActionsMenu({ workspace, isConnectionActionBusy, canRecover, className }: WorkspaceActionsMenuProps) {
+function WorkspaceActionsMenu({ workspace, isConnectionActionBusy, canRecover, className, reorder }: WorkspaceActionsMenuProps) {
   const ctx = useSidebarContext();
 
   return (
@@ -230,7 +238,7 @@ function WorkspaceActionsMenu({ workspace, isConnectionActionBusy, canRecover, c
           <Share2 className="size-4" />
           {t("workspace_list.share")}
         </DropdownMenuItem>
-        {workspace.workspaceType === "local" ? (
+        {workspace.workspaceType === "local" && isDesktopRuntime() ? (
           <DropdownMenuItem onClick={() => ctx.onRevealWorkspace(workspace.id)}>
             <FolderOpen className="size-4" />
             {isWindowsPlatform() ? t("workspace_list.reveal_explorer") : t("workspace_list.reveal_finder")}
@@ -265,6 +273,17 @@ function WorkspaceActionsMenu({ workspace, isConnectionActionBusy, canRecover, c
                 {t("workspace_list.edit_connection")}
               </DropdownMenuItem>
             ) : null}
+          </>
+        ) : null}
+        {reorder ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem disabled={!reorder.canMoveUp} onClick={() => reorder.onMove(-1)}>
+              <ArrowUp className="size-4" /> Move workspace up
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={!reorder.canMoveDown} onClick={() => reorder.onMove(1)}>
+              <ArrowDown className="size-4" /> Move workspace down
+            </DropdownMenuItem>
           </>
         ) : null}
         <DropdownMenuSeparator />
@@ -399,6 +418,8 @@ export type AppSidebarProps = {
   onTestWorkspaceConnection?: (workspaceId: string) => Promise<boolean> | boolean | void;
   onEditWorkspaceConnection?: (workspaceId: string) => void;
   onForgetWorkspace: (workspaceId: string) => void;
+  onOpenLocalWorkspace: () => void;
+  onOpenNewLocalWorkspace: () => void;
   onOpenCreateWorkspace: () => void;
   onReorderWorkspaces?: (workspaceIds: string[]) => void;
   onStartResize?: React.PointerEventHandler<HTMLButtonElement>;
@@ -489,14 +510,20 @@ export function AppSidebar(props: AppSidebarProps) {
     expandWorkspace(id);
   }, [props.selectedWorkspaceId, expandWorkspace]);
 
-  const previewCount = (workspaceId: string) =>
-    previewCountByWorkspaceId[workspaceId] ?? MAX_SESSIONS_PREVIEW;
+  const previewCount = (workspaceId: string) => {
+    const count = previewCountByWorkspaceId[workspaceId] ?? MAX_SESSIONS_PREVIEW;
+    if (!MINIMAL_UI || workspaceId !== props.selectedWorkspaceId || !props.selectedSessionId) return count;
+    const sessions = props.workspaceSessionGroups.find((group) => group.workspace.id === workspaceId)?.sessions ?? [];
+    const tree = buildSessionTreeState(sessions, props.sessionStatusById);
+    const selectedRootId = tree.ancestorIdsBySessionId.get(props.selectedSessionId)?.[0] ?? props.selectedSessionId;
+    return Math.max(count, getRootSessions(sessions).findIndex((session) => session.id === selectedRootId) + 1);
+  };
 
   const showMoreSessions = (workspaceId: string, totalRoots: number) => {
     expandWorkspace(workspaceId);
     setPreviewCountByWorkspaceId((current) => ({
       ...current,
-      [workspaceId]: Math.min((current[workspaceId] ?? MAX_SESSIONS_PREVIEW) + MAX_SESSIONS_PREVIEW, totalRoots),
+      [workspaceId]: Math.min(Math.max(current[workspaceId] ?? MAX_SESSIONS_PREVIEW, previewCount(workspaceId)) + MAX_SESSIONS_PREVIEW, totalRoots),
     }));
   };
 
@@ -559,7 +586,7 @@ export function AppSidebar(props: AppSidebarProps) {
 
   return (
     <SidebarContext.Provider value={contextValue}>
-      {MINIMAL_UI ? <MinimalWorkspaceSidebar {...props} /> : <>
+      {MINIMAL_UI ? <MinimalWorkspaceSidebar {...props} previewCount={previewCount(props.selectedWorkspaceId)} showMoreSessions={showMoreSessions} /> : <>
       <Sidebar
         collapsible="offcanvas"
         className="mac:**:data-[sidebar=sidebar]:bg-transparent"
@@ -597,10 +624,19 @@ export function AppSidebar(props: AppSidebarProps) {
           <SidebarFooter>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton onClick={props.onOpenCreateWorkspace}>
-                  <Plus className="size-4" />
-                  {t("workspace_list.add_workspace")}
-                </SidebarMenuButton>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <SidebarMenuButton>
+                        <Plus className="size-4" />
+                        Add workspace
+                      </SidebarMenuButton>
+                    }
+                  />
+                  <DropdownMenuContent side="right" align="end">
+                    <WorkspaceSetupMenuItems sidebar={props} />
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarFooter>
@@ -619,15 +655,29 @@ export function AppSidebar(props: AppSidebarProps) {
   );
 }
 
-function MinimalWorkspaceSidebar(props: AppSidebarProps) {
+function MinimalWorkspaceSidebar(props: AppSidebarProps & {
+  previewCount: number;
+  showMoreSessions: (workspaceId: string, totalRoots: number) => void;
+}) {
   const { setOpenMobile } = useSidebar();
+  const { config: shellConfig } = useShellConfig();
   const current = props.workspaceSessionGroups.find((group) => group.workspace.id === props.selectedWorkspaceId);
+  const connectionState = props.workspaceConnectionStateById[props.selectedWorkspaceId];
+  const currentIndex = props.workspaceSessionGroups.findIndex((group) => group.workspace.id === props.selectedWorkspaceId);
+  const moveWorkspace = (direction: -1 | 1) => {
+    const targetIndex = currentIndex + direction;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= props.workspaceSessionGroups.length) return;
+    const workspaceIds = props.workspaceSessionGroups.map((group) => group.workspace.id);
+    [workspaceIds[currentIndex], workspaceIds[targetIndex]] = [workspaceIds[targetIndex], workspaceIds[currentIndex]];
+    props.onReorderWorkspaces?.(workspaceIds);
+  };
   const close = () => setOpenMobile(false);
   return (
     <Sidebar collapsible="offcanvas" aria-label="Workspace navigation" className="matterhorn-workspace-sidebar">
       <div className="flex min-h-0 flex-1 flex-col p-3">
+        <div className="flex min-w-0 items-center">
         <DropdownMenu>
-          <DropdownMenuTrigger render={<Button variant="ghost" className="w-full justify-start overflow-hidden" aria-label="Switch workspace">
+          <DropdownMenuTrigger render={<Button variant="ghost" className="min-w-0 flex-1 justify-start overflow-hidden" aria-label="Switch workspace">
             <WorkspaceIcon seed={props.selectedWorkspaceId} />
             <span className="truncate">{current ? workspaceLabel(current.workspace) : "Workspace"}</span>
             <ChevronRight className="ml-auto size-4 shrink-0" />
@@ -636,31 +686,86 @@ function MinimalWorkspaceSidebar(props: AppSidebarProps) {
             {props.workspaceSessionGroups.map(({ workspace }) => <DropdownMenuItem key={workspace.id} onClick={() => { void props.onSelectWorkspace(workspace.id); close(); }}>
               {workspaceLabel(workspace)}
             </DropdownMenuItem>)}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => { props.onOpenCreateWorkspace(); close(); }}>Workspace setup</DropdownMenuItem>
+            {shellConfig.addWorkspace ? <>
+              <DropdownMenuSeparator />
+              <WorkspaceSetupMenuItems sidebar={props} onSelect={close} />
+            </> : null}
           </DropdownMenuContent>
         </DropdownMenu>
+        {current ? <WorkspaceActionsMenu
+          workspace={current.workspace}
+          isConnectionActionBusy={props.connectingWorkspaceId === current.workspace.id || connectionState?.status === "connecting"}
+          canRecover={Boolean(props.onRecoverWorkspace) && isRemoteConnectionWorkspace(current.workspace) && connectionState?.status === "error"}
+          className="shrink-0"
+          reorder={props.onReorderWorkspaces && props.workspaceSessionGroups.length > 1 ? {
+            canMoveUp: currentIndex > 0,
+            canMoveDown: currentIndex < props.workspaceSessionGroups.length - 1,
+            onMove: moveWorkspace,
+          } : undefined}
+        /> : null}
+        </div>
         <Button variant="outline" className="my-3 justify-start" disabled={props.newTaskDisabled} onClick={() => { props.onCreateTaskInWorkspace(props.selectedWorkspaceId); close(); }}>
           <Plus className="size-4" /> New chat
         </Button>
         <div onClick={close}>{props.deskNavigation}</div>
         <div className="mt-5 min-h-0 flex-1 overflow-y-auto">
           <h2 className="mb-2 px-2 text-xs font-medium text-dls-secondary">Recent chats</h2>
-          <SidebarMenu>
-            {(current?.sessions ?? []).filter((session) => !session.parentID).map((session) => <SidebarMenuItem key={session.id} className="group/session flex items-center">
-              <SidebarMenuButton isActive={session.id === props.selectedSessionId} onClick={() => { props.onOpenSession(props.selectedWorkspaceId, session.id); close(); }}>
-                <span className="truncate">{getDisplaySessionTitle(session.title)}</span>
-              </SidebarMenuButton>
-              <SessionActions sessionId={session.id} className="shrink-0" />
-            </SidebarMenuItem>)}
-          </SidebarMenu>
-          {!current?.sessions.length ? <p className="px-2 text-xs text-dls-secondary">Your conversations will appear here.</p> : null}
+          {current ? <WorkspaceSidebarGroup
+            className="p-0"
+            group={current}
+            showInitialLoading={props.showInitialLoading}
+            previewCount={props.previewCount}
+            showMoreSessions={props.showMoreSessions}
+            sessionListOnly
+          /> : <p className="px-2 text-xs text-dls-secondary">Your conversations will appear here.</p>}
         </div>
         <Button variant="ghost" className="mt-3 justify-start" onClick={() => { props.onOpenSettings?.(); close(); }}>
           <Settings className="size-4" /> Settings
         </Button>
       </div>
+      <SidebarRail
+        aria-label={props.onStartResize ? t("session.resize_workspace_column") : undefined}
+        title={props.onStartResize ? t("session.resize_workspace_column") : undefined}
+        onClick={props.onStartResize ? (event) => event.preventDefault() : undefined}
+        onPointerDown={props.onStartResize}
+      />
     </Sidebar>
+  );
+}
+
+function WorkspaceSetupMenuItems(props: {
+  sidebar: AppSidebarProps;
+  onSelect?: () => void;
+}) {
+  const run = (action: () => void) => () => {
+    action();
+    props.onSelect?.();
+  };
+
+  if (!isDesktopRuntime()) {
+    return (
+      <DropdownMenuItem onClick={run(props.sidebar.onOpenCreateWorkspace)}>
+        <FolderOpen className="size-4" />
+        Local workspaces…
+      </DropdownMenuItem>
+    );
+  }
+
+  return (
+    <>
+      <DropdownMenuItem onClick={run(props.sidebar.onOpenLocalWorkspace)}>
+        <FolderOpen className="size-4" />
+        Open local workspace…
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={run(props.sidebar.onOpenNewLocalWorkspace)}>
+        <Plus className="size-4" />
+        New local workspace…
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem onClick={run(props.sidebar.onOpenCreateWorkspace)}>
+        Other workspace options…
+      </DropdownMenuItem>
+    </>
   );
 }
 
@@ -714,7 +819,7 @@ type WorkspaceHeaderProps = React.ComponentProps<typeof SidebarMenuButton> & {
   statusLabel: string;
   isError: boolean;
   isLoading: boolean;
-  onTitlePointerDown: React.PointerEventHandler<HTMLDivElement>;
+  onTitlePointerDown?: React.PointerEventHandler<HTMLDivElement>;
 };
 
 function WorkspaceHeader({
@@ -775,7 +880,8 @@ type WorkspaceSidebarGroupProps = {
   showInitialLoading?: boolean;
   previewCount: number;
   showMoreSessions: (workspaceId: string, totalRoots: number) => void;
-  onWorkspaceTitlePointerDown: React.PointerEventHandler<HTMLDivElement>;
+  onWorkspaceTitlePointerDown?: React.PointerEventHandler<HTMLDivElement>;
+  sessionListOnly?: boolean;
 };
 
 function WorkspaceSidebarGroup({
@@ -785,6 +891,7 @@ function WorkspaceSidebarGroup({
   previewCount,
   showMoreSessions,
   onWorkspaceTitlePointerDown,
+  sessionListOnly = false,
 }: WorkspaceSidebarGroupProps) {
   const ctx = useSidebarContext();
   const workspace = group.workspace;
@@ -850,11 +957,11 @@ function WorkspaceSidebarGroup({
         <SidebarMenu>
           <Collapsible
             render={<SidebarMenuItem />}
-            open={isExpanded}
+            open={sessionListOnly || isExpanded}
             onOpenChange={() => ctx.toggleWorkspaceExpanded(workspace.id)}
             className="group/collapsible"
           >
-            <div className="group/workspace-header relative max-md:hidden">
+            {!sessionListOnly ? <div className="group/workspace-header relative max-md:hidden">
               <WorkspaceHeader
                 workspace={workspace}
                 statusLabel={statusLabel}
@@ -896,10 +1003,10 @@ function WorkspaceSidebarGroup({
               >
                 <ChevronRight className={cn("size-4 transition-transform duration-200 text-muted-foreground group-hover/expand-collapse-button:text-foreground", isExpanded && "rotate-90")} />
               </Button>
-            </div>
+            </div> : null}
 
             <CollapsibleContent className="pt-px">
-              <SidebarMenuSub>
+              <SidebarMenuSub className={sessionListOnly ? "mx-0 border-0 px-0" : undefined}>
                 {showRemoteConnectionIssue ? (
                   <RemoteConnectionIssueCard
                     message={connectionIssueMessage}
@@ -933,6 +1040,7 @@ function WorkspaceSidebarGroup({
                         tree={tree}
                         workspaceId={workspace.id}
                         forcedExpandedSessionIds={forcedExpandedSessionIds}
+                        actionsVisible={sessionListOnly}
                       />
                     ))}
                     {rootSessions.length > previewCount ? (
@@ -986,9 +1094,10 @@ type SessionMenuItemProps = {
   tree: SessionTreeState;
   workspaceId: string;
   forcedExpandedSessionIds: Set<string>;
+  actionsVisible?: boolean;
 };
 
-function SessionMenuItem({ session, sessionIndex, tree, workspaceId, forcedExpandedSessionIds, depth }: SessionMenuItemProps) {
+function SessionMenuItem({ session, sessionIndex, tree, workspaceId, forcedExpandedSessionIds, depth, actionsVisible = false }: SessionMenuItemProps) {
   const ctx = useSidebarContext();
   const { setOpenMobile } = useSidebar();
   const isSelected = ctx.selectedSessionId === session.id;
@@ -1018,11 +1127,11 @@ function SessionMenuItem({ session, sessionIndex, tree, workspaceId, forcedExpan
   if (hasChildren) {
     return (
       <Collapsible
+        render={<SidebarMenuSubItem />}
         open={isExpanded}
         onOpenChange={() => ctx.toggleSessionExpanded(session.id)}
         className="group/session-collapsible"
       >
-        <SidebarMenuSubItem>
           <SessionContextMenu sessionId={session.id}>
             <CollapsibleTrigger
               render={
@@ -1037,7 +1146,7 @@ function SessionMenuItem({ session, sessionIndex, tree, workspaceId, forcedExpan
                 >
                   <SessionStatusIndicator status={sessionActivityStatus} isStreaming={isSessionStreaming} isActive={isSessionActive} />
                   <span
-                    className="min-w-0 flex-1 truncate transition-[padding] duration-75 group-hover/menu-sub-item:pe-12 group-has-data-popup-open/menu-sub-item:pe-12 pe-4"
+                    className={cn("min-w-0 flex-1 truncate transition-[padding] duration-75 group-hover/menu-sub-item:pe-12 group-has-data-popup-open/menu-sub-item:pe-12", actionsVisible ? "pe-12" : "pe-4")}
                     title={displayTitle}
                   >
                     {displayTitle}
@@ -1051,9 +1160,8 @@ function SessionMenuItem({ session, sessionIndex, tree, workspaceId, forcedExpan
           </SessionContextMenu>
           <SessionActions
             sessionId={session.id}
-            className="absolute right-9 top-1/2 -translate-y-1/2 opacity-0 group-hover/menu-sub-item:opacity-100 data-popup-open:opacity-100"
+            className={cn("absolute right-9 top-1/2 -translate-y-1/2", !actionsVisible && "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100")}
           />
-        </SidebarMenuSubItem>
       </Collapsible>
     );
   }
@@ -1067,7 +1175,7 @@ function SessionMenuItem({ session, sessionIndex, tree, workspaceId, forcedExpan
           onClick={openSession}
           onPointerEnter={prefetchSession}
           onFocus={prefetchSession}
-          className={cn("transition-[padding] duration-75 group-hover/menu-sub-item:pe-8 group-has-data-popup-open/menu-sub-item:pe-8", depth > 0 && "ps-13")}
+          className={cn("transition-[padding] duration-75 group-hover/menu-sub-item:pe-8 group-has-data-popup-open/menu-sub-item:pe-8", actionsVisible && "pe-8", depth > 0 && "ps-13")}
         >
           <SessionStatusIndicator status={sessionActivityStatus} isStreaming={isSessionStreaming} isActive={isSessionActive} />
           <span className="truncate" title={displayTitle}>{displayTitle}</span>
@@ -1075,7 +1183,7 @@ function SessionMenuItem({ session, sessionIndex, tree, workspaceId, forcedExpan
       </SessionContextMenu>
       <SessionActions
         sessionId={session.id}
-        className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover/menu-sub-item:opacity-100 data-popup-open:opacity-100"
+        className={cn("absolute right-2 top-1/2 -translate-y-1/2", !actionsVisible && "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100")}
       />
     </SidebarMenuSubItem>
   );

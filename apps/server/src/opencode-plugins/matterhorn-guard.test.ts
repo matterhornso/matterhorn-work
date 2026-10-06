@@ -1,5 +1,6 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import { MatterhornGuard } from "./matterhorn-guard.js";
+import { compactionPromptPart } from "../opencode-compaction-request.js";
 
 const original = {
   mode: process.env.MATTERHORN_GUARDED_RUNTIME_MODE,
@@ -65,6 +66,78 @@ afterAll(() => {
 });
 
 describe("matterhorn-guard OpenCode plugin", () => {
+  test.each(["enforce", "off"])("rejects runtimes without exact hook identity in %s mode", async mode => {
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = mode;
+    const plugin = await MatterhornGuard({ directory: "/fixture" });
+    const output = { messages: [{ info: { id: "msg_history", sessionID: "ses_identity", role: "user" },
+      parts: [{ type: "text", text: "Public synthetic history" }] }] };
+    for (const input of [{}, { sessionID: "ses_identity" }, { messageID: "msg_parent" },
+      { sessionID: "ses_other", messageID: "msg_parent" }, { sessionID: "ses_identity", messageID: "" }]) {
+      await expect(plugin["experimental.chat.messages.transform"](input, structuredClone(output)))
+        .rejects.toThrow("cannot verify this request's identity");
+    }
+    await expect(plugin["experimental.session.compacting"]({ sessionID: "ses_identity" }, { context: [] }))
+      .rejects.toThrow("cannot verify this summary request");
+    expect(requests).toHaveLength(0);
+  });
+
+  test.each(["enforce", "off"])("native compaction conversion requires an exact acknowledged claim in %s mode", async mode => {
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = mode;
+    const plugin = await MatterhornGuard({ directory: "/fixture" });
+    const input = { sessionID: "ses_claim", messageID: "msg_claim" };
+    type Output = Parameters<typeof plugin["chat.message"]>[1];
+    const output = (): Output => ({ message: { id: input.messageID, sessionID: input.sessionID,
+      model: { providerID: "ollama", modelID: "fixture" } },
+      parts: [{ ...compactionPromptPart("run_claim"), id: "prt_claim", messageID: input.messageID, sessionID: input.sessionID }] });
+    for (const acknowledgement of ["rejected", "wrong-run", "wrong-message", "accepted"]) {
+      globalThis.fetch = Object.assign(async (url: string | URL | Request, init?: RequestInit) => {
+        expect(String(url)).toEndWith("/internal/agent-runs/claim-compaction");
+        expect(JSON.parse(String(init?.body))).toEqual({ workspaceDirectory: "/fixture", runId: "run_claim", sessionId: "ses_claim",
+          messageId: "msg_claim", providerId: "ollama", modelId: "fixture" });
+        if (acknowledgement === "rejected") return Response.json({ message: "Request no longer active" }, { status: 409 });
+        return Response.json({ runId: acknowledgement === "wrong-run" ? "run_other" : "run_claim",
+          messageId: acknowledgement === "wrong-message" ? "msg_other" : "msg_claim" });
+      }, { preconnect: original.fetch.preconnect });
+      const value = output();
+      const parts = value.parts;
+      const conversion = plugin["chat.message"](input, value);
+      if (acknowledgement !== "accepted") {
+        await expect(conversion).rejects.toThrow();
+        expect(value).toEqual(output());
+      } else {
+        await conversion;
+        expect(value.parts).toBe(parts);
+        expect(parts).toEqual([{ id: "prt_claim", sessionID: "ses_claim", messageID: "msg_claim", type: "compaction", auto: false }]);
+      }
+    }
+    globalThis.fetch = mockFetch;
+    await expect(plugin["chat.message"]({ ...input, messageID: "msg_other" }, output())).rejects.toThrow("could not validate");
+    const mutations: Array<(value: Output) => void> = [
+      value => { value.parts.push({ ...value.parts[0] }); },
+      value => { value.parts[0].text = "Send this as ordinary text"; },
+      value => { value.parts[0].synthetic = false; },
+      value => { value.parts[0].ignored = false; },
+      value => { value.parts[0].sessionID = "ses_other"; },
+      value => { value.parts[0].messageID = "msg_other"; },
+      value => { value.parts[0].id = ""; },
+      value => { value.message.id = "msg_other"; },
+      value => { value.message.sessionID = "ses_other"; },
+    ];
+    for (const mutate of mutations) {
+      const value = output();
+      mutate(value);
+      const before = structuredClone(value);
+      await expect(plugin["chat.message"](input, value)).rejects.toThrow("could not validate");
+      expect(value).toEqual(before);
+    }
+    expect(requests).toHaveLength(0);
+    const ordinary = output();
+    ordinary.parts[0].metadata = {};
+    await plugin["chat.message"](input, ordinary);
+    expect(requests).toHaveLength(0);
+    expect(ordinary.parts[0].type).toBe("text");
+  });
+
   test.each(["enforce", "off"])("retains every usage step until settlement acknowledgement in %s mode", async (mode) => {
     process.env.MATTERHORN_GUARDED_RUNTIME_MODE = mode;
     const completions: unknown[] = [];
@@ -169,12 +242,31 @@ describe("matterhorn-guard OpenCode plugin", () => {
     });
   });
 
+  test.each(["missing", "expired"])("blocks system release with %s message validation before transport", async state => {
+    const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
+    const output = { system: ["Unreviewed runtime context"] };
+    try {
+      if (state === "expired") {
+        await plugin["experimental.chat.messages.transform"]({ sessionID: "ses_validation", messageID: "msg_validation" }, { messages: [{
+          info: { role: "user", sessionID: "ses_validation" }, parts: [{ type: "text", text: "Read public data" }],
+        }] });
+        setSystemTime(Date.now() + 120_001);
+      }
+      const count = requests.length;
+      await expect(plugin["experimental.chat.system.transform"]({
+        sessionID: "ses_validation", messageID: "msg_validation", model: { providerID: "cudos", id: "asi1-mini" },
+      }, output)).rejects.toThrow("validation is missing or expired");
+      expect(requests).toHaveLength(count);
+      expect(output.system).toEqual(["Unreviewed runtime context"]);
+    } finally { setSystemTime(); }
+  });
+
   test("revalidates an unchanged run-bound snapshot before a provider retry", async () => {
     const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
     const messages = [{ info: { id: "msg_retry", role: "user", sessionID: "ses_retry" },
       parts: [{ type: "text", text: "Read public data" }] }];
-    await plugin["experimental.chat.messages.transform"]({}, { messages });
-    const input = { sessionID: "ses_retry", model: { providerID: "cudos", id: "asi1-mini" } };
+    const input = { sessionID: "ses_retry", messageID: "msg_retry", model: { providerID: "cudos", id: "asi1-mini" } };
+    await plugin["experimental.chat.messages.transform"](input, { messages });
     await plugin["experimental.chat.system.transform"](input, { system: [] });
     await plugin["experimental.chat.system.transform"](input, { system: [] });
     const validations = requests.filter(request => request.url.endsWith("/internal/agent-runs/provider-messages"));
@@ -184,14 +276,33 @@ describe("matterhorn-guard OpenCode plugin", () => {
     });
     expect(requests.at(-2)?.url).toEndWith("/internal/agent-runs/provider-messages");
     expect(requests.at(-1)?.url).toEndWith("/internal/agent-runs/provider-system");
+    for (const request of requests.filter(request => request.url.endsWith("/internal/agent-runs/provider-system"))) {
+      expect(JSON.parse(String(request.init?.body)).expectedRunId).toBe("run_plugin_1");
+    }
     messages[0]!.parts[0]!.text = "late unreviewed mutation";
     await expect(plugin["experimental.chat.system.transform"](input, { system: [] })).rejects.toThrow("messages changed");
     messages[0]!.parts[0]!.text = "Read public data";
-    await plugin["experimental.chat.messages.transform"]({}, { messages });
+    await plugin["experimental.chat.messages.transform"](input, { messages });
     await plugin["experimental.chat.system.transform"](input, { system: [] });
     globalThis.fetch = Object.assign(async () => Response.json({ message: "Run replaced" }, { status: 409 }),
       { preconnect: original.fetch.preconnect });
     await expect(plugin["experimental.chat.system.transform"](input, { system: [] })).rejects.toThrow("Run replaced");
+  });
+
+  test("a compaction retry retains its original request purpose", async () => {
+    const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
+    const input = { sessionID: "ses_compaction_retry", messageID: "msg_compaction_retry", model: { providerID: "cudos", id: "asi1-mini" } };
+    await plugin["experimental.session.compacting"](input, { context: [] });
+    await plugin["experimental.chat.messages.transform"](input, { messages: [{
+      info: { role: "user", sessionID: "ses_compaction_retry" }, parts: [{ type: "text", text: "Read public data" }],
+    }] });
+    await plugin["experimental.chat.system.transform"](input, { system: [] });
+    await plugin["experimental.chat.system.transform"](input, { system: [] });
+    const releases = requests.filter(request => request.url.endsWith("/internal/agent-runs/provider-system"));
+    expect(releases).toHaveLength(2);
+    for (const request of releases) {
+      expect(JSON.parse(String(request.init?.body))).toMatchObject({ purpose: "compaction", expectedRunId: "run_plugin_1" });
+    }
   });
 
   test("reports final usage and receipt completion even with capability mode off", async () => {
@@ -275,7 +386,7 @@ describe("matterhorn-guard OpenCode plugin", () => {
     }];
     const output = { messages: structuredClone(messages) };
 
-    await plugin["experimental.chat.messages.transform"]({}, output);
+    await plugin["experimental.chat.messages.transform"]({ sessionID: "ses_plugin", messageID: "msg_user_plugin_1" }, output);
 
     expect(output.messages).toEqual(messages);
     const request = requests.at(-1);
@@ -283,6 +394,7 @@ describe("matterhorn-guard OpenCode plugin", () => {
     expect(JSON.parse(String(request?.init?.body))).toEqual({
       workspaceDirectory: "/workspace/guarded",
       sessionId: "ses_plugin",
+      messageId: "msg_user_plugin_1",
       messages,
     });
     expect(String(request?.init?.body)).not.toContain("runtime-only-secret");
@@ -306,9 +418,13 @@ describe("matterhorn-guard OpenCode plugin", () => {
 
   test("replaces late OpenCode system context with the exact authorized provider context", async () => {
     const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
+    await plugin["experimental.chat.messages.transform"]({ sessionID: "ses_plugin", messageID: "msg_plugin" }, { messages: [{
+      info: { role: "user", sessionID: "ses_plugin" }, parts: [{ type: "text", text: "Read public data" }],
+    }] });
     const output = { system: ["OpenCode environment", "unreviewed workspace instruction"] };
     await plugin["experimental.chat.system.transform"]({
       sessionID: "ses_plugin",
+      messageID: "msg_plugin",
       model: { providerID: "cudos", id: "asi1-mini" },
     }, output);
 
@@ -321,6 +437,7 @@ describe("matterhorn-guard OpenCode plugin", () => {
       providerId: "cudos",
       modelId: "asi1-mini",
       purpose: "message",
+      expectedRunId: "run_plugin_1",
     });
     expect(String(request?.init?.body)).not.toContain("OpenCode environment");
     expect(String(request?.init?.body)).not.toContain("unreviewed workspace instruction");
@@ -329,22 +446,30 @@ describe("matterhorn-guard OpenCode plugin", () => {
 
   test("fails closed outside capability enforcement when the provider binding is unavailable", async () => {
     process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "off";
+    const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
+    await plugin["experimental.chat.messages.transform"]({ sessionID: "ses_plugin", messageID: "msg_plugin" }, { messages: [{
+      info: { role: "user", sessionID: "ses_plugin" }, parts: [{ type: "text", text: "Read public data" }],
+    }] });
     const unavailableFetch: typeof fetch = Object.assign(
       async () => Response.json({ code: "agent_provider_system_not_bound" }, { status: 409 }),
       { preconnect: globalThis.fetch.preconnect },
     );
     globalThis.fetch = unavailableFetch;
-    const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
     const output = { system: ["unreviewed"] };
 
     await expect(plugin["experimental.chat.system.transform"]({
       sessionID: "ses_plugin",
+      messageID: "msg_plugin",
       model: { providerID: "cudos", id: "asi1-mini" },
     }, output)).rejects.toThrow("Matterhorn denied this guarded runtime action.");
     expect(output.system).toEqual(["unreviewed"]);
   });
 
   test("rejects a provider-system response whose content does not match its bound hash", async () => {
+    const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
+    await plugin["experimental.chat.messages.transform"]({ sessionID: "ses_plugin", messageID: "msg_plugin" }, { messages: [{
+      info: { role: "user", sessionID: "ses_plugin" }, parts: [{ type: "text", text: "Read public data" }],
+    }] });
     const tamperedFetch: typeof fetch = Object.assign(
       async () => Response.json({
         runId: "run_plugin_1",
@@ -354,10 +479,10 @@ describe("matterhorn-guard OpenCode plugin", () => {
       { preconnect: globalThis.fetch.preconnect },
     );
     globalThis.fetch = tamperedFetch;
-    const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
 
     await expect(plugin["experimental.chat.system.transform"]({
       sessionID: "ses_plugin",
+      messageID: "msg_plugin",
       model: { providerID: "cudos", id: "asi1-mini" },
     }, { system: ["late unreviewed context"] })).rejects.toThrow("hash did not match");
   });
@@ -365,12 +490,16 @@ describe("matterhorn-guard OpenCode plugin", () => {
   test("adds crypto-specific safe compaction requirements", async () => {
     const plugin = await MatterhornGuard({ directory: "/workspace/guarded" });
     const output = { context: [] as string[] };
-    await plugin["experimental.session.compacting"]({ sessionID: "ses_plugin" }, output);
+    await plugin["experimental.session.compacting"]({ sessionID: "ses_plugin", messageID: "msg_plugin" }, output);
     expect(output.context.join("\n")).toContain("Do not retain or reconstruct secrets");
     expect(output.context.join("\n")).toContain("intent hash");
+    await plugin["experimental.chat.messages.transform"]({ sessionID: "ses_plugin", messageID: "msg_plugin" }, { messages: [{
+      info: { role: "user", sessionID: "ses_plugin" }, parts: [{ type: "text", text: "Read public data" }],
+    }] });
     const systemOutput = { system: ["late compaction context"] };
     await plugin["experimental.chat.system.transform"]({
       sessionID: "ses_plugin",
+      messageID: "msg_plugin",
       model: { providerID: "cudos", id: "asi1-mini" },
     }, systemOutput);
     expect(JSON.parse(String(requests.at(-1)?.init?.body))).toMatchObject({ purpose: "compaction" });

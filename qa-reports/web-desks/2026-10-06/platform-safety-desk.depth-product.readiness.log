@@ -1,0 +1,106 @@
+Matterhorn platform safety gate: 2 stages
+[prepare] Workspace artifacts
+[1/2] Desk depth
+Matterhorn Desks customer-ready crypto smoke: READY
+- PASS crypto.unified_chat: Unified crypto chat router
+- PASS crypto.unified_chat_routes: Unified crypto chat route contract
+- PASS crypto.direct_prompt_safety: Direct venue credential prompt safety
+- PASS crypto.shared_card_contract: Unified crypto shared-card contract
+- PASS crypto.cli: Unified crypto CLI fallback smoke
+- PASS crypto.agent_operator_loop: Crypto agent operator loop
+- PASS crypto.hermes_customer_qa: Hermes crypto customer QA handoff
+- PASS crypto.readiness_api: Unified crypto readiness API contract
+- PASS crypto.customer_readiness_ui: Customer readiness UI contract
+- PASS crypto.customer_onboarding_ui: Matterhorn customer onboarding UI contract
+- PASS bittensor.beta_release_gate: Bittensor beta release gate contract
+- PASS bittensor.beta_customer_packet: Bittensor beta release candidate packet
+- PASS market.safety_contract: Market shared safety contract
+- PASS market.execution_safety: Market execution safety gate
+- PASS market.execution_readiness_api: Market execution-readiness API and chat contract
+- PASS market.execution_readiness: Market execution-readiness security gate
+- PASS market.submit_sign_phase0_contract: Market submit/sign Phase 0 contract
+- PASS market.sign_request_phase1: Market sign-request Phase 1 gate
+- PASS market.artifact_validation_phase2: Market artifact validation Phase 2 gate
+- PASS market.sign_artifact_routes: Market sign-request and artifact-validation route contract
+- PASS market.artifact_reconciliation: Market artifact reconciliation evidence
+- PASS market.execution_chain_gate: Market execution chain aggregate gate
+- PASS market.official_sdk_validation: Market official SDK validation track
+- PASS market.official_sdk_capture: Market official SDK validation capture
+- PASS market.official_sdk_doctor: Market official SDK validation doctor
+- PASS market.official_sdk_normalize: Market official SDK artifact normalizer
+- PASS market.official_sdk_operator_loop: Market official SDK operator loop
+- PASS market.official_sdk_validate_public: Market official SDK public validation
+- PASS market.official_sdk_operator_artifacts: Market official SDK operator artifact examples
+- PASS market.official_sdk_manifest_check: Market official SDK run manifest checker
+- PASS market.official_sdk_fixtures: Market official SDK validation fixtures
+- PASS market.customer_evidence_bundle: Market customer evidence bundle
+- PASS market.customer_evidence_verify: Market customer evidence verifier
+- PASS crypto.customer_packet: Crypto customer packet manifest
+- PASS market.receipt_qa: Market public receipt QA
+- PASS market.receipt_evidence: Market receipt evidence docs/checks
+- PASS hyperliquid.readiness: Hyperliquid readiness gate
+- PASS polymarket.readiness: Polymarket readiness gate
+- PASS hyperliquid.read_preview: Hyperliquid read-preview self-test
+- PASS polymarket.read_preview: Polymarket read-preview self-test
+- PASS hyperliquid.cli: Hyperliquid CLI fallback smoke
+- PASS polymarket.cli: Polymarket CLI fallback smoke
+- PASS market.watch_workflows: Market watch and alert workflows
+- PASS market.watch_action_routes: Market watch alert action route contract
+- PASS market.live_readonly_self_test: Market live read-only smoke self-test
+- PASS bittensor.customer_readiness: Bittensor customer readiness gate
+- PASS bittensor.receipt: Bittensor receipt check
+- PASS bittensor.watch_autopilot: Bittensor watch autopilot
+- PASS bittensor.watch_scheduler: Bittensor watch autopilot scheduler
+- PASS bittensor.signing_handoff: Bittensor signing handoff check
+- PASS bittensor.evidence_bundle: Bittensor customer evidence bundle
+- PASS bittensor.evidence_verify: Bittensor customer evidence verifier
+Matterhorn crypto tool authority gate passed.
+61 pass
+0 fail
+402 expect() calls
+Ran 61 tests across 2 files. [186.00ms]
+26 pass
+0 fail
+266 expect() calls
+Ran 26 tests across 3 files. [2.67s]
+[2/2] Product readiness
+Matterhorn production CORS readiness: PASS
+- PASS Server default: Server config falls back to loopback CORS when no CLI, env, or file CORS origin is provided.
+- PASS Config regression test: The server config regression suite locks the loopback default.
+- PASS Local dev launcher: The local Matterhorn web stack passes --cors loopback instead of wildcard CORS.
+- PASS Generated media smoke launcher: The generated-media browser smoke stack passes --cors loopback instead of wildcard CORS.
+- PASS Headless web launcher: The dynamic-port web stack passes --cors loopback instead of relying on a fixed development origin.
+- PASS Environment CORS: No active Matterhorn CORS environment variable is set to wildcard.
+7 pass
+0 fail
+29 expect() calls
+Ran 7 tests across 2 files. [172.00ms]
+89 pass
+0 fail
+603 expect() calls
+Ran 89 tests across 10 files. [82.16s]
+6 pass
+0 fail
+25 expect() calls
+Ran 6 tests across 1 file. [645.00ms]
+896 pass
+0 fail
+6455 expect() calls
+Ran 896 tests across 7 files. [177.16s]
+7 pass
+0 fail
+60 expect() calls
+Ran 7 tests across 2 files. [473.00ms]
+8 pass
+0 fail
+30 expect() calls
+Ran 8 tests across 2 files. [75.00ms]
+8 pass
+0 fail
+27 expect() calls
+Ran 8 tests across 2 files. [55.00ms]
+57 pass
+0 fail
+878 expect() calls
+Ran 57 tests across 3 files. [39.62s]
+Matterhorn platform safety gate passed.

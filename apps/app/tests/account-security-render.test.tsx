@@ -5,6 +5,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createDenClient } from "../src/app/lib/den";
 import { AccountSecuritySection } from "../src/react-app/domains/settings/cloud/account-security-section";
 import { accountSecurityQueryKey } from "../src/react-app/domains/settings/cloud/account-security-scope";
+import { SettingsNotice } from "../src/react-app/domains/settings/settings-section";
+
+test("account action notices expose opt-in announcement semantics", () => {
+  expect(renderToStaticMarkup(<SettingsNotice role="alert" tone="error">Synthetic error</SettingsNotice>)).toContain('role="alert"');
+  expect(renderToStaticMarkup(<SettingsNotice role="status">Download started.</SettingsNotice>)).toContain('role="status"');
+  expect(renderToStaticMarkup(<SettingsNotice>Static guidance</SettingsNotice>)).not.toContain('role=');
+});
 
 const client = createDenClient({ baseUrl: "http://localhost:1" });
 const user = { id: "account-b", email: "b@example.invalid", name: "Fixture B" };

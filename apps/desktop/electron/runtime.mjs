@@ -884,6 +884,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
     if (!version) {
       throw new Error("constants.json is missing opencodeVersion");
     }
+    if (version.includes("-matterhorn.")) return null;
     return `curl -fsSL https://opencode.ai/install | bash -s -- --version ${version} --no-modify-path`;
   }
 
@@ -1487,6 +1488,10 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
 
     const installDir = path.join(app.getPath("home"), ".opencode", "bin");
     const command = await pinnedOpencodeInstallCommand();
+    if (!command) {
+      return { ok: false, status: -1, stdout: "",
+        stderr: "Guided installation is blocked: the maintained Matterhorn runtime has no published desktop artifacts yet. Do not install stock OpenCode as a substitute." };
+    }
     const result = await runShellCommand("bash", ["-lc", command], {
       env: { ...(await buildChildEnv()), OPENCODE_INSTALL_DIR: installDir },
       timeoutMs: 180_000,

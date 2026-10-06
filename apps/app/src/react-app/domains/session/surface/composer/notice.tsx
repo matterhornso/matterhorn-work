@@ -27,7 +27,7 @@ export function ReactComposerNotice(props: { notice: ReactComposerNotice | null 
   const ToneIcon = tone === "success" ? Check : tone === "warning" ? AlertTriangle : tone === "error" ? CircleX : Info;
 
   return (
-    <div className="absolute bottom-full right-0 z-30 mb-3 w-[min(26rem,calc(100vw-2rem))] max-w-full overflow-hidden rounded-lg bg-dls-surface px-4 py-3 shadow-lg ring-1 ring-dls-border/35">
+    <div role={tone === "warning" || tone === "error" ? "alert" : "status"} className="absolute bottom-full right-0 z-30 mb-3 w-[min(26rem,calc(100vw-2rem))] max-w-full overflow-hidden break-words rounded-lg bg-dls-surface px-4 py-3 shadow-lg ring-1 ring-dls-border/35">
       <div className="flex items-start gap-3">
         <div className={cn("mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md", toneClass)}>
           <ToneIcon className="size-4" aria-hidden="true" />

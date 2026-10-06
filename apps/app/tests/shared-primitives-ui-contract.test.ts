@@ -1158,7 +1158,7 @@ describe("Shared primitives UI contract", () => {
     expect(accountView).toContain("hover:bg-dls-surface-muted/[0.46]");
     expect(accountView).toContain("bg-dls-surface-muted/[0.18] px-2.5 py-1.5");
     expect(accountView).toContain("{cloudAvailable ? <section");
-    expect(accountView).toContain("{cloudAvailable ? <SettingsSection>");
+    expect(accountView).toContain("{isSignedIn || cloudAvailable ? <SettingsSection>");
     expect(
       readAppSource("domains/profile/profile-capability-status.tsx"),
     ).toContain("bg-dls-surface-muted/[0.20]");

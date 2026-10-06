@@ -1,4 +1,7 @@
 import { getPortfolio } from "./tools/portfolio-tracker.js";
+import { ServerResourceScope } from "./server-resource-scope.js";
+import { compactionPromptPart } from "./opencode-compaction-request.js";
+import { CHAT_ATTACHMENT_MAX_BYTES } from "@matterhorn-work/types/chat-attachments";
 import { resolveConfinedWorkspacePath } from "./workspace-path-boundary.js";
 import { hostBackupFresh } from "./host-backup-readiness.js";
 import { parseAnswerContinuation, assertAnswerContinuationTarget, answerContinuationSystemContext } from "./answer-continuation.js";
@@ -496,6 +499,7 @@ import {
   createInMemoryRequestRateLimitStore,
 } from "./request-rate-limit-store.js";
 import { ApprovalService } from "./approvals.js";
+import { SessionPreparationRegistry } from "./session-preparation.js";
 import { addPlugin, listPlugins, normalizePluginSpec, removePlugin } from "./plugins.js";
 import { sanitizePortableOpencodeConfig } from "./portable-opencode.js";
 import { addMcp, listMcp, removeMcp, setMcpEnabled } from "./mcp.js";
@@ -503,7 +507,7 @@ import { deleteSkill, listSkills, upsertSkill } from "./skills.js";
 import { installHubSkill, listHubSkills } from "./skill-hub.js";
 import { deleteCommand, listCommands, repairCommands, upsertCommand } from "./commands.js";
 import { ApiError, formatError } from "./errors.js";
-import { drainMatterhornEmailOutbox } from "./email-outbox.js";
+import { drainMatterhornEmailOutbox, type MatterhornEmailDeliver } from "./email-outbox.js";
 import { evaluateMatterhornPublicLaunchReadiness } from "./public-launch-readiness.js";
 import {
   resolveMatterhornTurnstileConfig,
@@ -923,11 +927,12 @@ function readOpenAiClientSecret(payload: unknown): { clientSecret: string; expir
   return { clientSecret: value, expiresAt: null };
 }
 
-async function createOpenAiRealtimeVoiceSession(env: EnvService, input: unknown, stm?: StmCredentials) {
+async function createOpenAiRealtimeVoiceSession(request: Request, env: EnvService, input: unknown, stm?: StmCredentials) {
   const apiKey = await resolveVoiceCredential(env, stm).catch(error => {
     if (error instanceof StmError) throw new ApiError(409, error.code, "Voice secret storage needs attention. Reconnect or check the selected binding.");
     throw error;
   });
+  assertRequestAccessCurrent(request);
   if (!apiKey) {
     throw new ApiError(
       400,
@@ -937,7 +942,7 @@ async function createOpenAiRealtimeVoiceSession(env: EnvService, input: unknown,
   }
 
   const model = readStringField(input, "model") || OPENWORK_VOICE_REALTIME_MODEL;
-  const response = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
+  const response = await fetchFixedEndpoint("https://api.openai.com/v1/realtime/client_secrets", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -966,20 +971,21 @@ async function createOpenAiRealtimeVoiceSession(env: EnvService, input: unknown,
         tools: OPENWORK_VOICE_REALTIME_TOOLS,
       },
     }),
-  });
+  }, { code: "openai_realtime_redirect_blocked", message: "The voice provider redirected this request. Ask the workspace owner to check the service." });
+
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new ApiError(response.status, "openai_realtime_failed",
+      "Voice session setup failed. Check the provider configuration or try again later.");
+  }
 
   const text = await response.text();
+  assertRequestAccessCurrent(request);
   let payload: unknown = null;
   try {
     payload = text ? JSON.parse(text) : null;
   } catch {
     payload = null;
-  }
-
-  if (!response.ok) {
-    const errorPayload = isRecord(payload) && isRecord(payload.error) ? payload.error : null;
-    const message = typeof errorPayload?.message === "string" ? errorPayload.message : response.statusText;
-    throw new ApiError(response.status, "openai_realtime_failed", message || "Failed to create OpenAI Realtime session");
   }
 
   const { clientSecret, expiresAt } = readOpenAiClientSecret(payload);
@@ -1429,6 +1435,7 @@ type MatterhornSuiEvidenceAnchorPackageState = {
 };
 
 export type MatterhornServerDependencies = {
+  emailDeliver?: MatterhornEmailDeliver;
   /** Trusted transport injection for isolated acceptance tests, never request data. */
   jevTransport?: JevTransport;
   // Trusted local-shell injection only; never populated from request bodies or
@@ -1455,10 +1462,22 @@ export async function startServer(
   config: ServerConfig,
   dependencies: MatterhornServerDependencies = {},
 ): Promise<ServeResult> {
+  const resources = new ServerResourceScope();
+  try { return await initializeServer(config, dependencies, resources); }
+  catch (error) { return resources.fail(error); }
+}
+
+async function initializeServer(
+  config: ServerConfig,
+  dependencies: MatterhornServerDependencies,
+  resources: ServerResourceScope,
+): Promise<ServeResult> {
   const approvals = new ApprovalService(config.approval);
+  const sessionPreparations = new SessionPreparationRegistry(assertRequestAccessCurrent);
   const reloadEvents = new ReloadEventStore();
   const tokens = new TokenService(config);
   const authStore = new MatterhornAuthStore();
+  resources.onClose(() => authStore.close());
   const env = new EnvService();
   const logger = createServerLogger(config);
   const maintainAuthSecurityState = () => {
@@ -1477,6 +1496,7 @@ export async function startServer(
     }
   }, 24 * 60 * 60 * 1_000);
   authSecurityMaintenanceTimer.unref?.();
+  resources.onStop(() => clearInterval(authSecurityMaintenanceTimer));
   const createWatcherHandle = () => config.reloadWatchers === false
     ? {
       close: () => undefined,
@@ -1484,17 +1504,22 @@ export async function startServer(
     }
     : startReloadWatchers({ config, reloadEvents, logger });
   let watcherHandle = createWatcherHandle();
+  resources.onStop(() => watcherHandle.close());
   const refreshWorkspaceReloadBaseline = (workspaceId: string, reasons?: ReloadReason[]) =>
     watcherHandle.refreshWorkspace(workspaceId, reasons);
   reloadBaselineRefreshers.set(config, refreshWorkspaceReloadBaseline);
+  resources.onStop(() => reloadBaselineRefreshers.delete(config));
   const restartReloadWatchers = () => {
     watcherHandle.close();
     watcherHandle = createWatcherHandle();
   };
   const operationalMetrics = new OperationalMetrics();
   const modelUsageStore = new MatterhornModelUsageStore();
+  resources.onClose(() => modelUsageStore.close());
   const guardedRuntime = new MatterhornGuardedAgentRuntime();
+  resources.onClose(() => guardedRuntime.close());
   const recoveryErasureLedger = recoveryErasureLedgerFromEnv(process.env);
+  resources.onClose(() => recoveryErasureLedger?.close());
   if (recoveryErasureLedger) guardedRuntime.reconcileRecoveryErasures(recoveryErasureLedger);
   const evidenceKeyManager = dependencies.evidenceKeyManager === undefined
     ? awsKmsEvidenceKeyManagerFromEnv(process.env)
@@ -1514,6 +1539,7 @@ export async function startServer(
     ? evidenceKmsRotationDaysFromEnv(process.env)
     : null;
   const cryptoAppRuntime = createMatterhornCryptoAppRuntime(process.env, { guardedRuntime });
+  resources.onClose(() => cryptoAppRuntime.close());
   const coworkerRuntime = createMatterhornCoworkerRuntime(process.env, {
     onInvalidate: (input) => {
       guardedRuntime.invalidateCoworker(input);
@@ -1529,6 +1555,7 @@ export async function startServer(
           && connection.grantedNetworks.includes(input.network)),
     } : {}),
   });
+  resources.onClose(() => coworkerRuntime.close());
   coworkerRuntime.maintainAccessMetadata();
   cryptoAppRuntime.maintainConnectionSetupMetadata();
   cryptoAppRuntime.maintainDeveloperInviteMetadata();
@@ -1547,6 +1574,7 @@ export async function startServer(
     }, 60 * 60 * 1_000)
     : null;
   connectionSetupMaintenanceTimer?.unref?.();
+  resources.onStop(() => { if (connectionSetupMaintenanceTimer) clearInterval(connectionSetupMaintenanceTimer); });
   const accessMetadataMaintenanceTimer = coworkerRuntime.access || cryptoAppRuntime.developerPortal
     ? setInterval(() => {
       try {
@@ -1568,6 +1596,7 @@ export async function startServer(
     }, 24 * 60 * 60 * 1_000)
     : null;
   accessMetadataMaintenanceTimer?.unref?.();
+  resources.onStop(() => { if (accessMetadataMaintenanceTimer) clearInterval(accessMetadataMaintenanceTimer); });
   const cryptoCoworkerConfig = cryptoCoworkerFeatureConfig(process.env);
   const agentFileStore = cryptoCoworkerConfig.agentFilesMode === "encrypted"
     && coworkerRuntime.mode !== "off"
@@ -1698,10 +1727,12 @@ export async function startServer(
     return { checked: 0, sealed: 0, failed: 1 };
   });
   let coworkerEvidenceRetryTask = retryCoworkerEvidence();
+  resources.onDrain(() => coworkerEvidenceRetryTask);
   const coworkerEvidenceRetryTimer = cryptoEvidenceStore ? setInterval(() => {
     coworkerEvidenceRetryTask = coworkerEvidenceRetryTask.then(retryCoworkerEvidence, retryCoworkerEvidence);
   }, 60_000) : null;
   coworkerEvidenceRetryTimer?.unref?.();
+  resources.onStop(() => { if (coworkerEvidenceRetryTimer) clearInterval(coworkerEvidenceRetryTimer); });
   const coworkerWatchRunner = coworkerRuntime.coworkers
     && cryptoAppRuntime.mode === "enforce"
     && cryptoAppRuntime.ready
@@ -1722,20 +1753,30 @@ export async function startServer(
     return { claimed: 0, completed: 0, alerted: 0, failed: 1 };
   }) ?? Promise.resolve({ claimed: 0, completed: 0, alerted: 0, failed: 0 });
   let coworkerWatchTask = runCoworkerWatches();
+  resources.onDrain(() => coworkerWatchTask);
   const coworkerWatchTimer = coworkerWatchRunner ? setInterval(() => {
     coworkerWatchTask = runCoworkerWatches();
   }, 60_000) : null;
   coworkerWatchTimer?.unref?.();
-  const drainEmailOutbox = createEmailOutboxDrainer(authStore, logger);
+  resources.onStop(() => { if (coworkerWatchTimer) clearInterval(coworkerWatchTimer); });
+  const drainEmailOutbox = createEmailOutboxDrainer(authStore, logger, dependencies.emailDeliver);
   let emailOutboxTask = drainEmailOutbox();
+  resources.onDrain(async () => {
+    await emailOutboxTask;
+    // Routes also start deliveries directly. Join the drainer's active batch
+    // before closing auth storage, not only the last timer-triggered task.
+    await drainEmailOutbox();
+  });
   const emailOutboxTimer = setInterval(() => {
     emailOutboxTask = drainEmailOutbox();
   }, 30_000);
   emailOutboxTimer.unref?.();
+  resources.onStop(() => clearInterval(emailOutboxTimer));
   let receiptExpiryTask = purgeAllExpiredAgentRunReceipts(guardedRuntime.receipts).catch((error) => {
     logger.log("error", "Guarded receipt expiry failed", unhandledErrorAttributes(error));
     return { workspaces: 0, files: 0 };
   });
+  resources.onDrain(() => receiptExpiryTask);
   const receiptExpiryTimer = setInterval(() => {
     receiptExpiryTask = purgeAllExpiredAgentRunReceipts(guardedRuntime.receipts).catch((error) => {
       logger.log("error", "Guarded receipt expiry failed", unhandledErrorAttributes(error));
@@ -1743,6 +1784,40 @@ export async function startServer(
     });
   }, 24 * 60 * 60 * 1_000);
   receiptExpiryTimer.unref?.();
+  resources.onStop(() => clearInterval(receiptExpiryTimer));
+  // Completion recovery is independent of billing holds and browser activity.
+  // Retry only native history reads; never dispatch inference or tools here.
+  let completionRecoveryStopped = false;
+  resources.onStop(() => { completionRecoveryStopped = true; });
+  let completionRecoveryOffset = 0;
+  const recoverPendingCompletions = async () => {
+    const sessions = guardedRuntime.pendingCompletionSessions();
+    if (!sessions.length) return;
+    const count = Math.min(20, sessions.length);
+    const offset = completionRecoveryOffset % sessions.length;
+    completionRecoveryOffset = (offset + count) % sessions.length;
+    for (let index = 0; index < count && !completionRecoveryStopped; index += 1) {
+      const scope = sessions[(offset + index) % sessions.length];
+      try {
+        const workspace = await resolveWorkspace(config, scope.workspaceId);
+        await recoverNativeSessionCompletions(config, workspace, guardedRuntime, scope.sessionId);
+      } catch {
+        // Retain the sealed identity for a later attempt; never log transcript
+        // content, upstream errors or credentials from a recovery response.
+        logger.log("warn", "Native completion recovery remains pending", { code: "agent_run_completion_retry_pending" });
+      }
+    }
+  };
+  const runCompletionRecovery = () => recoverPendingCompletions().catch(() => {
+    logger.log("error", "Native completion recovery could not verify its state", { code: "agent_run_completion_state_invalid" });
+  });
+  let completionRecoveryTask: Promise<void> | null = runCompletionRecovery().finally(() => { completionRecoveryTask = null; });
+  resources.onDrain(() => completionRecoveryTask);
+  const completionRecoveryTimer = setInterval(() => {
+    if (!completionRecoveryTask) completionRecoveryTask = runCompletionRecovery().finally(() => { completionRecoveryTask = null; });
+  }, 30_000);
+  completionRecoveryTimer.unref?.();
+  resources.onStop(() => clearInterval(completionRecoveryTimer));
   const expireCryptoEvidence = () => cryptoEvidenceStore?.destroyExpired().then((result) => {
     if (result.failures.length > 0) {
       logger.log("error", "Crypto evidence key expiry was incomplete", {
@@ -1797,6 +1872,7 @@ export async function startServer(
     rotation: await rotateCryptoEvidence(),
   });
   let cryptoEvidenceMaintenanceTask = maintainCryptoEvidence();
+  resources.onDrain(() => cryptoEvidenceMaintenanceTask);
   const cryptoEvidenceExpiryTimer = cryptoEvidenceStore ? setInterval(() => {
     cryptoEvidenceMaintenanceTask = cryptoEvidenceMaintenanceTask.then(
       maintainCryptoEvidence,
@@ -1804,7 +1880,9 @@ export async function startServer(
     );
   }, 24 * 60 * 60 * 1_000) : null;
   cryptoEvidenceExpiryTimer?.unref?.();
+  resources.onStop(() => { if (cryptoEvidenceExpiryTimer) clearInterval(cryptoEvidenceExpiryTimer); });
   let cryptoEvidenceVerificationTask = verifyCryptoEvidence();
+  resources.onDrain(() => cryptoEvidenceVerificationTask);
   const cryptoEvidenceVerificationTimer = cryptoEvidenceRuntime.mode === "testnet" ? setInterval(() => {
     cryptoEvidenceVerificationTask = cryptoEvidenceVerificationTask.then(
       verifyCryptoEvidence,
@@ -1812,6 +1890,7 @@ export async function startServer(
     );
   }, 6 * 60 * 60 * 1_000) : null;
   cryptoEvidenceVerificationTimer?.unref?.();
+  resources.onStop(() => { if (cryptoEvidenceVerificationTimer) clearInterval(cryptoEvidenceVerificationTimer); });
   const expireAgentFiles = () => agentFileStore?.destroyExpired().then((result) => {
     if (result.failures.length > 0) {
       logger.log("error", "Agent file expiry was incomplete", {
@@ -1826,13 +1905,16 @@ export async function startServer(
     return { checked: 0, destroyed: 0, failures: [] };
   }) ?? Promise.resolve({ checked: 0, destroyed: 0, failures: [] });
   let agentFileMaintenanceTask = expireAgentFiles();
+  resources.onDrain(() => agentFileMaintenanceTask);
   const agentFileExpiryTimer = agentFileStore ? setInterval(() => {
     agentFileMaintenanceTask = agentFileMaintenanceTask.then(expireAgentFiles, expireAgentFiles);
   }, 24 * 60 * 60 * 1_000) : null;
   agentFileExpiryTimer?.unref?.();
+  resources.onStop(() => { if (agentFileExpiryTimer) clearInterval(agentFileExpiryTimer); });
   let accountDeletionRetryTask = retryMatterhornAccountDeletionJobs({
     config,
     authStore,
+    approvals,
     guardedRuntime,
     cryptoAppRuntime,
     coworkerRuntime,
@@ -1842,10 +1924,12 @@ export async function startServer(
   }).catch((error) => {
     logger.log("error", "Account deletion retry failed", unhandledErrorAttributes(error));
   });
+  resources.onDrain(() => accountDeletionRetryTask);
   const accountDeletionRetryTimer = setInterval(() => {
     accountDeletionRetryTask = retryMatterhornAccountDeletionJobs({
       config,
       authStore,
+      approvals,
       guardedRuntime,
       cryptoAppRuntime,
       coworkerRuntime,
@@ -1857,11 +1941,14 @@ export async function startServer(
     });
   }, 60_000);
   accountDeletionRetryTimer.unref?.();
+  resources.onStop(() => clearInterval(accountDeletionRetryTimer));
   const ownsRequestRateLimitStore = !config.requestRateLimitStore;
   const requestRateLimitStore = config.requestRateLimitStore ?? createDefaultRequestRateLimitStore();
+  if (ownsRequestRateLimitStore) resources.onClose(() => requestRateLimitStore.close?.());
   const routes = createRoutes(
     config,
     approvals,
+    sessionPreparations,
     tokens,
     authStore,
     env,
@@ -1944,6 +2031,7 @@ export async function startServer(
             config,
             logger,
             approvals,
+            sessionPreparations,
             request,
             url,
             workspace,
@@ -2034,6 +2122,7 @@ export async function startServer(
             config,
             logger,
             approvals,
+            sessionPreparations,
             request,
             url,
             workspace,
@@ -2126,40 +2215,11 @@ export async function startServer(
     ...serverOptions,
     idleTimeout: 120,
   });
+  resources.onStop(() => server.stop());
 
   return {
     ...server,
-    stop: async (closeActiveConnections?: boolean) => {
-      clearInterval(receiptExpiryTimer);
-      if (cryptoEvidenceExpiryTimer) clearInterval(cryptoEvidenceExpiryTimer);
-      if (cryptoEvidenceVerificationTimer) clearInterval(cryptoEvidenceVerificationTimer);
-      if (agentFileExpiryTimer) clearInterval(agentFileExpiryTimer);
-      clearInterval(accountDeletionRetryTimer);
-      clearInterval(emailOutboxTimer);
-      if (coworkerWatchTimer) clearInterval(coworkerWatchTimer);
-      if (coworkerEvidenceRetryTimer) clearInterval(coworkerEvidenceRetryTimer);
-      if (connectionSetupMaintenanceTimer) clearInterval(connectionSetupMaintenanceTimer);
-      if (accessMetadataMaintenanceTimer) clearInterval(accessMetadataMaintenanceTimer);
-      clearInterval(authSecurityMaintenanceTimer);
-      watcherHandle.close();
-      reloadBaselineRefreshers.delete(config);
-      modelUsageStore.close();
-      await receiptExpiryTask;
-      await cryptoEvidenceMaintenanceTask;
-      await cryptoEvidenceVerificationTask;
-      await agentFileMaintenanceTask;
-      await accountDeletionRetryTask;
-      await emailOutboxTask;
-      await coworkerWatchTask;
-      await drainEmailOutbox();
-      authStore.close();
-      recoveryErasureLedger?.close();
-      guardedRuntime.close();
-      cryptoAppRuntime.close();
-      coworkerRuntime.close();
-      if (ownsRequestRateLimitStore) await requestRateLimitStore.close?.();
-      await (server.stop as unknown as (closeActiveConnections?: boolean) => void | Promise<void>)(closeActiveConnections);
-    },
+    stop: () => resources.close(),
   };
 }
 
@@ -2351,13 +2411,34 @@ function buildOpencodeDirectoryHeader(directory: string) {
   return /[^\x00-\x7F]/.test(directory) ? encodeURIComponent(directory) : directory;
 }
 
-function createOpencodeDirectoryFetch(directory: string): typeof fetch {
+async function fetchFixedEndpoint(input: Parameters<typeof fetch>[0], init: Parameters<typeof fetch>[1],
+  redirectError: { code: string; message: string }): Promise<Response> {
+  // Authorization, private bodies and directory scope apply to this endpoint,
+  // not to another URL selected by an upstream redirect (even on the same host).
+  const response = await fetch(input, { ...init, redirect: "manual" });
+  if ([301, 302, 303, 307, 308].includes(response.status)) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new ApiError(502, redirectError.code, redirectError.message,
+      { status: response.status });
+  }
+  return response;
+}
+
+function fetchOpencodeRuntime(input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): Promise<Response> {
+  const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+  // Do not replay runtime mutations on a stale pooled connection: a lost
+  // acknowledgement can follow accepted work, including compaction or commands.
+  return fetchFixedEndpoint(input, { ...init, ...(!["GET", "HEAD"].includes(method) ? { keepalive: false } : {}) }, { code: "opencode_redirect_blocked",
+    message: "The agent runtime redirected this request. Ask the workspace owner to check its configured URL." });
+}
+
+function createOpencodeDirectoryFetch(directory: string | null): typeof fetch {
   return Object.assign(
     (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
       const request = input instanceof Request ? input : new Request(input, init);
       const headers = new Headers(init?.headers ?? request.headers);
-      headers.set("x-opencode-directory", buildOpencodeDirectoryHeader(directory));
-      return fetch(new Request(request, { headers }));
+      if (directory) headers.set("x-opencode-directory", buildOpencodeDirectoryHeader(directory));
+      return fetchOpencodeRuntime(new Request(request, { headers }));
     },
     { preconnect: fetch.preconnect },
   );
@@ -2374,12 +2455,12 @@ function createWorkspaceOpencodeClient(config: ServerConfig, workspace: Workspac
     throw new ApiError(400, "opencode_unconfigured", "Agent runtime is not connected for this workspace");
   }
   const directory = resolveOpencodeDirectory(workspace);
-  const directoryFetch = directory ? createOpencodeDirectoryFetch(directory) : undefined;
+  const directoryFetch = createOpencodeDirectoryFetch(directory);
 
   return createOpencodeClient({
     baseUrl,
     ...(directory ? { directory } : {}),
-    ...(directoryFetch ? { fetch: directoryFetch } : {}),
+    fetch: directoryFetch,
     ...(connection.authHeader ? { headers: { Authorization: connection.authHeader } } : {}),
   });
 }
@@ -2532,6 +2613,7 @@ async function ensureMatterhornSessionPermissionProfile(input: {
   config: ServerConfig;
   workspace: WorkspaceInfo;
   sessionId: string;
+  assertCurrent: () => void;
   agentId?: string;
   expectedAgentId?: string;
   expectedAgentPromptHash?: string;
@@ -2546,6 +2628,7 @@ async function ensureMatterhornSessionPermissionProfile(input: {
         expectedAgentPromptHash: input.expectedAgentPromptHash,
       })
     : await resolveMatterhornSessionAgentContext(input);
+  input.assertCurrent();
   const { opencode, directory, session } = context;
   const agentPermission = normalizeMatterhornPermissionRules(context.agent.permission);
   const profile = buildMatterhornSessionPermissionProfile({
@@ -2604,7 +2687,7 @@ async function postWorkspaceOpencodePromptWithReasoning(input: {
   if (directory) headers.set("x-opencode-directory", buildOpencodeDirectoryHeader(directory));
 
   const target = `${baseUrl.replace(/\/+$/, "")}/session/${encodeURIComponent(input.sessionId)}/prompt_async`;
-  const response = await fetch(target, {
+  const response = await fetchOpencodeRuntime(target, {
     method: "POST",
     headers,
     body: JSON.stringify(input.body),
@@ -2623,6 +2706,7 @@ function unwrapOpencodeResult<T, E>(result: OpencodeClientResult<T, E>, path: st
   if (result.data != null) {
     return result.data;
   }
+  if (result.error instanceof ApiError) throw result.error;
   if (result.error === undefined) {
     throw new ApiError(502, "opencode_empty_response", "OpenCode returned an empty response", { path });
   }
@@ -2775,7 +2859,13 @@ function assertModelSelectionInCatalog(
   catalog: MatterhornBackendModelCatalogSnapshot,
   selection: MatterhornBackendModelSelectionRequest,
 ) {
-  if (!catalog.serverFetched) return;
+  if (!catalog.serverFetched) {
+    throw new ApiError(
+      503,
+      "model_catalog_unavailable",
+      "Model availability could not be checked. Reconnect the runtime and try again; your saved model is unchanged.",
+    );
+  }
 
   const provider = catalog.providers.find((candidate) => candidate.id === selection.providerId);
   if (
@@ -2796,6 +2886,11 @@ function assertModelSelectionInCatalog(
       "Choose a model that is available from the connected provider.",
     );
   }
+  // Match the client catalogue's fallback for older runtimes without modality
+  // metadata. These known embedding/reranking models cannot serve chat.
+  if (/(?:embed|rerank|(?:^|[\/_-])bge(?:[\/_-]|$)|(?:^|[\/_-])uae(?:[\/_-]|$))/i.test(selection.modelId)) {
+    throw new ApiError(400, "invalid_model_selection", "Choose a chat-compatible model from the connected provider.");
+  }
 }
 
 function modelUsageSubject(access: Pick<ClientAccess, "actor" | "session">): ModelUsageSubject {
@@ -2814,6 +2909,7 @@ function clientAccessFromRequestContext(ctx: RequestContext, workspace: Workspac
 }
 
 async function reconcileModelUsageSession(input: {
+  guardedRuntime: MatterhornGuardedAgentRuntime;
   config: ServerConfig;
   workspace: WorkspaceInfo;
   store: MatterhornModelUsageStore;
@@ -2825,15 +2921,27 @@ async function reconcileModelUsageSession(input: {
     await opencode.session.messages({ sessionID: input.sessionId }),
     `/session/${encodeURIComponent(input.sessionId)}/message`,
   );
-  return input.store.reconcile({
+  const reconciled = input.store.reconcile({
     subject: input.subject,
     workspaceId: input.workspace.id,
     sessionId: input.sessionId,
     messages,
+    unusedMessageIds: input.guardedRuntime.revokedUnusedProviderMessages({ workspaceId: input.workspace.id, sessionId: input.sessionId }),
   });
+  await input.guardedRuntime.recoverSessionCompletions({ workspaceId: input.workspace.id, sessionId: input.sessionId, messages });
+  return reconciled;
+}
+
+async function recoverNativeSessionCompletions(config: ServerConfig, workspace: WorkspaceInfo,
+  guardedRuntime: MatterhornGuardedAgentRuntime, sessionId: string): Promise<void> {
+  const opencode = createWorkspaceOpencodeClient(config, workspace);
+  const messages = unwrapOpencodeResult(await opencode.session.messages({ sessionID: sessionId }, { signal: AbortSignal.timeout(5_000) }),
+    `/session/${encodeURIComponent(sessionId)}/message`);
+  await guardedRuntime.recoverSessionCompletions({ workspaceId: workspace.id, sessionId, messages });
 }
 
 function scheduleModelUsageReconciliation(input: {
+  guardedRuntime: MatterhornGuardedAgentRuntime;
   config: ServerConfig;
   workspace: WorkspaceInfo;
   store: MatterhornModelUsageStore;
@@ -2857,6 +2965,7 @@ function scheduleModelUsageReconciliation(input: {
 }
 
 async function reserveModelUsage(input: {
+  guardedRuntime: MatterhornGuardedAgentRuntime;
   config: ServerConfig;
   workspace: WorkspaceInfo;
   store: MatterhornModelUsageStore;
@@ -2864,9 +2973,11 @@ async function reserveModelUsage(input: {
   sessionId: string;
   providerId: string;
   modelId: string;
+  messageId?: string;
 }) {
   const subject = modelUsageSubject(input.access);
   await reconcileModelUsageSession({
+    guardedRuntime: input.guardedRuntime,
     config: input.config,
     workspace: input.workspace,
     store: input.store,
@@ -2879,6 +2990,7 @@ async function reserveModelUsage(input: {
     sessionId: input.sessionId,
     providerId: input.providerId,
     modelId: input.modelId,
+    messageId: input.messageId,
   });
   if (!reservation.allowed) {
     const resetAt = reservation.status.blockReason === "monthly_limit" ||
@@ -2900,10 +3012,11 @@ async function reserveModelUsage(input: {
   return { reservation, subject };
 }
 
-async function proxyOpencodeRequest(input: {
+type OpencodeProxyRequestInput = {
   config: ServerConfig;
   logger: ServerLogger;
   approvals: ApprovalService;
+  sessionPreparations: SessionPreparationRegistry;
   request: Request;
   url: URL;
   workspace?: WorkspaceInfo;
@@ -2911,7 +3024,21 @@ async function proxyOpencodeRequest(input: {
   access?: ClientAccess;
   modelUsageStore?: MatterhornModelUsageStore;
   guardedRuntime: MatterhornGuardedAgentRuntime;
-}) {
+};
+
+async function proxyOpencodeRequest(input: OpencodeProxyRequestInput) {
+  const path = normalizeOpencodeProxyPath(input.proxyPath ?? input.url.pathname);
+  const match = input.request.method === "POST"
+    ? path.match(/^\/session\/([^/]+)\/(?:message|prompt_async|command|summarize)$/) : null;
+  const sessionId = match ? decodePathSegment(match[1]) : null;
+  if (sessionId && input.workspace && input.access) {
+    return input.sessionPreparations.run({ workspaceId: input.workspace.id, sessionId,
+      subjectId: modelUsageSubject(input.access).id }, input.request, () => forwardOpencodeRequest(input));
+  }
+  return forwardOpencodeRequest(input);
+}
+
+async function forwardOpencodeRequest(input: OpencodeProxyRequestInput) {
   const workspace = input.workspace;
   const baseUrl = workspace ? resolveWorkspaceOpencodeConnection(input.config, workspace).baseUrl?.trim() ?? "" : "";
   if (!baseUrl) {
@@ -2919,15 +3046,15 @@ async function proxyOpencodeRequest(input: {
   }
 
   const proxyPath = input.proxyPath ?? input.url.pathname;
-  const targetUrl = buildOpencodeProxyUrl(baseUrl, proxyPath, input.url.search);
-  const headers = new Headers(input.request.headers);
-  headers.delete("authorization");
-  headers.delete("x-matterhorn-host-token");
-  headers.delete("x-openwork-host-token");
-  headers.delete("x-openwork-client-id");
-  headers.delete("host");
-  headers.delete("origin");
-  headers.delete(MATTERHORN_EXECUTION_MODE_HEADER);
+  let targetUrl = buildOpencodeProxyUrl(baseUrl, proxyPath, input.url.search);
+  // Browser/account and edge credentials belong to Matterhorn, not the runtime.
+  // Copy protocol metadata only; runtime auth and directory are set below from
+  // the authorized workspace, never inherited from the inbound request.
+  const headers = new Headers();
+  for (const name of ["accept", "content-type", "last-event-id", "if-none-match", "if-modified-since"]) {
+    const value = input.request.headers.get(name);
+    if (value !== null) headers.set(name, value);
+  }
 
   const directory = workspace ? resolveOpencodeDirectory(workspace) : null;
   if (directory) {
@@ -2954,22 +3081,33 @@ async function proxyOpencodeRequest(input: {
       `${headerExecutionMode === "plan" ? "Plan" : "Discuss"} mode does not allow commands or session changes. Switch to Work mode first.`,
     );
   }
-  // Buffer the request body so it can be forwarded reliably across Node.js
+  // Bound and buffer the request body so it can be forwarded reliably across Node.js
   // stream boundaries (Readable.toWeb streams from the HTTP adapter aren't
   // always accepted directly by Node's global fetch as a body).
   const rawBody = method === "GET" || method === "HEAD"
     ? undefined
-    : await input.request.arrayBuffer().then((buf) => (buf.byteLength > 0 ? buf : undefined));
+    : await readBodyBytesLimited(input.request, AGENT_MESSAGE_JSON_BODY_MAX_BYTES, "Agent runtime")
+      .then((buf) => (buf.byteLength > 0 ? buf : undefined));
+  assertRequestAccessCurrent(input.request);
   const stopSessionMatch = method === "POST"
     ? normalizeOpencodeProxyPath(proxyPath).match(/^\/session\/([^/]+)\/abort$/)
     : null;
   const stopSessionId = stopSessionMatch ? decodePathSegment(stopSessionMatch[1]) : null;
   if (stopSessionId && workspace && input.access) {
-    input.approvals.cancelSession({
+    const scope = {
       workspaceId: workspace.id,
       sessionId: stopSessionId,
       subjectId: modelUsageSubject(input.access).id,
-    });
+    };
+    input.sessionPreparations.stop(scope);
+    input.approvals.cancelSession(scope);
+    try {
+      await input.guardedRuntime.cancelSessionRun(scope);
+    } catch (error) {
+      if (error instanceof GuardedRuntimeError) throw guardedRuntimeApiError(error);
+      throw error;
+    }
+    assertRequestAccessCurrent(input.request);
   }
   let body: BodyInit | undefined = rawBody;
   let promptAudit: { executionMode: MatterhornExecutionMode; agent?: string; sessionId: string } | null = null;
@@ -2995,12 +3133,30 @@ async function proxyOpencodeRequest(input: {
     input: GuardedPromptInput;
     authorization: GuardedPromptAuthorization;
     sessionId: string;
+    messageId: string;
     agentId: string;
     agentPromptHash: string;
     privacyParts: MatterhornAgentPrivacyPart[];
     providerSystem: GuardedProviderSystemContext;
   } | null = null;
   let completeGuardedRunAfterResponse = false;
+  const unusedCompactionDispatch = () => !!(guardedSummaryStart && guardedRunId && workspace
+    && input.guardedRuntime.revokeUnusedProviderDispatch({
+      runId: guardedRunId, workspaceId: workspace.id,
+      sessionId: guardedSummaryStart.sessionId, messageId: guardedSummaryStart.messageId,
+    }));
+  const reconcileUsage = () => {
+    if (input.modelUsageStore && usageSubject && usageReservationId && workspace) {
+      scheduleModelUsageReconciliation({
+        guardedRuntime: input.guardedRuntime,
+        config: input.config,
+        workspace,
+        store: input.modelUsageStore,
+        subject: usageSubject,
+        sessionId: decodeURIComponent(normalizeOpencodeProxyPath(proxyPath).split("/")[2] ?? ""),
+      });
+    }
+  };
   if (isSessionPromptProxyRequest(method, proxyPath)) {
     let payload: Record<string, unknown>;
     try {
@@ -3013,6 +3169,10 @@ async function proxyOpencodeRequest(input: {
     }
     if (payload.jevReceipt !== undefined) {
       throw new ApiError(400, "jev_gateway_required", "Use the Matterhorn messages endpoint for Jev-assisted chats.");
+    }
+    const rawParts = Array.isArray(payload.parts) ? payload.parts : [];
+    if (rawParts.length > AGENT_MESSAGE_MAX_PARTS) {
+      throw new ApiError(400, "invalid_payload", `parts must include no more than ${AGENT_MESSAGE_MAX_PARTS} items`);
     }
 
     const bodyExecutionMode = payload.executionMode == null
@@ -3111,8 +3271,20 @@ async function proxyOpencodeRequest(input: {
         [agentContext.prompt, typeof payload.system === "string" ? payload.system : ""],
         "message",
       );
+      // Client privacy labels may tighten policy, but cannot replace inspection
+      // of the bytes that the runtime will actually receive.
+      const promptPrivacyParts = normalizePrivacyParts(rawParts);
+      const attachmentBudget = { remainingBytes: AGENT_MESSAGE_MAX_TOTAL_ATTACHMENT_BYTES };
+      for (let index = 0; index < rawParts.length; index++) {
+        const part = rawParts[index];
+        if (!isRecord(part) || (part.type !== "file" && part.type !== "attachment")) continue;
+        const resolved = await resolveAgentAttachment(workspace, part, attachmentBudget);
+        rawParts[index] = resolved.upstream;
+        promptPrivacyParts.push(resolved.privacy);
+      }
+      body = JSON.stringify(payload);
       const requestPrivacyParts = [
-        ...normalizePrivacyParts(Array.isArray(payload.parts) ? payload.parts : []),
+        ...promptPrivacyParts,
         ...rawPromptSystemPrivacyParts(payload.system),
         ...agentContext.privacyParts,
         guardedProviderSystemPrivacyPart(providerSystem),
@@ -3153,6 +3325,7 @@ async function proxyOpencodeRequest(input: {
       if (input.access && input.modelUsageStore) {
         try {
           const usage = await reserveModelUsage({
+            guardedRuntime: input.guardedRuntime,
             config: input.config,
             workspace,
             store: input.modelUsageStore,
@@ -3163,6 +3336,7 @@ async function proxyOpencodeRequest(input: {
           });
           usageReservationId = usage.reservation.reservationId;
           usageSubject = usage.subject;
+          input.modelUsageStore.bindUserMessage(usageReservationId, guardedPromptMessageId);
         } catch (error) {
           if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
           throw error;
@@ -3231,16 +3405,19 @@ async function proxyOpencodeRequest(input: {
           executionMode: "work",
         };
         const authorization = input.guardedRuntime.authorizePrompt(guardedInput);
+        input.sessionPreparations.assertActive(input.request);
         await ensureMatterhornSessionPermissionProfile({
           config: input.config,
           workspace,
           sessionId,
+          assertCurrent: () => input.sessionPreparations.assertActive(input.request),
           agentId: agentContext.agentId,
           expectedAgentId: agentContext.agentId,
           expectedAgentPromptHash: agentContext.promptHash,
         });
         if (input.access && input.modelUsageStore) {
           const usage = await reserveModelUsage({
+            guardedRuntime: input.guardedRuntime,
             config: input.config,
             workspace,
             store: input.modelUsageStore,
@@ -3251,7 +3428,9 @@ async function proxyOpencodeRequest(input: {
           });
           usageReservationId = usage.reservation.reservationId;
           usageSubject = usage.subject;
+          input.modelUsageStore.bindUserMessage(usageReservationId, userMessageId);
         }
+        input.sessionPreparations.assertActive(input.request);
         await abortWorkspaceSessionBeforeReplacement(input.config, workspace, sessionId);
         const currentHistoryPrivacyParts = await guardedSessionPromptHistoryPrivacyParts({
           config: input.config,
@@ -3259,6 +3438,7 @@ async function proxyOpencodeRequest(input: {
           sessionId,
           guardedRuntime: input.guardedRuntime,
         });
+        input.sessionPreparations.assertActive(input.request);
         const acceptance = await input.guardedRuntime.startAuthorizedPrompt(
           {
             ...guardedInput,
@@ -3273,6 +3453,7 @@ async function proxyOpencodeRequest(input: {
           sessionId,
           messageId: userMessageId,
         });
+        input.sessionPreparations.assertActive(input.request);
       } catch (error) {
         input.modelUsageStore?.cancel(usageReservationId);
         if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
@@ -3282,28 +3463,20 @@ async function proxyOpencodeRequest(input: {
       body = JSON.stringify(payload);
       headers.delete("content-length");
     }
-    void fetch(targetUrl, {
+    void fetchOpencodeRuntime(targetUrl, {
       method,
       headers,
       body,
     }).then((upstream) => {
-      if (!upstream.ok) {
+      if (upstream.status >= 400 && upstream.status < 500) {
         input.modelUsageStore?.cancel(usageReservationId);
         if (guardedRunId) void input.guardedRuntime.failRun(guardedRunId);
         return;
       }
-      if (input.modelUsageStore && usageSubject && workspace) {
-        scheduleModelUsageReconciliation({
-          config: input.config,
-          workspace,
-          store: input.modelUsageStore,
-          subject: usageSubject,
-          sessionId: decodeURIComponent(normalizeOpencodeProxyPath(proxyPath).split("/")[2] ?? ""),
-        });
-      }
+      reconcileUsage();
     }).catch(() => {
-      input.modelUsageStore?.cancel(usageReservationId);
-      if (guardedRunId) void input.guardedRuntime.failRun(guardedRunId);
+      // A missing acknowledgement does not prove the runtime rejected work.
+      reconcileUsage();
     });
     return jsonResponse({ ok: true, accepted: true });
   }
@@ -3360,6 +3533,7 @@ async function proxyOpencodeRequest(input: {
         input: guardedInput,
         authorization: input.guardedRuntime.authorizePrompt(guardedInput),
         sessionId,
+        messageId: `msg_${randomUUID().replaceAll("-", "")}`,
         agentId: compactionAgentContext.agentId,
         agentPromptHash: compactionAgentContext.promptHash,
         privacyParts: guardedCompactionPrivacyParts,
@@ -3370,6 +3544,7 @@ async function proxyOpencodeRequest(input: {
     }
     if (input.access && input.modelUsageStore) {
       const usage = await reserveModelUsage({
+        guardedRuntime: input.guardedRuntime,
         config: input.config,
         workspace,
         store: input.modelUsageStore,
@@ -3377,6 +3552,7 @@ async function proxyOpencodeRequest(input: {
         sessionId,
         providerId: modelResolution.model.providerID,
         modelId: modelResolution.model.modelID,
+        messageId: guardedSummaryStart.messageId,
       });
       usageReservationId = usage.reservation.reservationId;
       usageSubject = usage.subject;
@@ -3384,9 +3560,11 @@ async function proxyOpencodeRequest(input: {
   }
   if (promptPermissionRequest) {
     try {
+      input.sessionPreparations.assertActive(input.request);
       await ensureMatterhornSessionPermissionProfile({
         config: input.config,
         ...promptPermissionRequest,
+        assertCurrent: () => input.sessionPreparations.assertActive(input.request),
       });
     } catch (error) {
       input.modelUsageStore?.cancel(usageReservationId);
@@ -3396,6 +3574,7 @@ async function proxyOpencodeRequest(input: {
   }
   if (guardedPromptStart && workspace && promptAudit) {
     try {
+      input.sessionPreparations.assertActive(input.request);
       await abortWorkspaceSessionBeforeReplacement(input.config, workspace, promptAudit.sessionId);
       const currentHistoryPrivacyParts = await guardedSessionPromptHistoryPrivacyParts({
         config: input.config,
@@ -3403,6 +3582,7 @@ async function proxyOpencodeRequest(input: {
         sessionId: promptAudit.sessionId,
         guardedRuntime: input.guardedRuntime,
       });
+      input.sessionPreparations.assertActive(input.request);
       const acceptance = await input.guardedRuntime.startAuthorizedPrompt(
         {
           ...guardedPromptStart.input,
@@ -3442,7 +3622,9 @@ async function proxyOpencodeRequest(input: {
         agentId: guardedSummaryStart.agentId,
         expectedAgentPromptHash: guardedSummaryStart.agentPromptHash,
       });
+      input.sessionPreparations.assertActive(input.request);
       await abortWorkspaceSessionBeforeReplacement(input.config, workspace, guardedSummaryStart.sessionId);
+      input.sessionPreparations.assertActive(input.request);
       const acceptance = await input.guardedRuntime.startAuthorizedPrompt(
         {
           ...guardedSummaryStart.input,
@@ -3455,6 +3637,20 @@ async function proxyOpencodeRequest(input: {
         guardedSummaryStart.providerSystem,
       );
       guardedRunId = acceptance.runId;
+      input.guardedRuntime.bindUserMessage({
+        runId: guardedRunId,
+        sessionId: guardedSummaryStart.sessionId,
+        messageId: guardedSummaryStart.messageId,
+      });
+      const lastUser = [...currentMessages].reverse().find(message => message.info.role === "user");
+      body = JSON.stringify({
+        messageID: guardedSummaryStart.messageId,
+        model: { providerID: guardedSummaryStart.input.providerId, modelID: guardedSummaryStart.input.modelId },
+        ...(typeof lastUser?.info.agent === "string" ? { agent: lastUser.info.agent } : {}),
+        parts: [compactionPromptPart(guardedRunId)],
+      });
+      targetUrl = buildOpencodeProxyUrl(baseUrl,
+        `/session/${encodeURIComponent(guardedSummaryStart.sessionId)}/message`, input.url.search);
       completeGuardedRunAfterResponse = true;
     } catch (error) {
       input.modelUsageStore?.cancel(usageReservationId);
@@ -3467,16 +3663,23 @@ async function proxyOpencodeRequest(input: {
   const abortUpstreamConnect = () => upstreamController.abort();
   input.request.signal.addEventListener("abort", abortUpstreamConnect, { once: true });
   let response: Response;
+  let dispatchStarted = false;
   try {
-    response = await fetch(targetUrl, {
+    if (promptAudit || guardedSummaryStart) input.sessionPreparations.assertActive(input.request);
+    dispatchStarted = true;
+    response = await fetchOpencodeRuntime(targetUrl, {
       method,
       headers,
       body,
       signal: upstreamController.signal,
     });
     if (!response.ok) {
-      input.modelUsageStore?.cancel(usageReservationId);
-      if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
+      if (unusedCompactionDispatch()
+        || (!guardedSummaryStart && response.status >= 400 && response.status < 500)) {
+        dispatchStarted = false;
+        input.modelUsageStore?.cancel(usageReservationId);
+        if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
+      } else reconcileUsage();
       if (promptAudit) {
         const errorPayload = await response.clone().json().catch(() => null);
         const errorRecord = recordLike(errorPayload);
@@ -3546,8 +3749,10 @@ async function proxyOpencodeRequest(input: {
       }
     }
   } catch (error) {
-    input.modelUsageStore?.cancel(usageReservationId);
-    if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
+    if (!dispatchStarted || unusedCompactionDispatch()) {
+      input.modelUsageStore?.cancel(usageReservationId);
+      if (guardedRunId) await input.guardedRuntime.failRun(guardedRunId);
+    } else reconcileUsage();
     throw error;
   } finally {
     input.request.signal.removeEventListener("abort", abortUpstreamConnect);
@@ -3567,51 +3772,81 @@ async function proxyOpencodeRequest(input: {
         ...(promptAudit.agent ? { agent: promptAudit.agent.slice(0, 120) } : {}),
       },
     });
-    if (input.modelUsageStore && usageSubject && usageReservationId) {
-      scheduleModelUsageReconciliation({
-        config: input.config,
-        workspace,
-        store: input.modelUsageStore,
-        subject: usageSubject,
-        sessionId: promptAudit.sessionId,
-      });
-    }
+    reconcileUsage();
   }
 
   if (response.ok && completeGuardedRunAfterResponse && guardedRunId) {
-    await input.guardedRuntime.completeTrustedGatewayRun(guardedRunId, "success");
-    if (input.modelUsageStore && usageSubject && workspace && guardedSummaryStart) {
-      scheduleModelUsageReconciliation({
-        config: input.config,
-        workspace,
-        store: input.modelUsageStore,
-        subject: usageSubject,
+    const result: unknown = await response.json().catch(() => null);
+    reconcileUsage();
+    if (!guardedSummaryStart) throw new Error("Missing compaction binding");
+    try {
+      assertCompactionResponse(result, {
         sessionId: guardedSummaryStart.sessionId,
+        messageId: guardedSummaryStart.messageId,
+        providerId: guardedSummaryStart.input.providerId,
+        modelId: guardedSummaryStart.input.modelId,
       });
+    } catch (error) {
+      if (unusedCompactionDispatch()) {
+        input.modelUsageStore?.cancel(usageReservationId);
+        await input.guardedRuntime.failRun(guardedRunId);
+      }
+      throw error;
     }
+    await input.guardedRuntime.completeTrustedGatewayRun(guardedRunId, "success");
+    // Keep the trusted summarize API's boolean response, not the internal
+    // native prompt response used to establish exact accounting ownership.
+    response = jsonResponse(true);
   }
 
-  const sanitized = sanitizeProxyResponse(response, input.request.signal, upstreamController);
+  // The runtime may respond long after authentication. Do not expose its
+  // response to a revoked principal, or cancel accounting for accepted work.
+  try {
+    assertRequestAccessCurrent(input.request);
+  } catch (error) {
+    upstreamController.abort();
+    await response.body?.cancel().catch(() => undefined);
+    throw error;
+  }
+  const sanitized = sanitizeProxyResponse(response, input.request.signal, upstreamController,
+    requestAccessChecks.get(input.request));
   if (guardedRunId) sanitized.headers.set("X-Matterhorn-Agent-Run-Id", guardedRunId);
   return sanitized;
 }
 
+function assertCompactionResponse(value: unknown, expected: {
+  sessionId: string; messageId: string; providerId: string; modelId: string;
+}): void {
+  const info = recordLike(recordLike(value)?.info);
+  const time = recordLike(info?.time);
+  if (!info || info.sessionID !== expected.sessionId || info.parentID !== expected.messageId
+    || info.providerID !== expected.providerId || info.modelID !== expected.modelId
+    || info.role !== "assistant" || info.summary !== true || info.finish !== "stop" || info.error != null
+    || typeof info.id !== "string" || !info.id || typeof time?.completed !== "number" || !Number.isFinite(time.completed)) {
+    throw new ApiError(502, "compaction_result_unverified",
+      "The runtime did not confirm this chat summary. Check chat history before retrying; usage remains pending until verified.");
+  }
+}
+
 /**
- * Strip hop-by-hop and transport-level headers that Bun's native fetch keeps
- * in the upstream response even after it has already decoded the body for us.
- * Without this the browser sees `content-encoding: gzip` on a plain-text
- * payload and bails out with ERR_CONTENT_DECODING_FAILED, breaking any UI
- * code that reaches through /opencode/* (including session.create).
+ * Runtime responses are data, not authority over the Matterhorn browser origin.
+ * Allow only API metadata, never cookies, redirects, caching or security policy.
+ * Transport headers are also omitted: fetch may already have decoded gzip and
+ * forwarding its old encoding/length would break the downstream response.
  */
 function sanitizeProxyResponse(
   response: Response,
   downstreamSignal?: AbortSignal,
   upstreamController?: AbortController,
+  checkAccess?: () => void,
 ): Response {
-  const headers = new Headers(response.headers);
-  headers.delete("content-encoding");
-  headers.delete("transfer-encoding");
-  headers.delete("content-length");
+  const headers = new Headers();
+  for (const name of ["content-type", "etag", "last-modified", "retry-after"]) {
+    const value = response.headers.get(name);
+    if (value !== null) headers.set(name, value);
+  }
+  headers.set("Cache-Control", "no-store");
+  headers.set("Content-Security-Policy", "default-src 'none'; sandbox; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
   if (!response.body) {
     return new Response(null, {
       status: response.status,
@@ -3651,6 +3886,13 @@ function sanitizeProxyResponse(
       if (closed) return;
       try {
         const { done, value } = await reader.read();
+        try {
+          checkAccess?.();
+        } catch {
+          await closeReader("request access revoked");
+          controller.close();
+          return;
+        }
         if (done) {
           closed = true;
           if (downstreamSignal && abortDownstream) {
@@ -3669,6 +3911,7 @@ function sanitizeProxyResponse(
           }
           return;
         }
+        await closeReader(error);
         controller.error(error);
       }
     },
@@ -4641,7 +4884,7 @@ function cryptoEvidencePublicationApiError(error: unknown): ApiError {
 function cryptoEvidenceRenewalApiError(error: unknown): ApiError {
   if (error instanceof MatterhornCryptoEvidenceWalrusRenewalError) {
     if (error.code === "crypto_evidence_walrus_renewal_intent_integrity_invalid") {
-      return new ApiError(503, "crypto_evidence_wallet_review_unavailable", "Wallet review is temporarily unavailable. Nothing was sent or changed.");
+      return new ApiError(503, "crypto_evidence_wallet_review_unavailable", "Wallet review is temporarily unavailable. If you submitted a transaction, check its status in your wallet before trying again.");
     }
     if (error.code === "crypto_evidence_not_found") {
       return new ApiError(404, error.code, "Secure record not found.");
@@ -4654,7 +4897,7 @@ function cryptoEvidenceRenewalApiError(error: unknown): ApiError {
     }
     if (error.code === "crypto_evidence_walrus_certification_expired"
       || error.code === "crypto_evidence_walrus_renewal_expired_or_replayed") {
-      return new ApiError(410, error.code, "This renewal expired or was already used. Prepare a new renewal.");
+      return new ApiError(410, error.code, "This renewal expired or was already used. Check its transaction status in your wallet before trying again.");
     }
     if (error.code === "crypto_evidence_walrus_renewal_not_due") {
       return new ApiError(409, error.code, "This encrypted copy does not need renewal yet.");
@@ -4666,10 +4909,13 @@ function cryptoEvidenceRenewalApiError(error: unknown): ApiError {
       return new ApiError(409, error.code, "The wallet transaction failed. Prepare a new renewal.");
     }
     if (error.code.includes("mismatch") || error.code.endsWith("_invalid")) {
-      return new ApiError(409, error.code, "The renewal changed or could not be verified. Prepare it again.");
+      return new ApiError(409, error.code, "Matterhorn could not verify this renewal. Check its transaction status in your wallet before trying again.");
     }
   }
   const code = error instanceof Error ? error.message.split(":", 1)[0] : "";
+  if (code === "crypto_evidence_workspace_deleted") {
+    return new ApiError(410, code, "This workspace is being deleted. This action cannot continue. If you submitted a transaction, check its status in your wallet.");
+  }
   if (code === "crypto_evidence_not_found") {
     return new ApiError(404, code, "Secure record not found.");
   }
@@ -4688,7 +4934,7 @@ function cryptoEvidenceRenewalApiError(error: unknown): ApiError {
   return new ApiError(
     503,
     "crypto_evidence_walrus_renewal_unavailable",
-    "The encrypted copy could not be renewed safely. Nothing was changed.",
+    "Matterhorn could not confirm the renewal. If you submitted a transaction, check its status in your wallet before trying again.",
   );
 }
 
@@ -4834,6 +5080,9 @@ function agentFileApiError(error: unknown): ApiError {
   if (error.code === "agent_file_not_found") {
     return new ApiError(404, error.code, "Agent file not found.");
   }
+  if (error.code === "agent_file_workspace_deleted") {
+    return new ApiError(410, error.code, "This workspace is being deleted. This action cannot continue. If you submitted a transaction, check its status in your wallet.");
+  }
   if (error.code === "agent_file_access_denied" || error.code === "agent_file_expired") {
     return new ApiError(404, "agent_file_not_found", "Agent file not found.");
   }
@@ -4882,7 +5131,7 @@ function agentFileWalrusApiError(error: unknown): ApiError {
   if (error instanceof MatterhornAgentFileStoreError) return agentFileApiError(error);
   if (error instanceof MatterhornAgentFileWalrusRenewalError) {
     if (error.code === "agent_file_walrus_renewal_intent_integrity_invalid") {
-      return new ApiError(503, "agent_file_wallet_review_unavailable", "Wallet review is temporarily unavailable. Nothing was sent or changed.");
+      return new ApiError(503, "agent_file_wallet_review_unavailable", "Wallet review is temporarily unavailable. If you submitted a transaction, check its status in your wallet before trying again.");
     }
     if (error.code === "agent_file_not_found") {
       return new ApiError(404, error.code, "Agent file not found.");
@@ -4893,7 +5142,7 @@ function agentFileWalrusApiError(error: unknown): ApiError {
     }
     if (error.code === "agent_file_walrus_certification_expired"
       || error.code === "agent_file_walrus_renewal_expired_or_replayed") {
-      return new ApiError(410, error.code, "This renewal expired or was already used. Prepare a new renewal.");
+      return new ApiError(410, error.code, "This renewal expired or was already used. Check its transaction status in your wallet before trying again.");
     }
     if (error.code === "agent_file_walrus_renewal_not_due") {
       return new ApiError(409, error.code, "This backup does not need renewal yet.");
@@ -4905,7 +5154,7 @@ function agentFileWalrusApiError(error: unknown): ApiError {
       return new ApiError(409, error.code, "The wallet transaction failed. Prepare a new renewal.");
     }
     if (error.code.includes("mismatch") || error.code.endsWith("_invalid")) {
-      return new ApiError(409, error.code, "The renewal changed or could not be verified. Prepare it again.");
+      return new ApiError(409, error.code, "Matterhorn could not verify this renewal. Check its transaction status in your wallet before trying again.");
     }
   }
   const code = error instanceof Error ? error.message : "";
@@ -4927,7 +5176,7 @@ function agentFileWalrusApiError(error: unknown): ApiError {
   return new ApiError(
     503,
     "agent_file_walrus_unavailable",
-    "Secure cloud backup is temporarily unavailable.",
+    "Secure cloud backup is temporarily unavailable. If you submitted a transaction, check its status in your wallet before trying again.",
   );
 }
 
@@ -5220,13 +5469,14 @@ function parseCookieHeader(header: string | null): Map<string, string> {
   return cookies;
 }
 
-function matterhornSessionToken(request: Request): string | null {
+function matterhornSessionToken(request: Request, authStore: MatterhornAuthStore): string | null {
+  // Match workspace authentication: a valid first-party browser session wins
+  // over an unrelated bearer header, including on security and sign-out routes.
+  const cookie = matterhornCookieSessionToken(request);
+  if (cookie && authStore.getSession(cookie)) return cookie;
   const authorization = request.headers.get("authorization")?.trim() ?? "";
   const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
-  if (bearer) return bearer;
-  return parseCookieHeader(request.headers.get("cookie")).get(
-    MATTERHORN_SESSION_COOKIE,
-  ) ?? null;
+  return bearer ?? cookie;
 }
 
 function matterhornCookieSessionToken(request: Request): string | null {
@@ -5361,13 +5611,14 @@ function matterhornPublicAuthConfig(authStore?: MatterhornAuthStore) {
   } as const;
 }
 
-function createEmailOutboxDrainer(authStore: MatterhornAuthStore, logger: ServerLogger) {
+function createEmailOutboxDrainer(authStore: MatterhornAuthStore, logger: ServerLogger, deliver?: MatterhornEmailDeliver) {
   let active: Promise<void> | null = null;
   return (): Promise<void> => {
     if (active) return active;
     active = drainMatterhornEmailOutbox({
       authStore,
       config: matterhornEmailConfig(),
+      deliver,
       onDeferred: (item) => logger.log("warn", "Transactional email delivery deferred", {
         "email.template": item.template,
         "email.attempt": item.attempts,
@@ -5407,7 +5658,7 @@ function requireMatterhornSessionToken(
   request: Request,
   authStore: MatterhornAuthStore,
 ): string {
-  const token = matterhornSessionToken(request);
+  const token = matterhornSessionToken(request, authStore);
   if (!token || !authStore.getSession(token)) {
     throw new ApiError(401, "unauthorized", "Sign in to continue.");
   }
@@ -5489,6 +5740,7 @@ async function purgeMatterhornOrganizationWorkspaces(
 async function processMatterhornAccountDeletionJob(input: {
   config: ServerConfig;
   authStore: MatterhornAuthStore;
+  approvals: ApprovalService;
   job: MatterhornAuthAccountDeletionJob;
   guardedRuntime?: MatterhornGuardedAgentRuntime;
   cryptoAppRuntime?: MatterhornCryptoAppRuntimeServices;
@@ -5499,6 +5751,13 @@ async function processMatterhornAccountDeletionJob(input: {
 }): Promise<{ complete: boolean; job: MatterhornAuthAccountDeletionJob }> {
   let job = input.job;
   try {
+    // Sessions are already revoked by beginAccountDeletion. Settle approval
+    // waiters before removing files, including when retrying an interrupted job.
+    for (const organizationId of job.deletedOrganizationIds) {
+      const workspaceId = matterhornOrganizationWorkspaceId(organizationId);
+      input.guardedRuntime?.beginWorkspaceDeletion(workspaceId);
+      input.approvals.cancelWorkspace(workspaceId);
+    }
     if (!job.steps.memory) {
       const memoryVault = createMatterhornMemoryVault(resolveMatterhornMemoryRoot());
       for (const organizationId of job.deletedOrganizationIds) {
@@ -5555,6 +5814,7 @@ async function processMatterhornAccountDeletionJob(input: {
 async function retryMatterhornAccountDeletionJobs(input: {
   config: ServerConfig;
   authStore: MatterhornAuthStore;
+  approvals: ApprovalService;
   guardedRuntime?: MatterhornGuardedAgentRuntime;
   cryptoAppRuntime?: MatterhornCryptoAppRuntimeServices;
   coworkerRuntime?: MatterhornCoworkerRuntimeServices;
@@ -6231,6 +6491,7 @@ function buildNoteMemorySuggestion(
 }
 
 function memoryApiError(error: unknown): ApiError {
+  if (error instanceof ApiError) return error;
   const message = error instanceof Error ? error.message : String(error);
   if (/Could not read Matterhorn memory (index|suggestion inbox)/i.test(message)) {
     return new ApiError(
@@ -6325,12 +6586,17 @@ function sessionEventStreamResponse(input: SessionStreamEventInput) {
   let sent = 0;
   let closed = false;
   let heartbeat: ReturnType<typeof setInterval> | undefined;
+  let abortListener: (() => void) | undefined;
 
   const nextCursor = () => String(index > 0 ? ++index : startedAt + ++index);
+  const cleanup = () => {
+    if (heartbeat) clearInterval(heartbeat);
+    if (abortListener) input.request.signal.removeEventListener("abort", abortListener);
+  };
   const close = (controller: ReadableStreamDefaultController<Uint8Array>) => {
     if (closed) return;
     closed = true;
-    if (heartbeat) clearInterval(heartbeat);
+    cleanup();
     try {
       controller.close();
     } catch {
@@ -6343,6 +6609,12 @@ function sessionEventStreamResponse(input: SessionStreamEventInput) {
     payload: Record<string, unknown>,
   ) => {
     if (closed) return;
+    try {
+      assertRequestAccessCurrent(input.request);
+    } catch {
+      close(controller);
+      return;
+    }
     const cursor = nextCursor();
     const event = {
       type,
@@ -6356,8 +6628,7 @@ function sessionEventStreamResponse(input: SessionStreamEventInput) {
     try {
       controller.enqueue(encoder.encode(`id: ${cursor}\nevent: ${type}\ndata: ${JSON.stringify(event)}\n\n`));
     } catch {
-      closed = true;
-      if (heartbeat) clearInterval(heartbeat);
+      close(controller);
       return;
     }
     sent += 1;
@@ -6472,6 +6743,12 @@ function sessionEventStreamResponse(input: SessionStreamEventInput) {
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
+      abortListener = () => close(controller);
+      input.request.signal.addEventListener("abort", abortListener, { once: true });
+      if (input.request.signal.aborted) {
+        close(controller);
+        return;
+      }
       if (input.sinceCursor) {
         emit(controller, "error", {
           code: "cursor_expired",
@@ -6491,11 +6768,10 @@ function sessionEventStreamResponse(input: SessionStreamEventInput) {
           emit(controller, "heartbeat", { intervalMs: heartbeatMs });
         }, heartbeatMs);
       }
-      input.request.signal.addEventListener("abort", () => close(controller), { once: true });
     },
     cancel() {
       closed = true;
-      if (heartbeat) clearInterval(heartbeat);
+      cleanup();
     },
   });
 
@@ -6621,8 +6897,23 @@ async function requireClient(request: Request, config: ServerConfig, tokens: Tok
   if (!scope) {
     throw new ApiError(401, "unauthorized", "Invalid bearer token");
   }
+  requestAccessChecks.set(request, () => {
+    if (tokens.currentScopeForToken(token) !== scope) {
+      throw new ApiError(401, "unauthorized", "Access token is no longer active. Check the current state before retrying any operation.");
+    }
+  });
+  assertRequestAccessCurrent(request);
   const clientId = request.headers.get("x-openwork-client-id") ?? undefined;
   return { type: "remote", clientId, tokenHash: hashToken(token), scope };
+}
+
+// Request bodies may arrive long after authentication. Recheck the original
+// principal after reading them; never fall back to a different credential.
+// Weak keys keep request-scoped checks from retaining completed requests.
+const requestAccessChecks = new WeakMap<Request, () => void>();
+
+function assertRequestAccessCurrent(request: Request): void {
+  requestAccessChecks.get(request)?.();
 }
 
 async function requireClientAccess(
@@ -6641,6 +6932,15 @@ async function requireClientAccess(
     if (!token) continue;
     const session = authStore.getSession(token);
     if (!session) continue;
+    requestAccessChecks.set(request, () => {
+      const current = authStore.getSession(token);
+      if (!current || current.user.id !== session.user.id) {
+        throw new ApiError(401, "unauthorized", "Your session is no longer active. Sign in again.");
+      }
+      if (current.activeOrgId !== session.activeOrgId) {
+        throw new ApiError(403, "organization_access_denied", "Your active workspace changed. Retry in the current workspace.");
+      }
+    });
     return {
       actor: {
         type: "remote",
@@ -6659,6 +6959,12 @@ async function requireClientAccess(
 
   const hostedMcpAccess = resolveMatterhornHostedMcpAccess(request, authStore);
   if (hostedMcpAccess && bearer) {
+    requestAccessChecks.set(request, () => {
+      const current = resolveMatterhornHostedMcpAccess(request, authStore);
+      if (!current || current.user.id !== hostedMcpAccess.user.id || current.activeOrgId !== hostedMcpAccess.activeOrgId) {
+        throw new ApiError(401, "unauthorized", "Hosted tool access is no longer active.");
+      }
+    });
     const session: MatterhornAuthSession = {
       token: "",
       user: hostedMcpAccess.user,
@@ -6703,6 +7009,11 @@ function assertMatterhornWorkspaceAccess(
 function requireHostToken(request: Request, config: ServerConfig): Actor {
   const hostToken = request.headers.get("x-matterhorn-host-token") ?? request.headers.get("x-openwork-host-token");
   if (hostToken && timingSafeTokenEqual(hostToken, config.hostToken)) {
+    requestAccessChecks.set(request, () => {
+      if (!timingSafeTokenEqual(hostToken, config.hostToken)) {
+        throw new ApiError(401, "unauthorized", "Invalid host token");
+      }
+    });
     return { type: "host", tokenHash: hashToken(hostToken), scope: "owner" };
   }
   throw new ApiError(401, "unauthorized", "Invalid host token");
@@ -6711,7 +7022,7 @@ function requireHostToken(request: Request, config: ServerConfig): Actor {
 async function requireHost(request: Request, config: ServerConfig, tokens: TokenService): Promise<Actor> {
   const hostToken = request.headers.get("x-matterhorn-host-token") ?? request.headers.get("x-openwork-host-token");
   if (hostToken && timingSafeTokenEqual(hostToken, config.hostToken)) {
-    return { type: "host", tokenHash: hashToken(hostToken), scope: "owner" };
+    return requireHostToken(request, config);
   }
 
   const header = request.headers.get("authorization") ?? "";
@@ -6724,6 +7035,12 @@ async function requireHost(request: Request, config: ServerConfig, tokens: Token
   if (scope !== "owner") {
     throw new ApiError(401, "unauthorized", "Invalid host token");
   }
+  requestAccessChecks.set(request, () => {
+    if (tokens.currentScopeForToken(bearer) !== "owner") {
+      throw new ApiError(401, "unauthorized", "Owner access is no longer active. Check the current state before retrying any operation.");
+    }
+  });
+  assertRequestAccessCurrent(request);
   const clientId = request.headers.get("x-openwork-client-id") ?? undefined;
   return { type: "remote", clientId, tokenHash: hashToken(bearer), scope };
 }
@@ -7092,7 +7409,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       {
         recommendedPackages: ["@mysten/dapp-kit-react", "@mysten/dapp-kit-core", "@mysten/sui"],
         configuredNetworks: ["sui-testnet", "sui-mainnet"],
-        publicReadRoutes: ["/api/sui/account/:address", "/api/sui/balance/:address"],
+        publicReadRoutes: ["/api/sui/account/:address", "/api/sui/balance/:address", "/api/sui/object/:objectId"],
         transactionPreviewRoutes: ["/api/sui/transactions/preview"],
         receiptRoutes: ["/api/sui/transactions/receipt", "/api/sui/transactions/verify-receipt"],
         signingBoundary: "client_wallet",
@@ -8582,7 +8899,7 @@ async function probeWorkspaceOpencodeReadiness(
   try {
     const headers = new Headers();
     if (connection.authHeader) headers.set("Authorization", connection.authHeader);
-    const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/global/health`, {
+    const response = await fetchOpencodeRuntime(`${baseUrl.replace(/\/+$/, "")}/global/health`, {
       method: "GET",
       headers,
       signal: controller.signal,
@@ -9332,13 +9649,13 @@ function fileRevision(info: { mtimeMs: number; size: number }): string {
   return `${Math.floor(info.mtimeMs)}:${info.size}`;
 }
 
-async function readWorkspaceFileSnapshot(absPath: string, maxBytes: number): Promise<{
+export async function readWorkspaceFileSnapshot(absPath: string, maxBytes: number): Promise<{
   content: Buffer;
   info: { mtimeMs: number; size: number };
 }> {
   const flags = process.platform === "win32"
     ? fsConstants.O_RDONLY
-    : fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW;
+    : fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK;
   let handle;
   try {
     handle = await open(absPath, flags);
@@ -9362,7 +9679,16 @@ async function readWorkspaceFileSnapshot(absPath: string, maxBytes: number): Pro
       });
     }
 
-    const content = await handle.readFile();
+    // Never let growth after stat turn a small snapshot into an unbounded read.
+    // One extra byte detects growth even when the file fills the initial buffer.
+    const buffer = Buffer.alloc(before.size + 1);
+    let total = 0;
+    while (total < buffer.byteLength) {
+      const { bytesRead } = await handle.read(buffer, total, buffer.byteLength - total, total);
+      if (bytesRead === 0) break;
+      total += bytesRead;
+    }
+    const content = buffer.subarray(0, total);
     const after = await handle.stat();
     if (content.byteLength > maxBytes || after.size > maxBytes) {
       throw new ApiError(413, "file_too_large", "File exceeds size limit", {
@@ -10147,6 +10473,7 @@ function coerceWalletSimulationInput(body: Record<string, unknown>): {
 function createRoutes(
   config: ServerConfig,
   approvals: ApprovalService,
+  sessionPreparations: SessionPreparationRegistry,
   tokens: TokenService,
   authStore: MatterhornAuthStore,
   env: EnvService,
@@ -10178,6 +10505,19 @@ function createRoutes(
   // launch boundary. Do not accept arbitrary consumer names from a browser.
   const stmConsumers = dependencies.stmConsumers ?? [STM_VOICE_CONSUMER];
   const routes: Route[] = [];
+  const withSessionPreparation = (handler: (ctx: RequestContext, workspace: WorkspaceInfo) => Promise<Response>): Route["handler"] => async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    if (!ctx.actor) throw new ApiError(401, "unauthorized", "An authenticated account is required.");
+    const workspaceId = resolveConfiguredWorkspace(config, ctx.params.id).id;
+    return sessionPreparations.run({ workspaceId, sessionId: (ctx.params.sessionId ?? "").trim(),
+      subjectId: modelUsageSubject({ actor: ctx.actor, session: ctx.matterhornSession }).id },
+    ctx.request, async () => {
+      const workspace = await resolveWorkspace(config, workspaceId);
+      sessionPreparations.assertActive(ctx.request);
+      return handler(ctx, workspace);
+    });
+  };
   const billingRouteContext = createBillingRouteContext(config);
   const fileSessions = new FileSessionStore();
   const googleWorkspaceConnectFlows = createGoogleWorkspaceConnectFlowManager(config);
@@ -10209,9 +10549,12 @@ function createRoutes(
     onEvent: recordWorkflowTaskEvent,
   });
   const resolveGuardedRuntimeWorkspace = (directoryValue: unknown): WorkspaceInfo => {
-    const directory = typeof directoryValue === "string" ? resolve(directoryValue) : "";
+    // Use the same canonical directory identity as outgoing runtime requests.
+    // Account workspaces can be provisioned beneath /var or another alias,
+    // while the runtime reports its real path back to this guarded boundary.
+    const directory = typeof directoryValue === "string" ? resolve(normalizeOpencodeDirectory(directoryValue)) : "";
     const workspace = directory
-      ? config.workspaces.find((item) => resolve(item.directory ?? item.path) === directory)
+      ? config.workspaces.find((item) => resolve(normalizeOpencodeDirectory(item.directory ?? item.path)) === directory)
       : config.workspaces[0];
     if (!workspace) throw new ApiError(404, "workspace_not_found", "Guarded runtime workspace not found");
     return workspace;
@@ -10598,7 +10941,7 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/api/auth/sign-out", "none", async ({ request }) => {
-    const token = matterhornSessionToken(request);
+    const token = matterhornSessionToken(request, authStore);
     if (token) authStore.signOut(token);
     const response = jsonResponse({ ok: true });
     response.headers.append(
@@ -10763,6 +11106,7 @@ function createRoutes(
     const processed = await processMatterhornAccountDeletionJob({
       config,
       authStore,
+      approvals,
       guardedRuntime,
       job: deletion,
       cryptoAppRuntime,
@@ -10789,7 +11133,7 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/api/den/v1/session", "none", async ({ request }) => {
-    const token = matterhornSessionToken(request);
+    const token = matterhornSessionToken(request, authStore);
     const session = token ? authStore.getSession(token) : null;
     const response = jsonResponse(
       session
@@ -10997,6 +11341,15 @@ function createRoutes(
         ...(body !== undefined ? { body } : {}),
         signal: controller.signal,
       });
+      // The internal request must retain the original key's authority checks.
+      // Re-authenticating without headers, or dropping the check, would let a
+      // revoked key continue after a body read or pending approval completes.
+      const checkAccess = requestAccessChecks.get(ctx.request);
+      if (!checkAccess) {
+        throw new HostedGuardedMcpToolError("Matterhorn could not verify this connection's access.");
+      }
+      checkAccess();
+      requestAccessChecks.set(targetRequest, checkAccess);
       if (!matterhornHostedMcpRouteIsAllowed(targetRequest)) {
         throw new HostedGuardedMcpToolError(
           "This operation is not available through Matterhorn's guarded connection.",
@@ -11023,7 +11376,9 @@ function createRoutes(
         url: targetUrl,
         params: targetRoute.params,
       });
-      return await hostedGuardedMcpInvocationResult(response);
+      const result = await hostedGuardedMcpInvocationResult(response);
+      checkAccess();
+      return result;
     } catch (error) {
       throw hostedGuardedMcpToolError(error);
     } finally {
@@ -11058,7 +11413,7 @@ function createRoutes(
     try {
       payload = JSON.parse(await readBodyTextLimited(ctx.request, 524_288, "Hosted MCP")) as unknown;
     } catch (error) {
-      if (error instanceof ApiError && error.status === 413) throw error;
+      if (error instanceof ApiError) throw error;
       return hostedGuardedMcpParseError();
     }
     return handleHostedGuardedMcpPost({
@@ -11133,14 +11488,16 @@ function createRoutes(
     );
     const workspace = resolveGuardedRuntimeWorkspace(body.workspaceDirectory);
     const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
-    if (!sessionId || !Array.isArray(body.messages)) {
-      throw new ApiError(400, "invalid_payload", "sessionId and messages are required");
+    const messageId = typeof body.messageId === "string" ? body.messageId.trim() : "";
+    if (!sessionId || !messageId || !Array.isArray(body.messages)) {
+      throw new ApiError(400, "invalid_payload", "sessionId, messageId and messages are required");
     }
     try {
       const validated = guardedRuntime.validateRuntimeProviderMessages({
         runtimeSecret,
         workspaceId: workspace.id,
         sessionId,
+        messageId,
         messages: body.messages,
         ...(typeof body.expectedRunId === "string" ? { expectedRunId: body.expectedRunId } : {}),
       });
@@ -11153,30 +11510,32 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/internal/agent-runs/provider-system", "none", async (ctx) => {
-    const body = await readJsonBody(ctx.request, 32_000, "Agent provider system context");
     const runtimeSecret = ctx.request.headers.get("x-matterhorn-agent-runtime-secret") ?? "";
     try {
       guardedRuntime.authenticateRuntime(runtimeSecret);
     } catch (error) {
       throw guardedRuntimeApiError(error);
     }
+    const body = await readJsonBody(ctx.request, 32_000, "Agent provider system context");
     const workspace = resolveGuardedRuntimeWorkspace(body.workspaceDirectory);
+    const expectedRunId = typeof body.expectedRunId === "string" ? body.expectedRunId.trim() : "";
     const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
     const providerId = typeof body.providerId === "string" ? body.providerId.trim() : "";
     const modelId = typeof body.modelId === "string" ? body.modelId.trim() : "";
     const purpose = body.purpose === "message" || body.purpose === "compaction"
       ? body.purpose
       : null;
-    if (!sessionId || !providerId || !modelId || !purpose) {
+    if (!expectedRunId || !sessionId || !providerId || !modelId || !purpose) {
       throw new ApiError(
         400,
         "invalid_payload",
-        "sessionId, providerId, modelId, and a valid purpose are required",
+        "expectedRunId, sessionId, providerId, modelId, and a valid purpose are required",
       );
     }
     try {
       const bound = guardedRuntime.resolveRuntimeProviderSystem({
         runtimeSecret,
+        expectedRunId,
         workspaceId: workspace.id,
         sessionId,
         providerId,
@@ -11187,6 +11546,27 @@ function createRoutes(
       response.headers.set("Cache-Control", "no-store");
       return response;
     } catch (error) {
+      throw guardedRuntimeApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/internal/agent-runs/claim-compaction", "none", async (ctx) => {
+    const runtimeSecret = ctx.request.headers.get("x-matterhorn-agent-runtime-secret") ?? "";
+    try {
+      guardedRuntime.authenticateRuntime(runtimeSecret);
+      const body = await readJsonBody(ctx.request, 32_000, "Compaction message binding");
+      const workspace = resolveGuardedRuntimeWorkspace(body.workspaceDirectory);
+      if (typeof body.runId !== "string" || typeof body.sessionId !== "string" || typeof body.messageId !== "string"
+        || typeof body.providerId !== "string" || typeof body.modelId !== "string") {
+        throw new ApiError(400, "invalid_payload", "A complete compaction message binding is required");
+      }
+      const bound = guardedRuntime.claimRuntimeCompactionMessage({ runtimeSecret, workspaceId: workspace.id,
+        runId: body.runId, sessionId: body.sessionId, messageId: body.messageId, providerId: body.providerId, modelId: body.modelId });
+      const response = jsonResponse(bound);
+      response.headers.set("Cache-Control", "no-store");
+      return response;
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
       throw guardedRuntimeApiError(error);
     }
   });
@@ -11403,7 +11783,9 @@ function createRoutes(
 
   addRoute(routes, "POST", "/runtime/upgrade", "host", async (ctx) => {
     const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Runtime upgrade");
+    assertRequestAccessCurrent(ctx.request);
     const result = await fetchRuntimeControl("/runtime/upgrade", { method: "POST", body });
+    assertRequestAccessCurrent(ctx.request);
     return jsonResponse(result, 202);
   });
 
@@ -11414,7 +11796,9 @@ function createRoutes(
 
   addRoute(routes, "POST", "/w/:id/runtime/upgrade", "host", async (ctx) => {
     const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Runtime upgrade");
+    assertRequestAccessCurrent(ctx.request);
     const result = await fetchRuntimeControl("/runtime/upgrade", { method: "POST", body });
+    assertRequestAccessCurrent(ctx.request);
     return jsonResponse(result, 202);
   });
 
@@ -11868,6 +12252,10 @@ function createRoutes(
 
   addRoute(routes, "GET", "/workspace/:id/crypto-evidence", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
+    const evidenceId = ctx.url.searchParams.get("evidenceId");
+    if (evidenceId !== null && (evidenceId.length < 1 || evidenceId.length > 256)) {
+      throw new ApiError(400, "crypto_evidence_query_invalid", "Record identifier must be between 1 and 256 characters.");
+    }
     const rawLimit = ctx.url.searchParams.get("limit");
     const limit = rawLimit === null ? 50 : Number(rawLimit);
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
@@ -11877,7 +12265,7 @@ function createRoutes(
       ? cryptoEvidenceRuntime.verification.list({
           workspaceId: workspace.id,
           ownerId: cryptoAppCreatedBy(ctx),
-        }).slice(0, limit)
+        }).filter((item) => evidenceId === null || item.evidenceId === evidenceId).slice(0, limit)
       : [];
     return noStoreJsonResponse({
       mode: cryptoEvidenceRuntime.mode,
@@ -13732,7 +14120,8 @@ function createRoutes(
     }
     const currentModels = await buildWorkspaceBackendModels(config, workspace);
     assertModelSelectionInCatalog(currentModels.catalog, requestSelection);
-    assertPromptProviderPrivacy(requestSelection.providerId, requestSelection.modelId);
+    // A workspace preference is not authorization to send data. Prompt, proxy,
+    // and compaction routes independently enforce privacy and consent at use.
 
     let selection;
     try {
@@ -13813,7 +14202,9 @@ function createRoutes(
 
   addRoute(routes, "GET", "/workspace/:id/backend/team-access", "host", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
-    return jsonResponse(await buildBackendTeamAccess(config, workspace, tokens));
+    const result = await buildBackendTeamAccess(config, workspace, tokens);
+    assertRequestAccessCurrent(ctx.request);
+    return jsonResponse(result);
   });
 
   addRoute(routes, "GET", "/workspace/:id/backend/team-access/summary", "client", async (ctx) => {
@@ -13863,7 +14254,7 @@ function createRoutes(
         },
       );
     }
-    const issued = await tokens.create(scope, { label });
+    const issued = await tokens.create(scope, { label, assertAccess: () => assertRequestAccessCurrent(ctx.request) });
 
     await recordAudit(workspace.path, {
       id: shortId(),
@@ -13875,6 +14266,7 @@ function createRoutes(
       timestamp: Date.now(),
     });
 
+    assertRequestAccessCurrent(ctx.request);
     return jsonResponse({
       success: true,
       version: "matterhorn.backend.team-access.v1",
@@ -13907,13 +14299,14 @@ function createRoutes(
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const tokenId = ctx.params.tokenId.trim();
     const existing = (await tokens.list()).find((token) => token.id === tokenId);
+    assertRequestAccessCurrent(ctx.request);
     if (!existing) {
       throw new ApiError(404, "token_not_found", "Token not found");
     }
     if (existing.scope === "owner") {
       throw new ApiError(400, "owner_token_not_supported", "Revoke owner tokens from host token settings.");
     }
-    const ok = await tokens.revoke(tokenId);
+    const ok = await tokens.revoke(tokenId, () => assertRequestAccessCurrent(ctx.request));
     if (!ok) {
       throw new ApiError(404, "token_not_found", "Token not found");
     }
@@ -13935,6 +14328,7 @@ function createRoutes(
       timestamp: Date.now(),
     });
 
+    assertRequestAccessCurrent(ctx.request);
     return jsonResponse({
       success: true,
       version: "matterhorn.backend.team-access.v1",
@@ -14005,8 +14399,9 @@ function createRoutes(
     return jsonResponse({ items, workspaces: items, activeId: active?.id ?? null });
   });
 
-  addRoute(routes, "GET", "/tokens", "host", async () => {
+  addRoute(routes, "GET", "/tokens", "host", async (ctx) => {
     const items = await tokens.list();
+    assertRequestAccessCurrent(ctx.request);
     return jsonResponse({ items });
   });
 
@@ -14019,13 +14414,14 @@ function createRoutes(
       throw new ApiError(400, "invalid_scope", "Token scope must be owner, collaborator, or viewer");
     }
     const label = typeof body.label === "string" ? body.label.trim() : undefined;
-    const issued = await tokens.create(scope, { label });
+    const issued = await tokens.create(scope, { label, assertAccess: () => assertRequestAccessCurrent(ctx.request) });
+    assertRequestAccessCurrent(ctx.request);
     return jsonResponse(issued, 201);
   });
 
   addRoute(routes, "DELETE", "/tokens/:id", "host", async (ctx) => {
     ensureWritable(config);
-    const ok = await tokens.revoke(ctx.params.id);
+    const ok = await tokens.revoke(ctx.params.id, () => assertRequestAccessCurrent(ctx.request));
     if (!ok) {
       throw new ApiError(404, "token_not_found", "Token not found");
     }
@@ -14231,7 +14627,7 @@ function createRoutes(
       requireHostToken(ctx.request, config);
     }
     const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Realtime voice session");
-    return jsonResponse(await createOpenAiRealtimeVoiceSession(env, body, stm));
+    return jsonResponse(await createOpenAiRealtimeVoiceSession(ctx.request, env, body, stm));
   });
 
   addRoute(routes, "POST", "/workspaces/local", "host", async (ctx) => {
@@ -15105,6 +15501,7 @@ function createRoutes(
     const pending = modelUsageStore.pendingSessions(subject)
       .filter((entry) => entry.workspaceId === workspace.id);
     await Promise.all(pending.map((entry) => reconcileModelUsageSession({
+      guardedRuntime,
       config,
       workspace,
       store: modelUsageStore,
@@ -15121,6 +15518,7 @@ function createRoutes(
     if (!sessionId) throw new ApiError(400, "invalid_payload", "sessionId is required");
     const subject = modelUsageSubject(clientAccessFromRequestContext(ctx, workspace));
     const reconciled = await reconcileModelUsageSession({
+      guardedRuntime,
       config,
       workspace,
       store: modelUsageStore,
@@ -15138,6 +15536,7 @@ function createRoutes(
       search: ctx.url.searchParams.get("search")?.trim() || undefined,
       limit: parseOptionalPositiveInteger(ctx.url.searchParams.get("limit"), "limit"),
     });
+    assertRequestAccessCurrent(ctx.request);
     return jsonResponse({ items });
   });
 
@@ -15148,6 +15547,7 @@ function createRoutes(
       throw new ApiError(400, "invalid_payload", "sessionId is required");
     }
     const item = await readWorkspaceSession(config, workspace, sessionId);
+    assertRequestAccessCurrent(ctx.request);
     return jsonResponse({ item });
   });
 
@@ -15156,6 +15556,7 @@ function createRoutes(
     const sessionId = (ctx.params.sessionId ?? "").trim();
     if (!sessionId) throw new ApiError(400, "invalid_payload", "sessionId is required");
     await readWorkspaceSession(config, workspace, sessionId);
+    assertRequestAccessCurrent(ctx.request);
     if (!coworkerRuntime.coworkers || coworkerRuntime.mode === "off") {
       return noStoreJsonResponse({ mode: coworkerRuntime.mode, active: false, binding: null, coworker: null });
     }
@@ -15252,6 +15653,7 @@ function createRoutes(
       throw new ApiError(400, "coworker_session_binding_invalid", "Forked chat connection is invalid.");
     }
     await readWorkspaceSession(config, workspace, targetSessionId);
+    assertRequestAccessCurrent(ctx.request);
     try {
       const ownerId = cryptoAppCreatedBy(ctx);
       const sourceBinding = coworkerRuntime.coworkers.getSessionBinding(workspace.id, ownerId, sourceSessionId);
@@ -15382,7 +15784,7 @@ function createRoutes(
     if (!sessionId) throw new ApiError(400, "invalid_payload", "sessionId is required");
     const body = await readJsonBody(
       ctx.request,
-      AGENT_MESSAGE_MAX_ATTACHMENT_BYTES * 2 + 65_536,
+      AGENT_MESSAGE_JSON_BODY_MAX_BYTES,
       "Agent privacy preflight",
     );
     const headerExecutionMode = requestExecutionMode(ctx.request);
@@ -15517,7 +15919,17 @@ function createRoutes(
     const sessionId = ctx.url.searchParams.get("sessionId")?.trim() || undefined;
     const limit = parseOptionalPositiveInteger(ctx.url.searchParams.get("limit"), "limit");
     const items = await guardedRuntime.receipts.list(workspace.id, { sessionId, limit });
-    return jsonResponse({ items, retention: { windowDays: 365, purgeSupported: true } });
+    for (const pendingSession of [...new Set(items.filter(item => item.status === "pending").map(item => item.sessionId))].slice(0, 4)) {
+      assertRequestAccessCurrent(ctx.request);
+      // This read path also retries after billing has already settled. Native
+      // unavailability must leave the authentic pending receipt readable.
+      await recoverNativeSessionCompletions(config, workspace, guardedRuntime, pendingSession).catch(() => undefined);
+    }
+    assertRequestAccessCurrent(ctx.request);
+    const recoveredItems = items.some(item => item.status === "pending")
+      ? await guardedRuntime.receipts.list(workspace.id, { sessionId, limit }) : items;
+    assertRequestAccessCurrent(ctx.request);
+    return jsonResponse({ items: recoveredItems, retention: { windowDays: 365, purgeSupported: true } });
   });
 
   addRoute(routes, "POST", "/workspace/:id/security-receipts/migrate-legacy", "client", async (ctx) => {
@@ -15561,13 +15973,17 @@ function createRoutes(
     if (!receipt) {
       throw new ApiError(404, "agent_run_receipt_not_found", "Agent run receipt not found");
     }
-    return jsonResponse({ item: receipt });
+    assertRequestAccessCurrent(ctx.request);
+    if (receipt.status === "pending") {
+      await recoverNativeSessionCompletions(config, workspace, guardedRuntime, receipt.sessionId).catch(() => undefined);
+    }
+    const item = receipt.status === "pending" ? await guardedRuntime.receipts.get(workspace.id, receipt.runId) : receipt;
+    assertRequestAccessCurrent(ctx.request);
+    if (!item) throw new ApiError(404, "agent_run_receipt_not_found", "Agent run receipt not found");
+    return jsonResponse({ item });
   });
 
-  addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/compact", "client", async (ctx) => {
-    ensureWritable(config);
-    requireClientScope(ctx, "collaborator");
-    const workspace = await resolveWorkspace(config, ctx.params.id);
+  addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/compact", "client", withSessionPreparation(async (ctx, workspace) => {
     const sessionId = (ctx.params.sessionId ?? "").trim();
     if (!sessionId) {
       throw new ApiError(400, "invalid_payload", "sessionId is required");
@@ -15614,14 +16030,18 @@ function createRoutes(
     } catch (error) {
       throw guardedRuntimeApiError(error);
     }
+    sessionPreparations.assertActive(ctx.request);
     await requireApproval(ctx, {
       workspaceId: workspace.id,
       action: "session.compact",
       summary: `Compact session ${sessionId}`,
       paths: [workspace.path],
-    });
+    }, { sessionId, subjectId: modelUsageSubject(clientAccessFromRequestContext(ctx, workspace)).id });
+    sessionPreparations.assertActive(ctx.request);
 
+    const userMessageId = `msg_${randomUUID().replaceAll("-", "")}`;
     const usage = await reserveModelUsage({
+      guardedRuntime,
       config,
       workspace,
       store: modelUsageStore,
@@ -15629,19 +16049,13 @@ function createRoutes(
       sessionId,
       providerId: modelResolution.model.providerID,
       modelId: modelResolution.model.modelID,
+      messageId: userMessageId,
     });
 
     const directory = resolveOpencodeDirectory(workspace) ?? undefined;
     const opencode = createWorkspaceOpencodeClient(config, workspace);
-    const sessionApi = opencode.session as typeof opencode.session & {
-      summarize: (parameters: {
-        sessionID: string;
-        directory?: string;
-        providerID: string;
-        modelID: string;
-      }) => Promise<OpencodeClientResult<unknown, unknown>>;
-    };
     let guardedAcceptance: GuardedPromptAcceptance | null = null;
+    let dispatchStarted = false;
     try {
       // Consent is bound to the exact stored transcript. Re-read immediately
       // before dispatch so a concurrent message, tool result, edit, or revert
@@ -15654,7 +16068,9 @@ function createRoutes(
         agentId: compactionAgentContext.agentId,
         expectedAgentPromptHash: compactionAgentContext.promptHash,
       });
+      sessionPreparations.assertActive(ctx.request);
       await abortWorkspaceSessionBeforeReplacement(config, workspace, sessionId);
+      sessionPreparations.assertActive(ctx.request);
       guardedAcceptance = await guardedRuntime.startAuthorizedPrompt(
         {
           ...guardedInput,
@@ -15666,19 +16082,37 @@ function createRoutes(
         guardedAuthorization,
         providerSystem,
       );
-      unwrapOpencodeResult(
-        await sessionApi.summarize({
+      guardedRuntime.bindUserMessage({ runId: guardedAcceptance.runId, sessionId, messageId: userMessageId });
+      sessionPreparations.assertActive(ctx.request);
+      dispatchStarted = true;
+      const lastUser = [...currentMessages].reverse().find(message => message.info.role === "user");
+      const result = unwrapOpencodeResult(
+        await opencode.session.prompt({
           sessionID: sessionId,
           ...(directory ? { directory } : {}),
-          providerID: modelResolution.model.providerID,
-          modelID: modelResolution.model.modelID,
+          messageID: userMessageId,
+          model: modelResolution.model,
+          ...(typeof lastUser?.info.agent === "string" ? { agent: lastUser.info.agent } : {}),
+          parts: [compactionPromptPart(guardedAcceptance.runId)],
         }),
-        `/session/${encodeURIComponent(sessionId)}/summarize`,
+        `/session/${encodeURIComponent(sessionId)}/message`,
       );
+      assertCompactionResponse(result, { sessionId, messageId: userMessageId,
+        providerId: modelResolution.model.providerID, modelId: modelResolution.model.modelID });
     } catch (error) {
-      modelUsageStore.cancel(usage.reservation.reservationId);
-      if (guardedAcceptance) {
-        await guardedRuntime.failRun(guardedAcceptance.runId);
+      const unusedDispatch = guardedAcceptance && guardedRuntime.revokeUnusedProviderDispatch({
+        runId: guardedAcceptance.runId, workspaceId: workspace.id, sessionId, messageId: userMessageId,
+      });
+      if (!dispatchStarted || unusedDispatch) {
+        modelUsageStore.cancel(usage.reservation.reservationId);
+        if (guardedAcceptance) await guardedRuntime.failRun(guardedAcceptance.runId);
+      } else {
+        // The runtime may have accepted compaction before losing its reply.
+        scheduleModelUsageReconciliation({ guardedRuntime, config, workspace, store: modelUsageStore, subject: usage.subject, sessionId });
+      }
+      if (dispatchStarted && error instanceof SyntaxError) {
+        throw new ApiError(502, "compaction_result_unverified",
+          "The runtime returned an unreadable chat summary. Check chat history before retrying; usage remains pending until verified.");
       }
       if (error instanceof GuardedRuntimeError) {
         throw guardedRuntimeApiError(error);
@@ -15710,6 +16144,7 @@ function createRoutes(
 
     if (usage.reservation.reservationId) {
       scheduleModelUsageReconciliation({
+        guardedRuntime,
         config,
         workspace,
         store: modelUsageStore,
@@ -15729,19 +16164,16 @@ function createRoutes(
         consentUsed: guardedAcceptance.consentUsed,
       },
     }, 202);
-  });
+  }));
 
-  addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/messages", "client", async (ctx) => {
-    ensureWritable(config);
-    requireClientScope(ctx, "collaborator");
-    const workspace = await resolveWorkspace(config, ctx.params.id);
+  addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/messages", "client", withSessionPreparation(async (ctx, workspace) => {
     const sessionId = (ctx.params.sessionId ?? "").trim();
     if (!sessionId) {
       throw new ApiError(400, "invalid_payload", "sessionId is required");
     }
     const body = await readJsonBody(
       ctx.request,
-      AGENT_MESSAGE_MAX_ATTACHMENT_BYTES * 2 + 65_536,
+      AGENT_MESSAGE_JSON_BODY_MAX_BYTES,
       "Agent message",
     );
     const rawParts = parseSessionPromptParts(body);
@@ -15920,12 +16352,14 @@ function createRoutes(
       throw guardedRuntimeApiError(error);
     }
 
+    sessionPreparations.assertActive(ctx.request);
     await requireApproval(ctx, {
       workspaceId: workspace.id,
       action: "session.prompt",
       summary: `Submit prompt to session ${sessionId}`,
       paths: [workspace.path],
     }, { sessionId, subjectId });
+    sessionPreparations.assertActive(ctx.request);
     const userMessageId = `msg_${randomUUID().replaceAll("-", "")}`;
     if (!modelUsageStore.claimMessageDispatch({ subjectId, workspaceId: workspace.id, sessionId, requestId, requestHash, messageId: userMessageId })) {
       throw unknownDispatch();
@@ -15936,6 +16370,7 @@ function createRoutes(
       // reserving anything, so a continuation cannot replace a newer turn.
       if (continuationOf) await validateAnswerContinuation(config, workspace, sessionId, body);
       const usage = await reserveModelUsage({
+        guardedRuntime,
         config,
         workspace,
         store: modelUsageStore,
@@ -15949,6 +16384,8 @@ function createRoutes(
         // A follow-up is a replacement run. Abort any in-flight response before
         // consuming consent or starting the newly authorized guarded run; abort
         // is idempotent when the session is already idle.
+        assertRequestAccessCurrent(ctx.request);
+        sessionPreparations.assertActive(ctx.request);
         await abortWorkspaceSessionBeforeReplacement(config, workspace, sessionId);
       } catch (error) {
         modelUsageStore.cancel(usage.reservation.reservationId);
@@ -15964,6 +16401,8 @@ function createRoutes(
           guardedRuntime,
         });
         if (continuationOf) await validateAnswerContinuation(config, workspace, sessionId, body);
+        assertRequestAccessCurrent(ctx.request);
+        sessionPreparations.assertActive(ctx.request);
         guardedAcceptance = await guardedRuntime.startAuthorizedPrompt(
           {
             ...guardedInput,
@@ -15974,6 +16413,7 @@ function createRoutes(
         );
       } catch (error) {
         modelUsageStore.cancel(usage.reservation.reservationId);
+        if (error instanceof ApiError) throw error;
         throw guardedRuntimeApiError(error);
       }
       modelUsageStore.bindUserMessage(usage.reservation.reservationId, userMessageId);
@@ -16012,11 +16452,14 @@ function createRoutes(
           config,
           workspace,
           sessionId,
+          assertCurrent: () => sessionPreparations.assertActive(ctx.request),
           agentId: agent,
           expectedAgentId: agentContext.agentId,
           expectedAgentPromptHash: agentContext.promptHash,
           ...(requestToolProfiles.length ? { requestToolProfiles } : {}),
         });
+        assertRequestAccessCurrent(ctx.request);
+        sessionPreparations.assertActive(ctx.request);
         dispatchStarted = true;
         if (reasoningEffort) {
           const { sessionID: _sessionID, directory: _directory, ...upstreamBody } = promptBody;
@@ -16045,7 +16488,7 @@ function createRoutes(
         }
         // A transport error is not proof of rejection. Keep authority and the
         // usage hold while inspecting the exact parent, never a time heuristic.
-        scheduleModelUsageReconciliation({ config, workspace, store: modelUsageStore, subject: usage.subject, sessionId });
+        scheduleModelUsageReconciliation({ guardedRuntime, config, workspace, store: modelUsageStore, subject: usage.subject, sessionId });
         const history = await readWorkspaceSessionMessages(config, workspace, sessionId, {}).catch(() => []);
         const accepted = history.some((message) => message.info.id === userMessageId
           || ("parentID" in message.info && message.info.parentID === userMessageId));
@@ -16067,6 +16510,7 @@ function createRoutes(
 
       if (usage.reservation.reservationId) {
         scheduleModelUsageReconciliation({
+          guardedRuntime,
           config,
           workspace,
           store: modelUsageStore,
@@ -16083,7 +16527,7 @@ function createRoutes(
       if (!dispatchStarted) modelUsageStore.discardUnsentMessageDispatch(subjectId, workspace.id, sessionId, requestId);
       throw error;
     }
-  });
+  }));
 
   addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/execution-mode", "client", async (ctx) => {
     ensureWritable(config);
@@ -16123,6 +16567,7 @@ function createRoutes(
     const items = await readWorkspaceSessionMessages(config, workspace, sessionId, {
       limit: parseOptionalPositiveInteger(ctx.url.searchParams.get("limit"), "limit"),
     });
+    assertRequestAccessCurrent(ctx.request);
     return jsonResponse({ items });
   });
 
@@ -16133,7 +16578,13 @@ function createRoutes(
       throw new ApiError(400, "invalid_payload", "sessionId is required");
     }
     const item = await readWorkspaceSessionExecutionStatus(config, workspace, sessionId);
-    return jsonResponse({ item });
+    assertRequestAccessCurrent(ctx.request);
+    const awaitingOperatorApproval = approvals.hasPendingSession({
+      workspaceId: workspace.id,
+      sessionId,
+      subjectId: modelUsageSubject(clientAccessFromRequestContext(ctx, workspace)).id,
+    }, "session.prompt");
+    return jsonResponse({ item: { ...item, awaitingOperatorApproval } });
   });
 
   addRoute(routes, "GET", "/workspace/:id/sessions/:sessionId/snapshot", "client", async (ctx) => {
@@ -16145,6 +16596,7 @@ function createRoutes(
     const item = await readWorkspaceSessionSnapshot(config, workspace, sessionId, {
       limit: parseOptionalPositiveInteger(ctx.url.searchParams.get("limit"), "limit"),
     });
+    assertRequestAccessCurrent(ctx.request);
     return jsonResponse({ item });
   });
 
@@ -16167,6 +16619,7 @@ function createRoutes(
         : Promise.resolve(null),
       readWorkspaceSessionExecutionStatus(config, workspace, sessionId),
     ]);
+    assertRequestAccessCurrent(ctx.request);
     return sessionEventStreamResponse({
       request: ctx.request,
       workspaceId: workspace.id,
@@ -16355,6 +16808,7 @@ function createRoutes(
     } catch {
       throw new ApiError(400, "invalid_payload", "Invalid multipart upload");
     }
+    assertRequestAccessCurrent(ctx.request);
     const file = form.get("file");
     if (!(file instanceof File)) {
       throw new ApiError(400, "file_required", "Form field 'file' is required");
@@ -20252,6 +20706,19 @@ function createRoutes(
     }
   });
 
+  addRoute(routes, "GET", "/api/sui/object/:objectId", "client", async (ctx) => {
+    try {
+      const object = await suiProvider.getObjectSnapshot(ctx.params.objectId, {
+        network: ctx.url.searchParams.get("network"),
+        signal: ctx.request.signal,
+      });
+      if (!object) throw new ApiError(404, "sui_object_not_found", "Public Sui object not found on the requested network");
+      return jsonResponse({ success: true, object });
+    } catch (err) {
+      throw suiApiError(err);
+    }
+  });
+
   addRoute(routes, "POST", "/api/sui/transactions/preview", "client", async (ctx) => {
     const body = await readJsonBody(ctx.request);
     try {
@@ -20724,7 +21191,13 @@ function createRoutes(
         throw new ApiError(400, "invalid_limit", "limit must be an integer from 1 to 20");
       }
       let data: Record<string, unknown>;
-      if (operation === "subnet" || operation === "validators") {
+      if (operation === "subnet" && netuid === undefined) {
+        // An omitted ID selects the public list; a present malformed ID must
+        // still fail validation below rather than silently changing the read.
+        const subnets = await bittensorProvider.listSubnets();
+        data = { subnets: subnets.slice(0, limit), omittedSubnets: Math.max(0, subnets.length - limit),
+          configuredNetwork: getSubtensorSidecarStatus().network };
+      } else if (operation === "subnet" || operation === "validators") {
         if (typeof netuid !== "number" || !Number.isInteger(netuid) || netuid < 0) {
           throw new ApiError(400, "invalid_netuid", "netuid must be a non-negative integer");
         }
@@ -21962,7 +22435,10 @@ function promptPrivateContextIds(body: Record<string, unknown>, ...keys: string[
 }
 
 const AGENT_MESSAGE_MAX_PARTS = 64;
-const AGENT_MESSAGE_MAX_ATTACHMENT_BYTES = FILE_SESSION_MAX_FILE_BYTES;
+const AGENT_MESSAGE_MAX_ATTACHMENT_BYTES = CHAT_ATTACHMENT_MAX_BYTES;
+// Workspace URLs are small on the wire but expand into inspected file snapshots.
+const AGENT_MESSAGE_MAX_TOTAL_ATTACHMENT_BYTES = AGENT_MESSAGE_MAX_ATTACHMENT_BYTES * 2;
+const AGENT_MESSAGE_JSON_BODY_MAX_BYTES = AGENT_MESSAGE_MAX_TOTAL_ATTACHMENT_BYTES + 65_536;
 const AGENT_MESSAGE_MAX_SYSTEM_CHARS = 32_000;
 const AGENT_MESSAGE_MAX_MEMORY_IDS = 32;
 const AGENT_MESSAGE_MAX_AGENT_FILE_IDS = 8;
@@ -22201,7 +22677,9 @@ function decodeInlineAttachmentData(url: string): { bytes: Uint8Array; mimeFromU
   try {
     if (match[2]) {
       const compact = encoded.replace(/\s+/g, "");
-      if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(compact)) {
+      // Repeated-group validation can reject valid multi-megabyte base64.
+      // Check length, alphabet and final padding without nested repetition.
+      if (compact.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(compact)) {
         throw new Error("invalid base64");
       }
       return { bytes: Buffer.from(compact, "base64"), mimeFromUrl };
@@ -22215,11 +22693,12 @@ function decodeInlineAttachmentData(url: string): { bytes: Uint8Array; mimeFromU
 async function resolveAgentAttachment(
   workspace: WorkspaceInfo,
   part: Record<string, unknown>,
+  budget: { remainingBytes: number },
 ): Promise<{
   upstream: Record<string, unknown>;
   privacy: MatterhornAgentPrivacyPart;
 }> {
-  const url = typeof part.url === "string" ? part.url.trim() : "";
+  let url = typeof part.url === "string" ? part.url.trim() : "";
   const requestedMime = typeof part.mime === "string" ? part.mime.trim().slice(0, 160) : "";
   let bytes: Uint8Array;
   let mime = requestedMime;
@@ -22237,9 +22716,19 @@ async function resolveAgentAttachment(
       throw new ApiError(400, "attachment_unverifiable", "The workspace attachment path is invalid.");
     }
     const safePath = resolveSafeChildPath(workspace.path, relative(workspace.path, requestedPath));
+    const readLimit = Math.min(AGENT_MESSAGE_MAX_ATTACHMENT_BYTES, budget.remainingBytes);
     try {
-      bytes = await readFile(safePath);
-    } catch {
+      bytes = (await readWorkspaceFileSnapshot(safePath, readLimit)).content;
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "file_too_large") {
+        if (readLimit < AGENT_MESSAGE_MAX_ATTACHMENT_BYTES) throw aggregateAttachmentSizeError();
+        throw new ApiError(413, "attachment_too_large", "Attachments must be 5 MB or smaller.", {
+          maxBytes: AGENT_MESSAGE_MAX_ATTACHMENT_BYTES,
+        });
+      }
+      if (error instanceof ApiError && error.code === "file_changed") {
+        throw new ApiError(409, "attachment_changed", "The attachment changed while being read. Review it and try again.");
+      }
       throw new ApiError(404, "attachment_not_found", "The workspace attachment is no longer available.");
     }
     fallbackName = basename(safePath);
@@ -22256,6 +22745,18 @@ async function resolveAgentAttachment(
     throw new ApiError(413, "attachment_too_large", "Attachments must be 5 MB or smaller.", {
       maxBytes: AGENT_MESSAGE_MAX_ATTACHMENT_BYTES,
     });
+  }
+  if (bytes.byteLength > budget.remainingBytes) throw aggregateAttachmentSizeError();
+  budget.remainingBytes -= bytes.byteLength;
+
+  if (url.startsWith("file://")) {
+    const mediaType = mime.split(";")[0].trim();
+    if (!/^[\w.+-]+\/[\w.+-]+$/.test(mediaType)) {
+      throw new ApiError(400, "attachment_unverifiable", "The attachment media type is invalid.");
+    }
+    // Forward exactly the inspected snapshot, not a mutable path the runtime
+    // could reopen after privacy checks and consent have already completed.
+    url = `data:${mediaType};base64,${Buffer.from(bytes).toString("base64")}`;
   }
 
   const name = (
@@ -22285,6 +22786,12 @@ async function resolveAgentAttachment(
   };
 }
 
+function aggregateAttachmentSizeError(): ApiError {
+  return new ApiError(413, "attachments_too_large", "Attachments must total 10 MB or less. Remove a file and try again.", {
+    maxBytes: AGENT_MESSAGE_MAX_TOTAL_ATTACHMENT_BYTES,
+  });
+}
+
 async function resolveAgentPromptParts(
   workspace: WorkspaceInfo,
   value: unknown[],
@@ -22294,6 +22801,7 @@ async function resolveAgentPromptParts(
   }
   const upstreamParts: unknown[] = [];
   const privacyParts: MatterhornAgentPrivacyPart[] = [];
+  const attachmentBudget = { remainingBytes: AGENT_MESSAGE_MAX_TOTAL_ATTACHMENT_BYTES };
   for (const part of value) {
     if (!isRecord(part) || typeof part.type !== "string") {
       throw new ApiError(400, "invalid_payload", "Every message part must be a typed object.");
@@ -22314,7 +22822,7 @@ async function resolveAgentPromptParts(
       continue;
     }
     if (part.type === "file" || part.type === "attachment") {
-      const resolved = await resolveAgentAttachment(workspace, part);
+      const resolved = await resolveAgentAttachment(workspace, part, attachmentBudget);
       upstreamParts.push(resolved.upstream);
       privacyParts.push(resolved.privacy);
       continue;
@@ -23106,7 +23614,7 @@ async function readWorkspaceSessionSnapshot(
   }
 }
 
-async function resolveWorkspace(config: ServerConfig, id: string): Promise<WorkspaceInfo> {
+function resolveConfiguredWorkspace(config: ServerConfig, id: string): WorkspaceInfo {
   const workspaceId = id.trim();
   const aliasWorkspaceId = workspaceId.startsWith("rem_") ? workspaceId.slice("rem_".length) : "";
   const workspace =
@@ -23115,6 +23623,11 @@ async function resolveWorkspace(config: ServerConfig, id: string): Promise<Works
   if (!workspace) {
     throw new ApiError(404, "workspace_not_found", "Workspace not found");
   }
+  return workspace;
+}
+
+async function resolveWorkspace(config: ServerConfig, id: string): Promise<WorkspaceInfo> {
+  const workspace = resolveConfiguredWorkspace(config, id);
   const resolvedWorkspace = resolve(workspace.path);
   const authorized = await isAuthorizedRoot(resolvedWorkspace, config.authorizedRoots);
   if (!authorized) {
@@ -23185,17 +23698,18 @@ const CONTROL_PLANE_JSON_BODY_MAX_BYTES = 65_536;
 const FEEDBACK_JSON_BODY_MAX_BYTES = 131_072;
 const CHAT_RESPONSE_JSON_BODY_MAX_BYTES = FILE_SESSION_MAX_FILE_BYTES + 65_536;
 
-async function readBodyTextLimited(
+async function readBodyBytesLimited(
   request: Request,
   maxBytes: number,
   label = "Request",
-): Promise<string> {
+): Promise<ArrayBuffer> {
   const contentLength = Number(request.headers.get("content-length") ?? "");
   if (Number.isFinite(contentLength) && contentLength > maxBytes) {
     throw new ApiError(413, "payload_too_large", `${label} payload is too large`);
   }
 
-  if (!request.body) return "";
+  assertRequestAccessCurrent(request);
+  if (!request.body) return new ArrayBuffer(0);
 
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -23215,6 +23729,7 @@ async function readBodyTextLimited(
   } finally {
     reader.releaseLock();
   }
+  assertRequestAccessCurrent(request);
 
   const bytes = new Uint8Array(total);
   let offset = 0;
@@ -23222,7 +23737,15 @@ async function readBodyTextLimited(
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return new TextDecoder().decode(bytes);
+  return bytes.buffer;
+}
+
+async function readBodyTextLimited(
+  request: Request,
+  maxBytes: number,
+  label = "Request",
+): Promise<string> {
+  return new TextDecoder().decode(await readBodyBytesLimited(request, maxBytes, label));
 }
 
 async function readJsonBody(
@@ -23369,20 +23892,24 @@ async function fetchRuntimeControl(path: string, init?: { method?: string; body?
   if (!control) {
     throw new ApiError(501, "runtime_upgrade_unavailable", "Worker runtime control is not configured on this host");
   }
-  const response = await fetch(`${control.baseUrl}${path}`, {
+  const response = await fetchFixedEndpoint(`${control.baseUrl}${path}`, {
     method: init?.method ?? "GET",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${control.token}`,
     },
     body: init?.body === undefined ? undefined : JSON.stringify(init.body),
-  });
-  const text = await response.text();
-  const json = text ? JSON.parse(text) : null;
+  }, { code: "runtime_control_redirect_blocked", message: "Worker runtime control redirected this request. Ask the workspace owner to check its configured URL." });
   if (!response.ok) {
-    throw new ApiError(response.status, "runtime_upgrade_failed", "Worker runtime control request failed", json);
+    await response.body?.cancel().catch(() => undefined);
+    throw new ApiError(response.status, "runtime_upgrade_failed", "Worker runtime control request failed");
   }
-  return json;
+  const text = await response.text();
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch {
+    throw new ApiError(502, "runtime_control_invalid_response", "Worker runtime control returned an invalid response");
+  }
 }
 
 async function readOpencodeConfig(workspaceRoot: string): Promise<Record<string, unknown>> {
@@ -23464,7 +23991,7 @@ async function reloadOpencodeEngine(config: ServerConfig, workspace: WorkspaceIn
   const auth = connection.authHeader ?? null;
   if (auth) headers.Authorization = auth;
 
-  const response = await fetch(targetUrl, { method: "POST", headers });
+  const response = await fetchOpencodeRuntime(targetUrl, { method: "POST", headers });
   if (response.ok) return;
   const body = parseOpencodeErrorBody(await response.text());
   throw new ApiError(502, "opencode_reload_failed", "Agent runtime reload failed", {
@@ -23485,11 +24012,13 @@ async function requireApproval(
   input: Omit<ApprovalRequest, "id" | "createdAt" | "actor">,
   cancellation?: { sessionId: string; subjectId: string },
 ): Promise<void> {
+  assertRequestAccessCurrent(ctx.request);
   const actor = ctx.actor ?? { type: "remote" };
   const result = await ctx.approvals.requestApproval(
     { ...input, actor }, ctx.request.signal,
     cancellation ? { workspaceId: input.workspaceId, ...cancellation } : undefined,
   );
+  assertRequestAccessCurrent(ctx.request);
   if (!result.allowed) {
     throw new ApiError(403, "write_denied", "Write request denied", {
       requestId: result.id,
