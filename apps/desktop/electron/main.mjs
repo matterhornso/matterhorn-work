@@ -24,6 +24,7 @@ import { registerMigrationIpc } from "./migration.mjs";
 import { createRuntimeManager } from "./runtime.mjs";
 import { registerUpdaterIpc } from "./updater.mjs";
 import { exportWorkspaceConfig, importWorkspaceConfig } from "./workspace-archive.mjs";
+import { ensureWorkspaceOpenworkConfig } from "./workspace-config.mjs";
 import {
   openworkWorkspaceDisplayName,
   selectOpenworkWorkspaceForConnection,
@@ -2676,7 +2677,7 @@ async function handleDesktopInvoke(event, command, ...args) {
       });
       await mkdir(path.join(folderPath, ".opencode"), { recursive: true });
       await ensureDefaultWorkspaceOpencodeConfig(folderPath);
-      await writeWorkspaceOpenworkConfig(folderPath, defaultWorkspaceOpenworkConfig(folderPath, preset));
+      await ensureWorkspaceOpenworkConfig(folderPath, defaultWorkspaceOpenworkConfig(folderPath, preset));
 
       return mutateWorkspaceState((state) => {
         const workspacePathKey = normalizeWorkspacePathKey(workspace.path);

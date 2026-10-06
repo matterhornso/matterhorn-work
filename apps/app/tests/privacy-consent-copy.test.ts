@@ -59,6 +59,22 @@ describe("privacy consent copy", () => {
       .toBe("private workspace data");
   });
 
+  test("describes keyword-detected wallet intent as uncertain without softening consent disclosures", () => {
+    const request = preflight({}, ["transaction_intent"]);
+    const detail = privacyConsentDetail(request);
+
+    expect(detail).toContain("This request includes text that may describe a wallet action.");
+    expect(detail).not.toContain("a proposed wallet action");
+    expect(detail).not.toContain("linked wallet details");
+    expect(detail).toContain("Matterhorn will send it to Example AI.");
+    expect(detail).toContain("has not verified whether the provider uses requests for training");
+    expect(detail).toContain("has not verified how long the provider keeps request data");
+    expect(detail).toContain("Approval applies only to this exact request and expires in five minutes.");
+    expect(request.decision).toBe("consent_required");
+    expect(privacyConsentCategorySummary(["transaction_intent", "linked_wallet_context"]))
+      .toBe("text that may describe a wallet action and linked wallet details");
+  });
+
   test("states unknown training and retention terms without implying protection", () => {
     const detail = privacyConsentDetail(preflight());
 
@@ -86,7 +102,7 @@ describe("privacy consent copy", () => {
       retentionDays: 30,
     }, ["transaction_intent"]));
 
-    expect(detail).toContain("a proposed wallet action");
+    expect(detail).toContain("text that may describe a wallet action");
     expect(detail).toContain("may use requests for training only when its Matterhorn account has opted in");
     expect(detail).toContain("may retain request data for up to 30 days");
   });

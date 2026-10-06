@@ -846,6 +846,22 @@ export const SUI_ACCOUNT_READ_ACTION: DeskActionManifest = {
   resultCardKinds: ["summary_card"],
 };
 
+export const SUI_OBJECT_READ_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "sui_object_read",
+  deskId: "sui",
+  title: "Inspect Sui object",
+  description: "Read one public object's metadata on mainnet or testnet, without contents or custody.",
+  requiredContextFields: ["objectId", "network"],
+  optionalContextFields: [],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Inspect public Sui object {objectId} on {network}",
+  mcpToolHints: ["sui_get_object"],
+  cliCommandHints: [],
+  resultCardKinds: ["summary_card"],
+};
+
 export const SUI_TRANSFER_PREVIEW_ACTION: DeskActionManifest = {
   version: "matterhorn.desk.action.manifest.v1",
   id: "sui_transfer_preview",
@@ -1254,6 +1270,7 @@ export const POLYMARKET_DESK_ACTION_REGISTRY: Record<string, DeskActionManifest>
 
 export const SUI_DESK_ACTION_REGISTRY: Record<string, DeskActionManifest> = {
   sui_account_read: SUI_ACCOUNT_READ_ACTION,
+  sui_object_read: SUI_OBJECT_READ_ACTION,
   sui_transfer_preview: SUI_TRANSFER_PREVIEW_ACTION,
   sui_coin_transfer: SUI_COIN_TRANSFER_ACTION,
   sui_object_transfer: SUI_OBJECT_TRANSFER_ACTION,

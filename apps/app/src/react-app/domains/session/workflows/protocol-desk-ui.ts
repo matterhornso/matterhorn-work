@@ -188,13 +188,13 @@ function railTitle(manifest: ProtocolDeskManifest): string {
     return "Private AI: custom workflows, files, notes, memory, and approved tools";
   }
   if (manifest.id === "bittensor") {
-    return "Bittensor: TAO reads, subnets, validators, wallet-reviewed transfers, stake, unstake, watches, and receipts";
+    return "Bittensor: TAO reads, subnets, validators, wallet-reviewed transfers, stake, unstake, watch planning, and receipts";
   }
   if (manifest.id === "hyperliquid") {
-    return "Hyperliquid: orderbooks, exposure, funding, watches, and wallet-reviewed place, cancel, modify, and close actions";
+    return "Hyperliquid: orderbooks, exposure, funding, watch planning, and wallet-reviewed place, cancel, modify, and close actions";
   }
   if (manifest.id === "polymarket") {
-    return "Polymarket: markets, liquidity, compliance, watches, and wallet-reviewed buy, sell, and cancel actions";
+    return "Polymarket: markets, liquidity, compliance, watch planning, and wallet-reviewed buy, sell, and cancel actions";
   }
   if (manifest.id === "sui") {
     return "Sui: account reads, native and custom coin transfers, object transfers, batch transfers, and transaction receipts";
@@ -300,71 +300,71 @@ const PUBLIC_BETA_PROTOCOL_DESK_COPY: Partial<
 > = {
   bittensor: {
     shortDescription: "Read TAO data, compare subnets and validators, and save cited results.",
-    capabilityBullets: ["TAO data", "Subnet and validator research", "Watches and saved results"],
+    capabilityBullets: ["TAO data", "Subnet and validator research", "Watch planning and cited results"],
     primaryActions: [
       publicBetaAction("read_tao_context", "Read public TAO context", "Read public TAO context"),
       publicBetaAction("compare_subnets", "Compare subnets", "Compare public subnet data"),
       publicBetaAction("compare_validators", "Compare validators", "Compare public validator data"),
     ],
     secondaryActions: [
-      publicBetaAction("create_watch", "Create a watch", "Monitor public Bittensor data"),
+      publicBetaAction("create_watch", "Plan a watch", "Plan public Bittensor monitoring; chat does not save or schedule watches"),
       publicBetaAction("save_public_evidence", "Save result", "Save the cited Bittensor result"),
     ],
-    safetySummary: "Public Beta is limited to Bittensor research, monitoring, and cited public data.",
-    railTitle: "Bittensor: TAO reads, subnet and validator research, watches, and saved results",
+    safetySummary: "Public Beta supports Bittensor research and watch planning. Saving or scheduling a watch requires separate setup.",
+    railTitle: "Bittensor: TAO reads, subnet and validator research, watch planning, and cited results",
     sessionBoundary: "Public Beta keeps this desk read-only. Transaction preparation, staking, transfers, and wallet actions stay hidden.",
     agentDescription: "Researches public TAO, subnet, and validator context without preparing wallet actions.",
   },
   hyperliquid: {
-    shortDescription: "Research markets, exposure, funding, and saved watch results.",
-    capabilityBullets: ["Markets and orderbooks", "Exposure and funding", "Watches and saved results"],
+    shortDescription: "Research markets, exposure, funding, and watch thresholds.",
+    capabilityBullets: ["Markets and orderbooks", "Exposure and funding", "Watch planning and cited results"],
     primaryActions: [
       publicBetaAction("read_market_structure", "Read market structure", "Read public market structure"),
       publicBetaAction("review_exposure", "Review exposure", "Review public exposure data"),
       publicBetaAction("compare_funding", "Compare funding", "Compare public funding data"),
     ],
     secondaryActions: [
-      publicBetaAction("create_watch", "Create a watch", "Monitor public Hyperliquid data"),
+      publicBetaAction("create_watch", "Plan a watch", "Plan public Hyperliquid monitoring; chat does not save or schedule watches"),
       publicBetaAction("save_public_evidence", "Save result", "Save the cited Hyperliquid result"),
     ],
-    safetySummary: "Public Beta is limited to Hyperliquid research, monitoring, and cited public data.",
-    railTitle: "Hyperliquid: orderbooks, exposure, funding, watches, and saved results",
+    safetySummary: "Public Beta supports Hyperliquid research and watch planning. Saving or scheduling a watch requires separate setup.",
+    railTitle: "Hyperliquid: orderbooks, exposure, funding, watch planning, and cited results",
     sessionBoundary: "Public Beta keeps this desk read-only. Order preparation, trade tickets, and wallet actions stay hidden.",
     agentDescription: "Researches public market, exposure, and funding context without preparing orders.",
   },
   polymarket: {
-    shortDescription: "Research prediction markets across venues, including Polymarket liquidity, compliance, and saved watch results.",
-    capabilityBullets: ["Cross-venue research", "Polymarket liquidity and compliance", "Watches and saved results"],
+    shortDescription: "Research prediction markets across venues, including Polymarket liquidity, compliance, and watch thresholds.",
+    capabilityBullets: ["Cross-venue research", "Polymarket liquidity and compliance", "Watch planning and cited results"],
     primaryActions: [
       publicBetaAction("research_markets", "Research markets", "Research public prediction-market data"),
       publicBetaAction("review_liquidity", "Review liquidity", "Review public liquidity data"),
       publicBetaAction("check_compliance_context", "Check compliance context", "Read public compliance context"),
     ],
     secondaryActions: [
-      publicBetaAction("create_watch", "Create a watch", "Monitor public Polymarket data"),
+      publicBetaAction("create_watch", "Plan a watch", "Plan public Polymarket monitoring; chat does not save or schedule watches"),
       publicBetaAction("save_public_evidence", "Save result", "Save the cited Polymarket result"),
     ],
     safetySummary: "Public Beta supports cross-venue research. Kalshi and Manifold remain research-only; Polymarket wallet actions stay hidden.",
-    railTitle: "Prediction markets: cross-venue research, Polymarket compliance, watches, and saved results",
+    railTitle: "Prediction markets: cross-venue research, Polymarket compliance, watch planning, and cited results",
     sessionBoundary: "Public Beta keeps this desk read-only. Kalshi and Manifold have no transaction path, and Polymarket wallet actions stay hidden.",
     agentDescription: "Researches public prediction markets across supported venues without preparing trades.",
   },
   sui: {
-    shortDescription: "Read public Sui account, object, network, and transaction details.",
-    capabilityBullets: ["Account and object reads", "Network and fee research", "Transaction receipts"],
+    shortDescription: "Read public Sui accounts and objects, and understand network and receipt details.",
+    capabilityBullets: ["Account and object reads", "Network research", "Receipt guidance"],
     primaryActions: [
       publicBetaAction("read_account_context", "Read account context", "Read public Sui account context"),
-      publicBetaAction("inspect_objects", "Inspect objects", "Inspect public Sui objects"),
+      publicBetaAction("sui_object_read", "Inspect objects", "Inspect one public Sui object's metadata using its object ID and mainnet or testnet network"),
       publicBetaAction("review_network_context", "Review network context", "Review public Sui network context"),
     ],
     secondaryActions: [
-      publicBetaAction("import_public_receipts", "Import public receipts", "Import public Sui transaction receipts"),
+      publicBetaAction("import_public_receipts", "Explain receipt verification", "Explain the separate Sui receipt workflow; chat cannot verify or import receipts"),
       publicBetaAction("save_public_evidence", "Save result", "Save the cited Sui result"),
     ],
-    safetySummary: "Public Beta is limited to public Sui reads, monitoring, and transaction receipts.",
-    railTitle: "Sui: account and object reads, network research, watches, and transaction receipts",
+    safetySummary: "Public Beta supports public Sui reads and receipt guidance. Chat cannot verify or import receipts.",
+    railTitle: "Sui: account and object reads, network research, and receipt guidance",
     sessionBoundary: "Public Beta keeps this desk read-only. Transfer preparation, signing handoffs, and wallet actions stay hidden.",
-    agentDescription: "Researches public Sui account, object, network, and receipt context without preparing transfers.",
+    agentDescription: "Researches public Sui accounts and objects and explains receipt verification without preparing transfers.",
   },
 };
 

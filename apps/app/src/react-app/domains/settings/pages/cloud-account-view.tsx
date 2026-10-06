@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { t } from "@/i18n";
 import { MATTERHORN_CLOUD_ENABLED } from "../../../../app/lib/den";
+import { isWebDeployment } from "../../../../app/lib/matterhorn-deployment";
+import { workspaceSettingsRoute } from "../../../shell/workspace-routes";
 import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
 import { CloudAccountSection } from "../cloud/cloud-account-section";
 import { AccountSecuritySection } from "../cloud/account-security-section";
@@ -206,10 +208,12 @@ function cloudAuthState(isSignedIn: boolean, authError: string | null | undefine
 function ProfileReadinessSupportSection({
   compact = false,
   onSendFeedback,
+  accountSettingsPath,
   readiness,
 }: {
   compact?: boolean;
   onSendFeedback?: () => void;
+  accountSettingsPath?: string;
   readiness: ProfileReadiness;
 }) {
   const { docsUrl, feedbackUrl, issueUrl, accountUrl } = readiness.supportLinks;
@@ -246,7 +250,9 @@ function ProfileReadinessSupportSection({
             Report issue <ExternalLink size={10} />
           </a>
         ) : null}
-        {accountUrl ? (
+        {accountSettingsPath ? (
+          <Link className={actionClass} to={accountSettingsPath}>Account settings</Link>
+        ) : accountUrl ? (
           <a className={actionClass} href={accountUrl} target="_blank" rel="noreferrer">
             Account settings <ExternalLink size={10} />
           </a>
@@ -274,6 +280,9 @@ export function CloudAccountView({
 }: CloudAccountViewProps) {
   const { activeOrganization, client, isSignedIn, statusMessage, user } = useCloudSession();
   const navigate = useNavigate();
+  const accountSettingsPath = isWebDeployment()
+    ? workspaceId?.trim() ? workspaceSettingsRoute(workspaceId, "cloud-account") : "/settings/cloud-account"
+    : undefined;
 
   const profileReadiness = React.useMemo(
     () => getProfileReadiness(cloudAuthState(isSignedIn, session.authError)),
@@ -392,6 +401,7 @@ export function CloudAccountView({
         <ProfileReadinessSupportSection
           compact
           onSendFeedback={onSendFeedback}
+          accountSettingsPath={accountSettingsPath}
           readiness={profileReadiness}
         />
       </SettingsStack>

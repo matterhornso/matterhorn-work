@@ -26,6 +26,7 @@ const props: AppSidebarProps = {
   onSelectWorkspace: noop, onOpenSession: noop, onCreateTaskInWorkspace: noop,
   onOpenRenameSession: noop, onOpenDeleteSession: noop, onOpenRenameWorkspace: noop,
   onShareWorkspace: noop, onRevealWorkspace: noop, onForgetWorkspace: noop,
+  onOpenLocalWorkspace: noop, onOpenNewLocalWorkspace: noop,
   onOpenCreateWorkspace: noop, onStartResize: noop,
 };
 

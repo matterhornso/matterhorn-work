@@ -10,17 +10,35 @@ import { parseArgs, parseEnv } from "node:util";
 const { values } = parseArgs({ options: {
   "env-file": { type: "string" }, "opencode-bin": { type: "string" },
   "wiring-only": { type: "boolean" }, "check-only": { type: "boolean" },
+  "training-opt-out-confirmed": { type: "boolean" },
+  "operator-review": { type: "boolean" },
+  "browser-host": { type: "string", default: "localhost" },
+  "bittensor-sidecar-url": { type: "string" },
+  "bittensor-network": { type: "string" },
 } });
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(scriptDirectory, "../../../..");
-const binary = values["opencode-bin"] ?? "/private/tmp/matterhorn-maintained-runtime.4V7GrP/updater-protected/opencode";
-const expectedDigest = "1508e0d95931482a6bb76cee553422f6d60e07848b432c9512cc43908f169c90";
+const binary = values["opencode-bin"] ?? "/private/tmp/matterhorn-fixture-isolated-runtime.DgRjK5/opencode";
+const expectedDigest = "f0a85ae874e3f45c11ace836e46ee7775f955abef215be308cd5395a2c859679";
 const providerNames = [
   "CUDOS_API_KEY", "MATTERHORN_CUDOS_TRAINING_USE", "MATTERHORN_CUDOS_TRAINING_OPTED_IN",
   "MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS", "MATTERHORN_CUDOS_PROMPT_RETENTION_POLICY",
   "MATTERHORN_CUDOS_PRIVACY_POLICY_URL", "MATTERHORN_CUDOS_PRIVACY_VERIFIED_AT",
 ];
 function stop(message) { console.error(message); process.exit(1); }
+if (!["localhost", "model-qa.localhost", "desks-qa.localhost", "approval-qa.localhost", "final-qa.localhost"].includes(values["browser-host"])) stop("Browser host must be localhost, model-qa.localhost, desks-qa.localhost, approval-qa.localhost or final-qa.localhost.");
+const bittensorSidecarEnv = {};
+const bittensorSidecarUrl = values["bittensor-sidecar-url"];
+const bittensorNetwork = values["bittensor-network"];
+if (bittensorSidecarUrl !== undefined || bittensorNetwork !== undefined) {
+  if (bittensorSidecarUrl === undefined || bittensorNetwork === undefined) stop("Bittensor sidecar URL and network must be provided together.");
+  if (!["finney", "test"].includes(bittensorNetwork)) stop("Bittensor network must be finney or test.");
+  const port = /^http:\/\/127\.0\.0\.1:([1-9]\d{0,4})$/.exec(bittensorSidecarUrl)?.[1];
+  if (!port || Number(port) > 65535) stop("Bittensor sidecar URL must be exactly http://127.0.0.1:port with a valid port and no path, query, fragment, or credentials.");
+  // Explicit QA-only read-provider wiring. Never inherit sidecar or execution flags.
+  bittensorSidecarEnv.BITTENSOR_SUBTENSOR_SIDECAR_URL = bittensorSidecarUrl;
+  bittensorSidecarEnv.BITTENSOR_NETWORK = bittensorNetwork;
+}
 let source = {};
 if (values["wiring-only"] && values["env-file"]) stop("Wiring-only mode must not load a real provider env file.");
 if (!values["wiring-only"] && !values["env-file"]) stop("Missing --env-file: provide an existing owner-only file containing CUDOS_API_KEY. Do not paste the key into chat or command arguments.");
@@ -50,7 +68,7 @@ try { digest = createHash("sha256").update(readFileSync(binary)).digest("hex"); 
 catch { stop("Maintained runtime binary is unavailable."); }
 if (digest !== expectedDigest) stop("Maintained runtime digest mismatch; refusing to start.");
 if (values["check-only"]) {
-  console.log(JSON.stringify({ sourceSafetyAndBinaryValidated: true, providerKeyTextPresent: Boolean(source.CUDOS_API_KEY), binaryDigest: digest, credentialValidityAndProviderPolicyUnverified: true }));
+  console.log(JSON.stringify({ sourceSafetyAndBinaryValidated: true, providerKeyTextPresent: Boolean(source.CUDOS_API_KEY), binaryDigest: digest, credentialValidityAndProviderPolicyUnverified: true, bittensorReadOnlySidecar: bittensorSidecarEnv }));
   process.exit(0);
 }
 const root = mkdtempSync(join(tmpdir(), "matterhorn-pr1032-functional-"));
@@ -58,6 +76,8 @@ for (const directory of ["home", "config", "data", "cache", "state", "matterhorn
 const env = {
   PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: join(root, "home"), NODE_ENV: "development",
   MATTERHORN_QA_ROOT: root, MATTERHORN_QA_REPO: repo, MATTERHORN_QA_BINARY: binary,
+  MATTERHORN_QA_BROWSER_HOST: values["browser-host"],
+  MATTERHORN_QA_OPERATOR_REVIEW: values["operator-review"] ? "1" : "0",
   MATTERHORN_QA_WIRING_ONLY: values["wiring-only"] ? "1" : "0",
   XDG_CONFIG_HOME: join(root, "config"), XDG_DATA_HOME: join(root, "data"),
   XDG_CACHE_HOME: join(root, "cache"), XDG_STATE_HOME: join(root, "state"), TMPDIR: join(root, "tmp"),
@@ -77,8 +97,11 @@ const env = {
   MATTERHORN_SIGNUP_MAX_ACCOUNTS: "2", MATTERHORN_JEV_ENABLED: "0", MATTERHORN_STM_ENABLED: "0",
   VITE_MATTERHORN_DEPLOYMENT: "web", VITE_MATTERHORN_PUBLIC_BETA: "1", VITE_MATTERHORN_RETRO_UI: "1",
   VITE_MATTERHORN_MINIMAL_UI: "1",
+  ...bittensorSidecarEnv,
 };
 for (const name of providerNames) if (source[name]) env[name] = source[name];
+// An explicit owner declaration is not provider-policy verification.
+if (values["training-opt-out-confirmed"]) env.MATTERHORN_CUDOS_TRAINING_OPTED_IN = "false";
 const log = openSync(join(root, "private-runtime.log"), "wx", 0o600);
 const located = spawnSync("pnpm", ["exec", "bun", "--no-env-file", "--eval", "process.stdout.write(process.execPath)"], { cwd: repo, env, encoding: "utf8" });
 if (located.status !== 0 || !located.stdout.startsWith("/")) stop("Could not locate the workspace Bun runtime.");

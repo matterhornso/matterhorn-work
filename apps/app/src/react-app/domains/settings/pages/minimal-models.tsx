@@ -98,6 +98,20 @@ export function MinimalModels(props: {
     <div className="matterhorn-model-list mx-auto w-full max-w-3xl space-y-6">
       {props.children}
       <h2 className="text-lg font-semibold">Choose a model</h2>
+      <p className="text-sm text-dls-secondary">
+        {props.selection
+          ? `Default for new chats: ${resolveModelDisplayName(props.selection.modelId)}.`
+          : "Select a default for new chats. This does not send a message."}
+      </p>
+      <div aria-live="polite" role={save.isError ? "alert" : "status"}>
+        {save.isError
+          ? save.error instanceof Error
+            ? save.error.message
+            : "Could not save model. Try again."
+          : save.isSuccess
+            ? "Workspace model saved. Request privacy checks still apply."
+            : null}
+      </div>
       {props.loading ? (
         <p role="status">Loading models…</p>
       ) : props.failed || !models.length ? (
@@ -159,6 +173,9 @@ export function MinimalModels(props: {
               const selected =
                 props.selection?.providerId === model.providerId &&
                 props.selection.modelId === model.id;
+              const policy = props.policies.find(
+                (item) => item.providerId === model.providerId,
+              );
               return (
                 <li key={`${model.providerId}/${model.id}`}>
                   <button
@@ -175,6 +192,11 @@ export function MinimalModels(props: {
                       <span className="block text-xs text-dls-secondary">
                         {model.providerName}
                       </span>
+                      {!policy?.allowed ? (
+                        <span className="block text-xs text-dls-secondary">
+                          Provider privacy review pending
+                        </span>
+                      ) : null}
                     </span>
                     <span className="shrink-0 text-xs">
                       {save.isPending &&
@@ -197,15 +219,6 @@ export function MinimalModels(props: {
           ) : null}
         </>
       )}
-      <div aria-live="polite" role={save.isError ? "alert" : "status"}>
-        {save.isError
-          ? save.error instanceof Error
-            ? save.error.message
-            : "Could not save model. Try again."
-          : save.isSuccess
-            ? "Workspace model saved."
-            : null}
-      </div>
       <details className="border-t border-dls-border py-3">
         <summary className="cursor-pointer text-sm">Provider privacy</summary>
         <div className="mt-3 space-y-3 text-sm text-dls-secondary">
@@ -216,7 +229,9 @@ export function MinimalModels(props: {
                   {policy.providerName}:{" "}
                 </strong>
                 {policy.description}
-                {!policy.allowed ? " Sending is blocked." : ""}
+                {!policy.allowed
+                  ? " You can save this model as your preference. Requests still require privacy and permission checks."
+                  : ""}
               </p>
             ))
           ) : (

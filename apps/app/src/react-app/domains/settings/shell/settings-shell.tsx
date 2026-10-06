@@ -134,7 +134,7 @@ export function SettingsShell(props: SettingsShellProps) {
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
             <header className="flex h-[calc(2.75rem+env(safe-area-inset-top))] shrink-0 items-center justify-between px-4 pt-[env(safe-area-inset-top)] lg:hidden mac:titlebar-drag">
               <div className="flex min-w-0 items-center gap-2">
-                <SidebarTrigger className="size-11 mac:titlebar-no-drag lg:hidden" />
+                <SidebarTrigger className="h-11 w-auto shrink-0 gap-1.5 px-2 mac:titlebar-no-drag lg:hidden" label="Settings" aria-label="Toggle settings navigation" />
                 {props.headerLeadingSlot}
                 <h1 className="truncate text-xs font-medium text-dls-secondary">{title}</h1>
                 {props.developerMode && props.headerStatus ? (

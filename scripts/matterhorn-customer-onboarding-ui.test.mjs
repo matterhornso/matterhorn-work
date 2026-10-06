@@ -507,9 +507,9 @@ assert.ok(workflowTemplates.includes('primaryPanelRouteId: manifest.primaryPanel
 assert.ok(workflowTemplates.includes('launchBehavior: manifest.launchBehavior'), "app launcher metadata should preserve manifest launch behavior");
 assert.ok(workflowTemplates.includes('canSubmit: false'), "app launcher metadata should keep market submit disabled");
 assert.ok(workflowTemplates.includes('liveExecutionEnabled: false'), "app launcher metadata should keep live execution disabled");
-assert.ok(protocolDeskUi.includes("Bittensor: TAO reads, subnets, validators, wallet-reviewed transfers, stake, unstake, watches, and receipts"), "Bittensor rail tooltip should explain protocol-specific work");
-assert.ok(protocolDeskUi.includes("Hyperliquid: orderbooks, exposure, funding, watches, and wallet-reviewed place, cancel, modify, and close actions"), "Hyperliquid rail tooltip should explain protocol-specific work");
-assert.ok(protocolDeskUi.includes("Polymarket: markets, liquidity, compliance, watches, and wallet-reviewed buy, sell, and cancel actions"), "Polymarket rail tooltip should explain protocol-specific work");
+assert.ok(protocolDeskUi.includes("Bittensor: TAO reads, subnets, validators, wallet-reviewed transfers, stake, unstake, watch planning, and receipts"), "Bittensor rail tooltip should explain protocol-specific work without claiming chat saves watches");
+assert.ok(protocolDeskUi.includes("Hyperliquid: orderbooks, exposure, funding, watch planning, and wallet-reviewed place, cancel, modify, and close actions"), "Hyperliquid rail tooltip should explain protocol-specific work without claiming chat saves watches");
+assert.ok(protocolDeskUi.includes("Polymarket: markets, liquidity, compliance, watch planning, and wallet-reviewed buy, sell, and cancel actions"), "Polymarket rail tooltip should explain protocol-specific work without claiming chat saves watches");
 assert.ok(sessionPage.includes('w-[var(--nav-rail-width-compact)]'), "right rail should use a compact responsive width before wide desktop");
 assert.ok(sessionPage.includes('2xl:w-[var(--nav-rail-width)]'), "right rail should expand to readable customer desk labels on wide desktop");
 assert.ok(appCss.includes("--nav-rail-width-compact: 88px;"), "compact right rail should be wide enough for readable desk labels");

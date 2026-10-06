@@ -81,6 +81,7 @@ import { ReactSessionComposer } from "./composer/composer";
 import { useComposerSubmission } from "./composer/use-composer-submission";
 import { JevPreparationCancelledError, useJevChat } from "./use-jev-chat";
 import { JevChatControl } from "./jev-chat-control";
+import { isOperatorApprovalPending } from "./operator-approval-status";
 import type { ResponsePerspective } from "../perspectives/response-perspective";
 import { decodeComposerMentionValue, encodeComposerMentionValue } from "./composer/mention-encoding";
 import { DevProfiler } from "../../../shell/dev-profiler";
@@ -1105,18 +1106,32 @@ export function parseSessionError(thrown: unknown): SessionError {
   }
   const diagnostic = `${raw}\n${parsed ? JSON.stringify(parsed) : ""}`;
   const approvalError = parsed ?? thrown;
+  const errorCode = approvalError && typeof approvalError === "object" && "code" in approvalError
+    ? approvalError.code : undefined;
   if (
-    approvalError && typeof approvalError === "object" &&
-    "code" in approvalError && approvalError.code === "write_denied" &&
+    errorCode === "write_denied" && approvalError && typeof approvalError === "object" &&
     "details" in approvalError && approvalError.details && typeof approvalError.details === "object" &&
-    "reason" in approvalError.details && approvalError.details.reason === "cancelled"
+    "reason" in approvalError.details
   ) {
-    return {
-      message: "Request stopped.",
-      detail: "Stopped before it was sent. Your draft is still available to edit or send again.",
-      kind: "cancelled",
-      retryable: false,
-    };
+    const reason = approvalError.details.reason;
+    if (reason === "cancelled") {
+      return {
+        message: "Request stopped.",
+        detail: "Stopped before it was sent. Your draft is still available to edit or send again.",
+        kind: "cancelled",
+        retryable: false,
+      };
+    }
+    if (reason === "timeout" || reason === "denied") {
+      return {
+        message: reason === "timeout" ? "Workspace approval timed out." : "The workspace owner declined this request.",
+        detail: reason === "timeout"
+          ? "Your prompt was not sent to the model. Ask the workspace owner to review your next attempt, then send again. Your draft is preserved."
+          : "Your prompt was not sent to the model. Check with the workspace owner before sending again. Your draft is preserved.",
+        kind: "generic",
+        retryable: false,
+      };
+    }
   }
   if (
     (approvalError && typeof approvalError === "object" &&
@@ -1163,7 +1178,8 @@ export function parseSessionError(thrown: unknown): SessionError {
       retryable: false,
     };
   }
-  if (/model_usage_exceeded/i.test(diagnostic)) {
+  if (errorCode === "model_usage_exceeded" || errorCode === "model_usage_limit_reached"
+    || /model_usage_exceeded|model_usage_limit_reached/i.test(diagnostic)) {
     return {
       message: "This workspace has reached its current model allowance.",
       detail: "Requests will resume when the allowance resets. You can see the reset date in Models.",
@@ -1675,6 +1691,27 @@ export function SessionSurface(props: SessionSurfaceProps) {
     staleTime: 500,
     retry: (failureCount, error) => !(error instanceof MatterhornServerError && error.status === 404) && failureCount < 2,
   });
+  const activeModelOperation = sending ? latestModelOperation(props.workspaceId, props.sessionId) : null;
+  const operatorApprovalQuery = useQuery({
+    queryKey: ["session-operator-approval", props.workspaceId, props.sessionId, activeModelOperation?.id],
+    enabled: Boolean(activeModelOperation) && isCurrentAccount(),
+    queryFn: async () => {
+      const operation = activeModelOperation;
+      const isCurrentView = captureViewLifetime();
+      const response = await props.client.getSessionExecutionStatus(props.workspaceId, props.sessionId);
+      return operation && isCurrentView() && isLatestModelOperation(operation) ? response.item : null;
+    },
+    refetchInterval: activeModelOperation ? 1_000 : false,
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+  });
+  const awaitingOperatorApproval = isOperatorApprovalPending({
+    sending,
+    currentRequest: isCurrentAccount() && viewScope.current && Boolean(activeModelOperation && isLatestModelOperation(activeModelOperation)),
+    sessionId: props.sessionId,
+    status: operatorApprovalQuery.isError ? undefined : operatorApprovalQuery.data ?? undefined,
+  });
   const coworkerBindingQuery = useQuery({
     queryKey: ["coworker-session-binding", props.workspaceId, props.sessionId],
     queryFn: async () => props.client.getCoworkerSessionBinding(props.workspaceId, props.sessionId),
@@ -2040,7 +2077,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
         ? "responding"
         : "idle";
   const optimisticRunTitle = sessionActivityRecord?.optimisticRunTitle?.trim();
-  const assistantActivityLabel = sending && !assistantOutputAfterAwaitStart
+  const assistantActivityLabel = awaitingOperatorApproval
+    ? "Waiting for operator approval"
+    : sending && !assistantOutputAfterAwaitStart
     ? "Preparing request"
     : optimisticRunTitle && effectiveActivityStatus === "thinking"
     ? `Working on ${optimisticRunTitle}`
@@ -3787,6 +3826,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
           privateModeAvailable={props.privateModeAvailable}
           privateModeEnabled={props.privateModeEnabled}
           privateModeUnavailableReason={props.privateModeUnavailableReason}
+          accountMessageGateway={publicBetaWeb}
+          hasPrivateContext={Boolean(attachments.length || memoryContext?.records.length
+            || agentFileContext?.files.length || (agentFileContext?.coworker.id ?? coworkerContext?.id))}
           onPrivateModeChange={props.onPrivateModeChange}
           onOpenPrivacyDetails={props.onOpenPrivacyDetails}
         />

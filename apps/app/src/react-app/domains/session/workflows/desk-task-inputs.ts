@@ -1,4 +1,4 @@
-export type DeskTaskInputKind = "ss58" | "sui_address" | "transaction_digest" | "market" | "generic";
+export type DeskTaskInputKind = "ss58" | "sui_address" | "sui_object_id" | "transaction_digest" | "market" | "generic";
 
 export type DeskTaskInputRequirement = {
   kind: DeskTaskInputKind;
@@ -47,6 +47,17 @@ export function getDeskTaskInputRequirement(prompt: string): DeskTaskInputRequir
       helpText: "Paste a public coldkey only. Never paste a seed phrase or private key.",
       missingMessage: "Paste the public SS58 address to start this task.",
       invalidMessage: "Use a public SS58 address, not a seed phrase or private key.",
+    };
+  }
+
+  if (lowerDescription.includes("sui object id")) {
+    return {
+      kind: "sui_object_id", fieldId: "objectId", label: "Public Sui object ID", actionLabel: "Add object ID",
+      placeholder, inputPlaceholder: "0x2",
+      question: "What public Sui object ID and network (mainnet or testnet) should I inspect?",
+      helpText: "Use a public object ID. This metadata read does not require a wallet connection.",
+      missingMessage: "Paste the public Sui object ID to start this task.",
+      invalidMessage: "Use a public Sui object ID beginning with 0x (up to 64 hex digits).",
     };
   }
 
@@ -120,6 +131,8 @@ export function validateDeskTaskInput(requirement: DeskTaskInputRequirement, val
       return SS58_PUBLIC_ADDRESS_PATTERN.test(trimmed) ? null : requirement.invalidMessage;
     case "sui_address":
       return SUI_PUBLIC_ADDRESS_PATTERN.test(trimmed) ? null : requirement.invalidMessage;
+    case "sui_object_id":
+      return /^0x[a-fA-F0-9]{1,64}$/.test(trimmed) ? null : requirement.invalidMessage;
     case "transaction_digest":
       return PUBLIC_DIGEST_PATTERN.test(trimmed) ? null : requirement.invalidMessage;
     case "market":

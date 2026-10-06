@@ -2859,7 +2859,13 @@ function assertModelSelectionInCatalog(
   catalog: MatterhornBackendModelCatalogSnapshot,
   selection: MatterhornBackendModelSelectionRequest,
 ) {
-  if (!catalog.serverFetched) return;
+  if (!catalog.serverFetched) {
+    throw new ApiError(
+      503,
+      "model_catalog_unavailable",
+      "Model availability could not be checked. Reconnect the runtime and try again; your saved model is unchanged.",
+    );
+  }
 
   const provider = catalog.providers.find((candidate) => candidate.id === selection.providerId);
   if (
@@ -2879,6 +2885,11 @@ function assertModelSelectionInCatalog(
       "invalid_model_selection",
       "Choose a model that is available from the connected provider.",
     );
+  }
+  // Match the client catalogue's fallback for older runtimes without modality
+  // metadata. These known embedding/reranking models cannot serve chat.
+  if (/(?:embed|rerank|(?:^|[\/_-])bge(?:[\/_-]|$)|(?:^|[\/_-])uae(?:[\/_-]|$))/i.test(selection.modelId)) {
+    throw new ApiError(400, "invalid_model_selection", "Choose a chat-compatible model from the connected provider.");
   }
 }
 
@@ -7398,7 +7409,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       {
         recommendedPackages: ["@mysten/dapp-kit-react", "@mysten/dapp-kit-core", "@mysten/sui"],
         configuredNetworks: ["sui-testnet", "sui-mainnet"],
-        publicReadRoutes: ["/api/sui/account/:address", "/api/sui/balance/:address"],
+        publicReadRoutes: ["/api/sui/account/:address", "/api/sui/balance/:address", "/api/sui/object/:objectId"],
         transactionPreviewRoutes: ["/api/sui/transactions/preview"],
         receiptRoutes: ["/api/sui/transactions/receipt", "/api/sui/transactions/verify-receipt"],
         signingBoundary: "client_wallet",
@@ -10538,9 +10549,12 @@ function createRoutes(
     onEvent: recordWorkflowTaskEvent,
   });
   const resolveGuardedRuntimeWorkspace = (directoryValue: unknown): WorkspaceInfo => {
-    const directory = typeof directoryValue === "string" ? resolve(directoryValue) : "";
+    // Use the same canonical directory identity as outgoing runtime requests.
+    // Account workspaces can be provisioned beneath /var or another alias,
+    // while the runtime reports its real path back to this guarded boundary.
+    const directory = typeof directoryValue === "string" ? resolve(normalizeOpencodeDirectory(directoryValue)) : "";
     const workspace = directory
-      ? config.workspaces.find((item) => resolve(item.directory ?? item.path) === directory)
+      ? config.workspaces.find((item) => resolve(normalizeOpencodeDirectory(item.directory ?? item.path)) === directory)
       : config.workspaces[0];
     if (!workspace) throw new ApiError(404, "workspace_not_found", "Guarded runtime workspace not found");
     return workspace;
@@ -14106,7 +14120,8 @@ function createRoutes(
     }
     const currentModels = await buildWorkspaceBackendModels(config, workspace);
     assertModelSelectionInCatalog(currentModels.catalog, requestSelection);
-    assertPromptProviderPrivacy(requestSelection.providerId, requestSelection.modelId);
+    // A workspace preference is not authorization to send data. Prompt, proxy,
+    // and compaction routes independently enforce privacy and consent at use.
 
     let selection;
     try {
@@ -16564,7 +16579,12 @@ function createRoutes(
     }
     const item = await readWorkspaceSessionExecutionStatus(config, workspace, sessionId);
     assertRequestAccessCurrent(ctx.request);
-    return jsonResponse({ item });
+    const awaitingOperatorApproval = approvals.hasPendingSession({
+      workspaceId: workspace.id,
+      sessionId,
+      subjectId: modelUsageSubject(clientAccessFromRequestContext(ctx, workspace)).id,
+    }, "session.prompt");
+    return jsonResponse({ item: { ...item, awaitingOperatorApproval } });
   });
 
   addRoute(routes, "GET", "/workspace/:id/sessions/:sessionId/snapshot", "client", async (ctx) => {
@@ -20686,6 +20706,19 @@ function createRoutes(
     }
   });
 
+  addRoute(routes, "GET", "/api/sui/object/:objectId", "client", async (ctx) => {
+    try {
+      const object = await suiProvider.getObjectSnapshot(ctx.params.objectId, {
+        network: ctx.url.searchParams.get("network"),
+        signal: ctx.request.signal,
+      });
+      if (!object) throw new ApiError(404, "sui_object_not_found", "Public Sui object not found on the requested network");
+      return jsonResponse({ success: true, object });
+    } catch (err) {
+      throw suiApiError(err);
+    }
+  });
+
   addRoute(routes, "POST", "/api/sui/transactions/preview", "client", async (ctx) => {
     const body = await readJsonBody(ctx.request);
     try {
@@ -21158,7 +21191,13 @@ function createRoutes(
         throw new ApiError(400, "invalid_limit", "limit must be an integer from 1 to 20");
       }
       let data: Record<string, unknown>;
-      if (operation === "subnet" || operation === "validators") {
+      if (operation === "subnet" && netuid === undefined) {
+        // An omitted ID selects the public list; a present malformed ID must
+        // still fail validation below rather than silently changing the read.
+        const subnets = await bittensorProvider.listSubnets();
+        data = { subnets: subnets.slice(0, limit), omittedSubnets: Math.max(0, subnets.length - limit),
+          configuredNetwork: getSubtensorSidecarStatus().network };
+      } else if (operation === "subnet" || operation === "validators") {
         if (typeof netuid !== "number" || !Number.isInteger(netuid) || netuid < 0) {
           throw new ApiError(400, "invalid_netuid", "netuid must be a non-negative integer");
         }

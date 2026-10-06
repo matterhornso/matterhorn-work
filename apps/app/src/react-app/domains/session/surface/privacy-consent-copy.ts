@@ -5,7 +5,7 @@ const CATEGORY_LABELS: Readonly<Record<string, string>> = {
   workspace_attachment: "an attached file",
   selected_memory: "saved memory",
   linked_wallet_context: "linked wallet details",
-  transaction_intent: "a proposed wallet action",
+  transaction_intent: "text that may describe a wallet action",
   external_tool_data: "data returned by an external tool",
 };
 

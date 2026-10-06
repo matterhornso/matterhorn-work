@@ -47,10 +47,10 @@ describe("responsive accessibility regressions", () => {
     const statusBar = readAppSource("domains/session/chat/status-bar.tsx");
     const settingsShell = readAppSource("domains/settings/shell/settings-shell.tsx");
 
-    expect(sessionPage).toContain('SidebarTrigger className="size-11 md:size-8');
+    expect(sessionPage).toContain('SidebarTrigger className={cn("size-11 shrink-0 md:size-8');
     expect(sessionPage).toContain("size-11 shrink-0 text-dls-secondary");
     expect(statusBar.match(/min-h-11 min-w-11/g)?.length).toBeGreaterThanOrEqual(4);
-    expect(settingsShell).toContain('SidebarTrigger className="size-11');
+    expect(settingsShell).toContain('SidebarTrigger className="h-11 w-auto shrink-0');
     expect(settingsShell).toContain('className="flex size-11 items-center');
   });
 

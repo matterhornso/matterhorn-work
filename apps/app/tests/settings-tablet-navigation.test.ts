@@ -7,7 +7,7 @@ test("settings navigation remains available until the sidebar becomes desktop-si
   const page = readFileSync("apps/app/src/react-app/domains/settings/shell/settings-page.tsx", "utf8");
   expect(mobileHook.includes("MOBILE_BREAKPOINT = 1024")).toBe(true);
   expect(shell.includes("md:hidden")).toBe(false);
-  expect(shell.includes('SidebarTrigger className="size-11 mac:titlebar-no-drag lg:hidden"')).toBe(true);
+  expect(shell.includes('SidebarTrigger className="h-11 w-auto shrink-0 gap-1.5 px-2 mac:titlebar-no-drag lg:hidden" label="Settings" aria-label="Toggle settings navigation"')).toBe(true);
   expect(shell.includes('className="flex items-center text-gray-10 mac:titlebar-no-drag lg:hidden"')).toBe(true);
   expect(page.includes('SettingsPanelHeading className="hidden lg:flex"')).toBe(true);
 });

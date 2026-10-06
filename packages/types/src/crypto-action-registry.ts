@@ -40,11 +40,11 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
   {
     name: "matterhorn_bittensor_chat",
     title: "Bittensor desk read",
-    description: "Read public Bittensor data using readOperation and netuid/ss58Address. Never executes actions.",
+    description: "Read-only. subnet: omit netuid to list, set it for detail. validators: netuid required; wallet: ss58Address required.",
     inputSchema: objectSchema({
-      message: { type: "string", description: "Discovery text." },
+      message: { type: "string" },
       readOperation: { type: "string", enum: ["subnet", "wallet", "validators", "discovery"] },
-      ss58Address: { type: "string", description: "Optional public SS58 address." },
+      ss58Address: { type: "string" },
       netuid: { type: "number" },
       limit: { type: "number" },
       strategy: { type: "string", enum: ["balanced", "yield", "safety"] },
@@ -127,7 +127,7 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
   {
     name: "matterhorn_hyperliquid_list_markets",
     title: "Hyperliquid markets",
-    description: "List public Hyperliquid markets with source and freshness metadata.",
+    description: "List public markets with source and freshness.",
     inputSchema: objectSchema({ limit: { type: "number", minimum: 1, maximum: 50 } }),
     deskIds: ["hyperliquid"],
     actionIds: ["hyperliquid_market_read"],
@@ -138,7 +138,7 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
   {
     name: "matterhorn_hyperliquid_get_account",
     title: "Hyperliquid account",
-    description: "Read public Hyperliquid account state for a connected or supplied public address.",
+    description: "Read public account state for the supplied address.",
     inputSchema: objectSchema({ address: { type: "string", description: "Public 42-character 0x account address." } }, ["address"]),
     deskIds: ["hyperliquid"],
     actionIds: ["hyperliquid_account_exposure"],
@@ -149,7 +149,7 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
   {
     name: "matterhorn_hyperliquid_get_positions",
     title: "Hyperliquid positions",
-    description: "Read public Hyperliquid positions and exposure for an account.",
+    description: "Read public positions and exposure.",
     inputSchema: objectSchema({ address: { type: "string", description: "Public 42-character 0x account address." } }, ["address"]),
     deskIds: ["hyperliquid"],
     actionIds: ["hyperliquid_account_exposure"],
@@ -160,7 +160,7 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
   {
     name: "matterhorn_hyperliquid_get_open_orders",
     title: "Hyperliquid open orders",
-    description: "Read public Hyperliquid open orders for an account.",
+    description: "Read public open orders.",
     inputSchema: objectSchema({ address: { type: "string", description: "Public 42-character 0x account address." } }, ["address"]),
     deskIds: ["hyperliquid"],
     actionIds: ["hyperliquid_open_orders"],
@@ -171,7 +171,7 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
   {
     name: "matterhorn_hyperliquid_get_orderbook",
     title: "Hyperliquid orderbook",
-    description: "Read a public Hyperliquid orderbook. This tool is read-only and cannot submit orders.",
+    description: "Read a public orderbook. Cannot submit orders.",
     inputSchema: objectSchema({ asset: { type: "string", description: "Asset symbol such as BTC." } }, ["asset"]),
     deskIds: ["hyperliquid"],
     actionIds: ["hyperliquid_orderbook_read"],
@@ -182,7 +182,7 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
   {
     name: "matterhorn_hyperliquid_get_funding",
     title: "Hyperliquid funding",
-    description: "Read public Hyperliquid funding data for an asset.",
+    description: "Read public funding for an asset.",
     inputSchema: objectSchema({ asset: { type: "string", description: "Asset symbol such as BTC." } }, ["asset"]),
     deskIds: ["hyperliquid"],
     actionIds: ["hyperliquid_funding_read"],
@@ -255,9 +255,9 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
   {
     name: "matterhorn_polymarket_get_orderbook",
     title: "Polymarket public order book",
-    description: "Read one bounded public Polymarket order book by its exact outcome token ID. Never accesses an account or places an order.",
+    description: "Read one public orderbook by exact outcome token ID. No account access or orders.",
     inputSchema: objectSchema({
-      tokenId: { type: "string", description: "Exact public outcome token ID returned by Polymarket market discovery." },
+      tokenId: { type: "string", description: "Exact public outcome token ID from market discovery." },
     }, ["tokenId"]),
     deskIds: ["polymarket"],
     actionIds: ["polymarket_liquidity_orderbook"],
@@ -296,12 +296,12 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
   {
     name: "matterhorn_polymarket_prepare_handoff",
     title: "Polymarket wallet handoff",
-    description: "Prepare fresh, exact Polymarket CLOB terms for separate connected-wallet review. Never signs, authenticates, or submits.",
+    description: "Prepare fresh, exact CLOB terms for connected-wallet review. Never signs, authenticates or submits.",
     inputSchema: objectSchema({
-      address: { type: "string", description: "Public Polygon wallet address that must review the order." },
-      marketId: { type: "string", description: "Exact Polymarket condition ID returned by certified discovery." },
-      tokenId: { type: "string", description: "Exact outcome token ID returned by certified discovery." },
-      outcome: { type: "string", description: "Outcome label paired with the exact token ID by certified discovery." },
+      address: { type: "string", description: "Public Polygon address reviewing this order." },
+      marketId: { type: "string", description: "Exact condition ID from certified discovery." },
+      tokenId: { type: "string", description: "Exact outcome token ID from certified discovery." },
+      outcome: { type: "string", description: "Certified outcome label paired with tokenId." },
       side: { type: "string", enum: ["buy", "sell"] },
       amountUsdc: numberOrStringSchema,
       amountShares: numberOrStringSchema,
@@ -329,15 +329,29 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
     requiresFreshness: true,
   },
   {
+    name: "matterhorn_sui_get_object",
+    title: "Sui public object",
+    description: "Read public Sui object metadata only. No contents, BCS, signing or submission.",
+    inputSchema: objectSchema({
+      objectId: { type: "string", description: "Public 0x hex ID.", maxLength: 66 },
+      network: { type: "string", enum: ["mainnet", "testnet"] },
+    }, ["objectId", "network"]),
+    deskIds: ["sui"],
+    actionIds: ["sui_object_read"],
+    access: "read",
+    timeoutMs: 10_000,
+    requiresFreshness: true,
+  },
+  {
     name: "matterhorn_sui_preview_transfer",
     title: "Sui transfer preview",
-    description: "Prepare a non-custodial Sui transfer preview for review in the user's wallet. Never signs or broadcasts.",
+    description: "Preview a non-custodial Sui transfer for wallet review. Never signs or broadcasts.",
     inputSchema: objectSchema({
       network: { type: "string", enum: ["mainnet", "testnet"] },
       sender: { type: "string", description: "Public sender address." },
       recipient: { type: "string", description: "Public recipient address." },
       amountSui: { type: "string", description: "SUI amount as a positive decimal string." },
-      memo: { type: "string", description: "Optional public memo, up to 140 characters." },
+      memo: { type: "string", description: "Public memo, max 140 characters." },
     }, ["network", "sender", "recipient", "amountSui"]),
     deskIds: ["sui"],
     actionIds: ["sui_transfer_preview"],

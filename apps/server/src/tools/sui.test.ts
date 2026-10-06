@@ -14,6 +14,7 @@ import {
   formatMistToSui,
   normalizeMatterhornSuiAddress,
   normalizeMatterhornSuiNetwork,
+  normalizeMatterhornSuiObjectId,
   type SuiNetwork,
   type SuiReadClient,
 } from "./sui.js";
@@ -28,6 +29,7 @@ function mockProvider() {
   const provider = new SuiPublicReadProvider({
     now: () => NOW,
     clientFactory: (network) => ({
+      async getObjects() { return { objects: [] }; },
       async getBalance(input) {
         calls.push({ network, input });
         return {
@@ -53,6 +55,69 @@ function mockProvider() {
 }
 
 describe("Sui public read provider", () => {
+  test("validates object IDs before dispatch", () => {
+    expect(normalizeMatterhornSuiObjectId("0x2")).toBe(NORMALIZED_ADDRESS);
+    for (const id of ["", "0x", "0xgg", "https://example.com", `0x${"a".repeat(65)}`, "seed phrase: fake words"]) {
+      expect(() => normalizeMatterhornSuiObjectId(id)).toThrow(SuiInputError);
+    }
+  });
+
+  test("reads only bounded single-object metadata on fixed public networks", async () => {
+    for (const network of ["mainnet", "testnet"]) {
+      const calls: Parameters<SuiReadClient["getObjects"]>[0][] = [];
+      const provider = new SuiPublicReadProvider({ now: () => NOW, clientFactory: () => ({
+        async getBalance() { throw new Error("Unexpected balance read"); },
+        async getTransaction() { throw new Error("Unexpected transaction read"); },
+        async getObjects(input) {
+          calls.push(input);
+          return { objects: [{ objectId: NORMALIZED_ADDRESS, version: "7", digest: "1".repeat(32),
+            owner: { $kind: "Immutable", Immutable: true }, type: "package",
+            content: undefined, objectBcs: undefined, previousTransaction: undefined, json: undefined, display: undefined,
+            unexpectedBytecode: "DO_NOT_RETURN".repeat(1000),
+          }] };
+        },
+      }) });
+      const object = await provider.getObjectSnapshot("0x2", { network });
+      expect(object).toMatchObject({ objectId: NORMALIZED_ADDRESS, objectVersion: "7", network,
+        isPackage: true, type: "package", owner: { kind: "Immutable" }, custody: false, canSubmit: false,
+        source: { source: "sui.grpc", network, endpoint: `https://fullnode.${network}.sui.io:443`, fetchedAt: NOW.toISOString() } });
+      expect(calls).toHaveLength(1);
+      expect(calls[0].objectIds).toEqual([NORMALIZED_ADDRESS]);
+      expect(calls[0].include).toBeUndefined();
+      expect(calls[0].signal).toBeInstanceOf(AbortSignal);
+      expect(JSON.stringify(object)).not.toContain("DO_NOT_RETURN");
+      expect(JSON.stringify(object).length).toBeLessThan(1500);
+      await expect(provider.getObjectSnapshot("0x2", { network: "devnet" })).rejects.toThrow(SuiInputError);
+      await expect(provider.getObjectSnapshot("invalid", { network })).rejects.toThrow(SuiInputError);
+      expect(calls).toHaveLength(1);
+    }
+  });
+
+  test("distinguishes missing objects from sanitized upstream failure and bounds type metadata", async () => {
+    let response: Awaited<ReturnType<SuiReadClient["getObjects"]>> = { objects: [new Error("Object not found")] };
+    const provider = new SuiPublicReadProvider({ clientFactory: () => ({
+      async getBalance() { throw new Error("Unexpected"); }, async getTransaction() { throw new Error("Unexpected"); },
+      async getObjects() { return response; },
+    }) });
+    expect(await provider.getObjectSnapshot("0x2")).toBeNull();
+    response = { objects: [new Error("private upstream details DO_NOT_RETURN")] };
+    await expect(provider.getObjectSnapshot("0x2")).rejects.toThrow("Sui object metadata is unavailable from the public network");
+    const object = { objectId: NORMALIZED_ADDRESS, version: "7", digest: "1".repeat(32),
+      owner: { $kind: "AddressOwner", AddressOwner: NORMALIZED_ADDRESS }, type: "0x2::coin::Coin<0x2::sui::SUI>",
+      content: undefined, objectBcs: undefined, previousTransaction: undefined, json: undefined, display: undefined,
+    } satisfies Exclude<Awaited<ReturnType<SuiReadClient["getObjects"]>>["objects"][number], Error>;
+    response = { objects: [object] };
+    expect(await provider.getObjectSnapshot("0x2")).toMatchObject({ isPackage: false,
+      type: { packageAddress: NORMALIZED_ADDRESS, module: "coin", name: "Coin", typeArgumentCount: 1, typeArgumentsOmitted: true },
+      owner: { kind: "AddressOwner", address: NORMALIZED_ADDRESS } });
+    response = { objects: [{ ...object, type: "x".repeat(513) }] };
+    await expect(provider.getObjectSnapshot("0x2")).rejects.toThrow("Sui object metadata is unavailable");
+    response = { objects: [object, object] };
+    await expect(provider.getObjectSnapshot("0x2")).rejects.toThrow("Sui object metadata is unavailable");
+    response = { objects: [{ ...object, objectId: "0x3" }] };
+    await expect(provider.getObjectSnapshot("0x2")).rejects.toThrow("Sui object metadata is unavailable");
+  });
+
   test("normalizes public Sui addresses before validation", () => {
     expect(normalizeMatterhornSuiAddress(SHORT_ADDRESS)).toBe(NORMALIZED_ADDRESS);
     expect(() => normalizeMatterhornSuiAddress("not-a-sui-address")).toThrow(SuiInputError);

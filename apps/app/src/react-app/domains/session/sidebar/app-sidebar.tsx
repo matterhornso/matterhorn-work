@@ -418,6 +418,8 @@ export type AppSidebarProps = {
   onTestWorkspaceConnection?: (workspaceId: string) => Promise<boolean> | boolean | void;
   onEditWorkspaceConnection?: (workspaceId: string) => void;
   onForgetWorkspace: (workspaceId: string) => void;
+  onOpenLocalWorkspace: () => void;
+  onOpenNewLocalWorkspace: () => void;
   onOpenCreateWorkspace: () => void;
   onReorderWorkspaces?: (workspaceIds: string[]) => void;
   onStartResize?: React.PointerEventHandler<HTMLButtonElement>;
@@ -622,10 +624,19 @@ export function AppSidebar(props: AppSidebarProps) {
           <SidebarFooter>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton onClick={props.onOpenCreateWorkspace}>
-                  <Plus className="size-4" />
-                  {t("workspace_list.add_workspace")}
-                </SidebarMenuButton>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <SidebarMenuButton>
+                        <Plus className="size-4" />
+                        Add workspace
+                      </SidebarMenuButton>
+                    }
+                  />
+                  <DropdownMenuContent side="right" align="end">
+                    <WorkspaceSetupMenuItems sidebar={props} />
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarFooter>
@@ -677,7 +688,7 @@ function MinimalWorkspaceSidebar(props: AppSidebarProps & {
             </DropdownMenuItem>)}
             {shellConfig.addWorkspace ? <>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => { props.onOpenCreateWorkspace(); close(); }}>Workspace setup</DropdownMenuItem>
+              <WorkspaceSetupMenuItems sidebar={props} onSelect={close} />
             </> : null}
           </DropdownMenuContent>
         </DropdownMenu>
@@ -719,6 +730,42 @@ function MinimalWorkspaceSidebar(props: AppSidebarProps & {
         onPointerDown={props.onStartResize}
       />
     </Sidebar>
+  );
+}
+
+function WorkspaceSetupMenuItems(props: {
+  sidebar: AppSidebarProps;
+  onSelect?: () => void;
+}) {
+  const run = (action: () => void) => () => {
+    action();
+    props.onSelect?.();
+  };
+
+  if (!isDesktopRuntime()) {
+    return (
+      <DropdownMenuItem onClick={run(props.sidebar.onOpenCreateWorkspace)}>
+        <FolderOpen className="size-4" />
+        Local workspaces…
+      </DropdownMenuItem>
+    );
+  }
+
+  return (
+    <>
+      <DropdownMenuItem onClick={run(props.sidebar.onOpenLocalWorkspace)}>
+        <FolderOpen className="size-4" />
+        Open local workspace…
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={run(props.sidebar.onOpenNewLocalWorkspace)}>
+        <Plus className="size-4" />
+        New local workspace…
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem onClick={run(props.sidebar.onOpenCreateWorkspace)}>
+        Other workspace options…
+      </DropdownMenuItem>
+    </>
   );
 }
 

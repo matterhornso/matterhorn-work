@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { MatterhornProviderPrivacyPolicy } from "@matterhorn-work/types/backend-models";
 import { PrivateModePrivacyNotice } from "../src/react-app/domains/session/surface/private-mode-privacy-notice";
 import { MINIMAL_UI } from "../src/app/lib/minimal-ui";
+import { readFileSync } from "node:fs";
 
 const allowedPolicy: MatterhornProviderPrivacyPolicy = {
   providerId: "cudos",
@@ -18,6 +19,14 @@ const allowedPolicy: MatterhornProviderPrivacyPolicy = {
   allowed: true,
   label: "No training",
   description: "Prompts are not used for training.",
+};
+
+const unverifiedPolicy: MatterhornProviderPrivacyPolicy = {
+  ...allowedPolicy,
+  allowed: false,
+  status: "unverified",
+  trainingUse: "unknown",
+  retentionDays: null,
 };
 
 function renderNotice(
@@ -107,17 +116,53 @@ describe("Private mode privacy notice rendered behavior", () => {
 
   test("keeps an unverified provider fail-closed", () => {
     const html = renderNotice({
-      providerPrivacyPolicy: {
-        ...allowedPolicy,
-        allowed: false,
-        status: "unverified",
-        trainingUse: "unknown",
-        retentionDays: null,
-      },
+      providerPrivacyPolicy: unverifiedPolicy,
       privateModeAvailable: true,
     });
 
     expect(html).toContain("Sending blocked");
     expect(html).toContain("training and retention terms are not verified");
+  });
+
+  test("describes the account gateway's conditional public-research path without claiming this draft passed", () => {
+    const html = renderNotice({ providerPrivacyPolicy: unverifiedPolicy, accountMessageGateway: true });
+    expect(html).toContain("Provider privacy unverified");
+    expect(html).toContain("training and retention terms are not verified");
+    expect(html).toContain("Public-only research may proceed after privacy checks");
+    expect(html).toContain("private context needs review");
+    expect(html).not.toContain("Sending blocked");
+    expect(html).not.toContain("No request retention");
+    expect(html).toContain(">Privacy details</button>");
+  });
+
+  test("selected private context requires review, not a public-research assurance", () => {
+    const html = renderNotice({ providerPrivacyPolicy: unverifiedPolicy, accountMessageGateway: true, hasPrivateContext: true });
+    expect(html).toContain("Private context needs privacy review before sharing");
+    expect(html).toContain("training and retention terms are not verified");
+    expect(html).not.toContain("Public-only research may proceed");
+    expect(html).not.toContain("Private is on");
+  });
+
+  test("the composer includes attachments, saved Memory, agent files and coworkers in private-context notice selection", () => {
+    const source = readFileSync(new URL("../src/react-app/domains/session/surface/session-surface.tsx", import.meta.url), "utf8");
+    const notice = source.slice(source.indexOf("<PrivateModePrivacyNotice"), source.indexOf('<DevProfiler id="SessionComposer">'));
+    expect(notice).toContain("accountMessageGateway={publicBetaWeb}");
+    for (const context of ["attachments.length", "memoryContext?.records.length", "agentFileContext?.files.length", "agentFileContext?.coworker.id", "coworkerContext?.id"]) {
+      expect(notice).toContain(context);
+    }
+  });
+
+  test("private mode and unverified Venice keep the real block warning", () => {
+    for (const props of [
+      { privateModeEnabled: true, providerPrivacyPolicy: unverifiedPolicy },
+      { providerPrivacyPolicy: { ...unverifiedPolicy, providerId: "venice", providerName: "Venice Private" } },
+      { privateModeEnabled: true, providerPrivacyPolicy: { ...unverifiedPolicy, providerId: " VENICE ", providerName: "Venice Private" } },
+    ]) {
+      const html = renderNotice({ accountMessageGateway: true, ...props });
+      expect(html).toContain("Sending blocked");
+      expect(html).not.toContain("Public-only research may proceed");
+      expect(html).not.toContain("Private is on");
+      expect(html).not.toContain("No request retention");
+    }
   });
 });

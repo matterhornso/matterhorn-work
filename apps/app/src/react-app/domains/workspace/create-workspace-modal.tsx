@@ -237,13 +237,17 @@ export function CreateWorkspaceModal(props: CreateWorkspaceModalProps) {
   // Reset state when the modal opens.
   useEffect(() => {
     if (!props.open) return;
-    dispatchLocal({ type: "reset", settings: readDenSettings() });
-  }, [props.open]);
+    dispatchLocal({
+      type: "reset",
+      settings: readDenSettings(),
+      screen: allowDirectWorkspaceConnections ? props.initialScreen ?? "chooser" : "chooser",
+    });
+  }, [allowDirectWorkspaceConnections, props.initialScreen, props.open]);
 
   useEffect(() => {
     if (
       !allowDirectWorkspaceConnections &&
-      (screen === "remote" || screen === "shared")
+      screen !== "chooser"
     ) {
       setScreen("chooser");
     }
@@ -477,9 +481,13 @@ export function CreateWorkspaceModal(props: CreateWorkspaceModalProps) {
           ) : null}
           <div className="min-w-0 flex flex-col gap-1.5">
             <div className="flex flex-wrap items-center gap-2">
-              <DialogTitle>{allowDirectWorkspaceConnections ? headerTitle : "Workspace"}</DialogTitle>
+              <DialogTitle>{allowDirectWorkspaceConnections ? headerTitle : "Browser workspace"}</DialogTitle>
             </div>
-            <DialogDescription>{allowDirectWorkspaceConnections ? headerSubtitle : "Access your hosted workspace."}</DialogDescription>
+            <DialogDescription>
+              {allowDirectWorkspaceConnections
+                ? headerSubtitle
+                : "Your account workspace is managed by the Matterhorn server."}
+            </DialogDescription>
           </div>
         </DialogHeader>
 
@@ -521,25 +529,14 @@ export function CreateWorkspaceModal(props: CreateWorkspaceModalProps) {
                   />
                 </>
               ) : (
-                <div className="flex flex-col gap-3 rounded-xl border border-dls-border bg-dls-hover/50 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0 space-y-1">
-                    <p className="text-sm font-medium text-foreground">Hosted workspace</p>
-                    <p className="text-sm leading-5 text-muted-foreground">
-                      Open your account's workspace setup. Additional cloud workers are not available in this beta.
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="shrink-0"
-                    onClick={() => {
-                      if (typeof window !== "undefined") {
-                        window.location.assign("/onboarding");
-                      }
-                    }}
-                  >
-                    Open workspace setup
-                  </Button>
+                <div className="space-y-2 rounded-xl border border-dls-border bg-dls-hover/50 p-4">
+                  <p className="text-sm font-medium text-foreground">Local folders need the desktop app</p>
+                  <p className="max-w-[58ch] text-sm leading-5 text-muted-foreground">
+                    To use folders on this computer, use Matterhorn Desks for desktop. Open the workspace switcher at the top left, then choose Open local workspace… to open an existing folder.
+                  </p>
+                  <p className="max-w-[58ch] text-sm leading-5 text-muted-foreground">
+                    To create a workspace, choose New local workspace… then Choose folder. Use New Folder in the native folder picker to create a folder, select it, and confirm in Matterhorn Desks.
+                  </p>
                 </div>
               )}
 
@@ -566,7 +563,7 @@ export function CreateWorkspaceModal(props: CreateWorkspaceModalProps) {
           </div>
         ) : null}
 
-        {screen === "local" ? (
+        {screen === "local" && allowDirectWorkspaceConnections ? (
           <CreateWorkspaceLocalPanel
             selectedFolder={selectedFolder}
             hasSelectedFolder={hasSelectedFolder}
@@ -597,6 +594,14 @@ export function CreateWorkspaceModal(props: CreateWorkspaceModalProps) {
               setShowProgressDetails((prev) => !prev)
             }
           />
+        ) : null}
+
+        {screen === "chooser" && !allowDirectWorkspaceConnections ? (
+          <DialogFooter>
+            <DialogClose render={<Button type="button">Got it</Button>}>
+              Got it
+            </DialogClose>
+          </DialogFooter>
         ) : null}
 
         {screen === "remote" ? (

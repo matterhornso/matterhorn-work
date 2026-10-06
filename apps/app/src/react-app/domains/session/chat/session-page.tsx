@@ -1129,7 +1129,7 @@ function ProtocolDeskEmptyState({
       {!MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions ? (
         <div className="mx-1 flex items-start gap-2 rounded-md bg-dls-surface-muted/35 px-3 py-2 text-xs leading-5 text-dls-secondary" role="status">
           <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-[var(--matterhorn-desk-color)]" aria-hidden="true" />
-          <span><strong className="font-semibold text-dls-text">Public Beta is read-only.</strong> Research, watches, and cited public data are available; wallet actions stay hidden.</span>
+          <span><strong className="font-semibold text-dls-text">Public Beta is read-only.</strong> Research, watch planning, and cited public data are available; wallet actions stay hidden.</span>
         </div>
       ) : null}
 
@@ -1251,7 +1251,7 @@ function PublicBetaProtocolRail({
         </div>
       </div>
       <div className="mt-4 rounded-lg bg-[rgb(var(--matterhorn-desk-rgb)/0.08)] px-3 py-2.5 text-xs leading-5 text-dls-secondary">
-        Research, monitoring, and cited public data are available. Transaction preparation and wallet actions stay hidden in Public Beta.
+        Research, watch planning, and cited public data are available. Transaction preparation and wallet actions stay hidden in Public Beta.
       </div>
       <div className="mt-5">
         <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-dls-muted">
@@ -1339,6 +1339,8 @@ export type SessionPageSidebarProps = {
   onTestWorkspaceConnection?: (workspaceId: string) => Promise<boolean> | boolean | void;
   onEditWorkspaceConnection?: (workspaceId: string) => void;
   onForgetWorkspace: (workspaceId: string) => void;
+  onOpenLocalWorkspace: () => void;
+  onOpenNewLocalWorkspace: () => void;
   onOpenCreateWorkspace: () => void;
   onReorderWorkspaces?: (workspaceIds: string[]) => void;
 };
@@ -2870,6 +2872,8 @@ export function SessionPage(props: SessionPageProps) {
           onTestWorkspaceConnection={props.sidebar.onTestWorkspaceConnection}
           onEditWorkspaceConnection={props.sidebar.onEditWorkspaceConnection}
           onForgetWorkspace={props.sidebar.onForgetWorkspace}
+          onOpenLocalWorkspace={props.sidebar.onOpenLocalWorkspace}
+          onOpenNewLocalWorkspace={props.sidebar.onOpenNewLocalWorkspace}
           onOpenCreateWorkspace={props.sidebar.onOpenCreateWorkspace}
           onReorderWorkspaces={props.sidebar.onReorderWorkspaces}
           onStartResize={startLeftSidebarResize}
@@ -2883,9 +2887,9 @@ export function SessionPage(props: SessionPageProps) {
           >
             <ResizablePanel minSize="360px" className="min-w-0">
               <div className="flex h-full min-w-0 flex-col overflow-hidden bg-dls-surface">
-          <header className="matterhorn-workspace-header z-10 flex h-[calc(2.75rem+env(safe-area-inset-top))] shrink-0 items-center justify-between bg-dls-surface/95 px-4 pt-[env(safe-area-inset-top)] shadow-[0_1px_0_rgb(var(--matterhorn-blue-rgb)/0.08)] md:h-10 md:px-6 md:pt-0 mac:titlebar-drag @container/titlebar">
-            <div className="flex min-w-0 items-center gap-3">
-              {shellConfig.sidebar ? <SidebarTrigger className="size-11 md:size-8 mac:hidden" /> : null}
+          <header className={cn("matterhorn-workspace-header z-10 flex h-[calc(2.75rem+env(safe-area-inset-top))] shrink-0 items-center justify-between bg-dls-surface/95 px-4 pt-[env(safe-area-inset-top)] shadow-[0_1px_0_rgb(var(--matterhorn-blue-rgb)/0.08)] md:h-10 md:px-6 md:pt-0 mac:titlebar-drag @container/titlebar", MINIMAL_UI && "h-auto flex-wrap gap-x-3 pb-1 md:h-10 md:flex-nowrap md:pb-0")}>
+            <div className={cn("flex min-w-0 items-center gap-3", MINIMAL_UI && "w-full md:w-auto md:flex-1")}>
+              {shellConfig.sidebar ? <SidebarTrigger className={cn("size-11 shrink-0 md:size-8 mac:hidden", MINIMAL_UI && "w-auto gap-1.5 px-2 md:w-auto")} label={MINIMAL_UI ? "Desks" : undefined} aria-label={MINIMAL_UI ? "Toggle desk navigation" : undefined} /> : null}
               {!showWorkspaceSetupEmptyState && !MINIMAL_UI ? (
                 <Button
                   variant="ghost"
@@ -2945,9 +2949,9 @@ export function SessionPage(props: SessionPageProps) {
               ) : null}
             </div>
 
-            <div className="flex items-center gap-1.5 text-gray-10 mac:titlebar-no-drag">
-              {MINIMAL_UI && shellConfig.modelPicker ? <div className="max-w-[36vw] truncate">
-                {props.surface ? <ModelSelect open={props.surface.modelPickerOpen} onOpenChange={props.surface.onModelPickerOpenChange} value={props.surface.selectedModel} onChange={props.surface.onModelChange} /> : <Button variant="ghost" size="sm" onClick={props.onOpenSettings}>Models</Button>}
+            <div className={cn("flex min-w-0 items-center gap-1.5 text-gray-10 mac:titlebar-no-drag", MINIMAL_UI && "w-full justify-between md:w-auto md:max-w-[60%] md:shrink-0")}>
+              {MINIMAL_UI && shellConfig.modelPicker ? <div className="min-w-0 flex-1 md:max-w-64">
+                {props.surface ? <ModelSelect showLabel open={props.surface.modelPickerOpen} onOpenChange={props.surface.onModelPickerOpenChange} value={props.surface.selectedModel} onChange={props.surface.onModelChange} /> : <Button variant="ghost" size="sm" onClick={props.onOpenSettings}>Models</Button>}
               </div> : null}
               {workspaceNotesAvailable && !MINIMAL_UI ? (
                 <Button
@@ -2972,13 +2976,14 @@ export function SessionPage(props: SessionPageProps) {
                   render={
                     <Button
                       variant="ghost"
-                      size="icon-sm"
-                      className={cn("size-11 text-dls-secondary hover:bg-dls-hover hover:text-dls-text md:size-8", !MINIMAL_UI && "lg:hidden")}
+                      size={MINIMAL_UI ? "sm" : "icon-sm"}
+                      className={cn("text-dls-secondary hover:bg-dls-hover hover:text-dls-text", MINIMAL_UI ? "h-11 shrink-0 px-2 md:h-8" : "size-11 md:size-8 lg:hidden")}
                       title={MINIMAL_UI ? "Workspace tools" : "Open workspace menu"}
                       aria-label={MINIMAL_UI ? "Workspace tools" : "Open workspace menu"}
                       aria-expanded={mobileWorkspaceMenuOpen}
                     >
                       <Ellipsis className="size-4" aria-hidden="true" />
+                      {MINIMAL_UI ? <span>Workspace tools</span> : null}
                     </Button>
                   }
                 />
@@ -3745,7 +3750,7 @@ export function SessionPage(props: SessionPageProps) {
               developerMode={props.developerMode}
               settingsOpen={props.statusBar?.settingsOpen ?? false}
               onSendFeedback={props.onSendFeedback}
-              onOpenSettings={props.onOpenSettings}
+              onOpenSettings={MINIMAL_UI && !props.statusBar?.settingsOpen ? () => setCurrentSidePanel("profile") : props.onOpenSettings}
               providerConnectedIds={props.providerConnectedIds}
               mcpConnectedCount={props.mcpConnectedCount}
               walletStatus={{

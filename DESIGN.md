@@ -242,6 +242,10 @@ Button background/shadow/translation transitions are 120ms ease-out. Reduced mot
 
 ### Navigation, selection and overlays
 
+The minimal workspace header names its primary controls: **Desks**, **Model** plus the selected model, and **Workspace tools**. Below 768px, the title/navigation and model/tools occupy separate bounded rows; selected names truncate, never the action labels or disclosure icons. The model popup stays within the viewport. The compact footer retains visible **Profile** text and opens the existing profile/account panel instead of restoring a previously selected settings section. The full Settings screen names its compact navigation trigger **Settings**, and section selection dismisses only the mobile drawer. Desktop keeps one compact header row and its sidebar open. These labels do not broaden desk capabilities or reveal launch-gated controls.
+
+On the hosted web profile panel, **Account settings** is an in-app link to the workspace-scoped account settings route, or the global account route when no workspace is selected. The desktop Cloud account link remains external. This is navigation to the existing identity/security controls, never an account action or a permission change.
+
 Chat attachment selection uses the gateway's shared 5,000,000-byte per-file limit; MB labels use decimal bytes. Success notices describe attachment to a draft, not a completed upload or shared-folder link. Failed image preparation preserves other valid selections and the typed draft. Notices use status semantics for ordinary feedback and alert semantics for warnings/errors, with wrapping text and a bounded summary for multiple failures. This client feedback does not replace the gateway's aggregate and encoded-request limits.
 
 Pending attachment preparation is announced inline and blocks Send/Enter until every current selection settles. Editing and Stop remain available; finishing preparation never sends automatically. Preparation belongs to the current chat/account lifetime. Rejected attachment-only messages retain their files and can use the error card's Retry response action without adding text.

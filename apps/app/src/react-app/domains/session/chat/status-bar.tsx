@@ -304,6 +304,7 @@ export function StatusBar(props: StatusBarProps) {
                     aria-label={props.settingsOpen ? t("status.back") : PROFILE_SETTINGS_LABEL}
                   >
                     <Settings className="size-3.5" />
+                    <span className="md:hidden">{props.settingsOpen ? t("status.back") : "Profile"}</span>
                     <span className="hidden md:inline">{props.settingsOpen ? t("status.back") : PROFILE_SETTINGS_LABEL}</span>
                   </Button>
                 )}

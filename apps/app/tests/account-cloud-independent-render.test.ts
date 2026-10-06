@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 // Keep the session mock in a child process: shared test workers must retain the
 // real provider and auth client for the account-lifetime suites.
-function renderAccount(options: { compact: boolean; cloud: boolean; signedIn?: boolean; authError?: string }) {
+function renderAccount(options: { compact: boolean; cloud: boolean; signedIn?: boolean; authError?: string; web?: boolean; workspaceId?: string }) {
   const page = fileURLToPath(new URL("../src/react-app/domains/settings/pages/cloud-account-view.tsx", import.meta.url));
   const provider = fileURLToPath(new URL("../src/react-app/domains/settings/cloud/cloud-session-provider.tsx", import.meta.url));
   const den = fileURLToPath(new URL("../src/app/lib/den.ts", import.meta.url));
@@ -41,12 +41,12 @@ function renderAccount(options: { compact: boolean; cloud: boolean; signedIn?: b
       const queries = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       const tree = React.createElement(QueryClientProvider, { client: queries },
         React.createElement(MemoryRouter, null,
-          React.createElement(CloudAccountView, { compact: options.compact, developerMode: options.cloud, session })));
+          React.createElement(CloudAccountView, { compact: options.compact, developerMode: options.cloud, workspaceId: options.workspaceId, session })));
       process.stdout.write(renderToStaticMarkup(tree));
       queries.clear();
     `],
     cwd: fileURLToPath(new URL("..", import.meta.url)),
-    env: { ...process.env, VITE_MATTERHORN_CLOUD_ENABLED: "0", VITE_DEN_BASE_URL: "", VITE_MATTERHORN_DEN_BASE_URL: "" },
+    env: { ...process.env, VITE_MATTERHORN_DEPLOYMENT: options.web ? "web" : "desktop", VITE_MATTERHORN_CLOUD_ENABLED: "0", VITE_DEN_BASE_URL: "", VITE_MATTERHORN_DEN_BASE_URL: "" },
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -87,5 +87,25 @@ describe("Account is independent of optional Cloud services", () => {
     expect(html).not.toContain("Sign out");
     expect(html).not.toContain("Create account");
     expect(html).not.toContain("Select an organization");
+  });
+
+  test("hosted compact Profile links to account settings in the current workspace", () => {
+    const html = renderAccount({ compact: true, cloud: false, web: true, workspaceId: " workspace/test " });
+    expect(html).toContain('href="/workspace/workspace%2Ftest/settings/cloud-account"');
+    expect(html).not.toContain('href="https://matterhorn.so/account"');
+    expect(html).toContain("Account settings</a>");
+    expect(html).toContain("Sign out");
+  });
+
+  test("hosted compact Profile without a workspace uses global account settings", () => {
+    const html = renderAccount({ compact: true, cloud: false, web: true });
+    expect(html).toContain('href="/settings/cloud-account"');
+    expect(html).not.toContain('href="https://matterhorn.so/account"');
+  });
+
+  test("desktop Profile preserves its external Cloud account settings link", () => {
+    const html = renderAccount({ compact: true, cloud: true, web: false, workspaceId: "workspace-fixture" });
+    expect(html).toContain('href="https://matterhorn.so/account" target="_blank"');
+    expect(html).not.toContain('href="/workspace/workspace-fixture/settings/cloud-account"');
   });
 });

@@ -178,7 +178,9 @@ export function resolveProviderPrivacyPolicy(
         ? "Provider policy says customer prompts are not used for foundational-model training unless the provider account opts in; this deployment declares that opt-in disabled. Prompt retention follows the linked provider policy rather than a numeric API retention term."
         : fixedRetentionVerified
           ? `Provider terms prohibit training with customer prompts. Prompt retention is limited to ${retentionDays} day${retentionDays === 1 ? "" : "s"}.`
-        : "Matterhorn has not verified this provider's training and prompt-retention terms for this deployment.",
+        : !policyUrl
+          ? "Provider privacy policy coming soon. Training and prompt-retention terms have not been verified for this deployment."
+          : "Matterhorn has not verified this provider's training and prompt-retention terms for this deployment.",
     };
   }
 

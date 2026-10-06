@@ -147,7 +147,7 @@ export function CreateWorkspaceLocalPanel(
                 className="h-11 w-full rounded-lg border border-transparent bg-dls-hover/75 px-3 font-mono text-[13px] text-dls-text outline-none placeholder:text-dls-secondary focus:ring-2 focus:ring-[rgb(var(--dls-accent-rgb)/0.12)]"
               />
               <span className="mt-1.5 block text-[11px] leading-4 text-dls-secondary">
-                Use this if the native folder picker does not open in browser mode.
+                Enter an existing folder on this computer.
               </span>
             </label>
             <div className="mt-4">
@@ -164,8 +164,11 @@ export function CreateWorkspaceLocalPanel(
                 )}
                 {props.hasSelectedFolder
                   ? t("dashboard.change")
-                  : "Select folder"}
+                  : "Choose folder"}
               </button>
+              <p className="mt-2 text-sm leading-5 text-dls-secondary">
+                To create a new folder, choose New Folder in the native folder picker, then select it.
+              </p>
             </div>
           </div>
 

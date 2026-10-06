@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
@@ -11,6 +11,7 @@ import { startServer, type MatterhornServerDependencies } from "./server.js";
 import { buildReviewedActionHandoffV2 } from "./reviewed-action-airlock.js";
 import { MatterhornAgentRunReceiptStore } from "./agent-run-receipts.js";
 import type { ServerConfig } from "./types.js";
+import { suiProvider } from "./tools/sui.js";
 
 type Served = {
   port: number;
@@ -748,7 +749,14 @@ describe("backend control plane routes", () => {
         models: {
           "gpt-4.1": { name: "GPT 4.1" },
           "gpt-4.1-mini": { name: "GPT 4.1 Mini" },
+          "text-embedding-3-large": { name: "Embedding" },
+          "rerank-v3": { name: "Reranker" },
+          "BAAI/bge-m3": { name: "BGE" },
+          "WhereIsAI/UAE-Large-V1": { name: "UAE" },
         },
+      }, {
+        id: "anthropic", name: "Anthropic", source: "api",
+        models: { "claude-3-sonnet": { name: "Claude 3 Sonnet" } },
       }],
       default: { openai: "gpt-4.1-mini" },
       connected: ["openai"],
@@ -776,6 +784,8 @@ describe("backend control plane routes", () => {
       body: JSON.stringify({ providerId: "openai", modelId: "gpt-4.1" }),
     }, viewer.payload.token);
     expect(deniedViewer.response.status).toBe(403);
+    const viewerRead = await jsonFetch(base, "/workspace/ws_backend/backend/model-selection", {}, viewer.payload.token);
+    expect(viewerRead.response.status).toBe(200);
 
     const invalid = await jsonFetch(base, "/workspace/ws_backend/backend/model-selection", {
       method: "PATCH",
@@ -796,10 +806,28 @@ describe("backend control plane routes", () => {
     expect(unknownModel.response.status).toBe(400);
     expect(unknownModel.payload.code).toBe("invalid_model_selection");
 
+    for (const selection of [
+      { providerId: "missing-provider", modelId: "gpt-4.1" },
+      { providerId: "anthropic", modelId: "claude-3-sonnet" },
+      ...["text-embedding-3-large", "rerank-v3", "BAAI/bge-m3", "WhereIsAI/UAE-Large-V1"]
+        .map(modelId => ({ providerId: "openai", modelId })),
+    ]) {
+      const rejected = await jsonFetch(base, "/workspace/ws_backend/backend/model-selection", {
+        method: "PATCH", body: JSON.stringify(selection),
+      });
+      expect(rejected.response.status).toBe(400);
+      expect(rejected.payload.code).toBe("invalid_model_selection");
+    }
+
+    const collaborator = await hostFetch(base, "/tokens", {
+      method: "POST", body: JSON.stringify({ scope: "collaborator", label: "Model collaborator" }),
+    });
+    expect(collaborator.response.status).toBe(201);
+
     const saved = await jsonFetch(base, "/workspace/ws_backend/backend/model-selection", {
       method: "PATCH",
       body: JSON.stringify({ providerId: "openai", modelId: "gpt-4.1", variant: "high" }),
-    });
+    }, collaborator.payload.token);
     expect(saved.response.status).toBe(200);
     expect(saved.payload.selection).toMatchObject({
       providerId: "openai",
@@ -1690,10 +1718,38 @@ describe("backend control plane routes", () => {
     expect(invalidAddress.response.status).toBe(400);
     expect(invalidAddress.payload.code).toBe("invalid_sui_address");
 
+    const invalidObject = await jsonFetch(base, "/api/sui/object/not-an-object?network=testnet");
+    expect(invalidObject.response.status).toBe(400);
+    expect(invalidObject.payload.code).toBe("invalid_sui_object_id");
+    const invalidObjectNetwork = await jsonFetch(base, "/api/sui/object/0x2?network=devnet");
+    expect(invalidObjectNetwork.response.status).toBe(400);
+    expect(invalidObjectNetwork.payload.code).toBe("invalid_sui_network");
+
     const secretAddress = encodeURIComponent("seed phrase: fake words for signing");
     const rejectedSecret = await jsonFetch(base, `/api/sui/account/${secretAddress}`);
     expect(rejectedSecret.response.status).toBe(400);
     expect(rejectedSecret.payload.code).toBe("sui_secret_rejected");
+  });
+
+  test("Sui object route preserves authentication and returns metadata or a safe not-found", async () => {
+    const { base } = await boot();
+    const lookup = spyOn(suiProvider, "getObjectSnapshot").mockResolvedValue({
+      version: "matterhorn.sui.object.v1", objectId: "0x2", network: "testnet", objectVersion: "7",
+      digest: "1".repeat(32), isPackage: true, type: "package", owner: { kind: "Immutable" },
+      custody: false, canSubmit: false,
+      source: { source: "sui.grpc", network: "testnet", endpoint: "https://fullnode.testnet.sui.io:443", fetchedAt: "2026-10-06T00:00:00.000Z" },
+    });
+    try {
+      expect((await fetch(`${base}/api/sui/object/0x2?network=testnet`)).status).toBe(401);
+      expect(lookup).not.toHaveBeenCalled();
+      const found = await jsonFetch(base, "/api/sui/object/0x2?network=testnet");
+      expect(found.response.status).toBe(200);
+      expect(found.payload.object).toMatchObject({ isPackage: true, custody: false, canSubmit: false });
+      lookup.mockResolvedValue(null);
+      const missing = await jsonFetch(base, "/api/sui/object/0x3?network=testnet");
+      expect(missing.response.status).toBe(404);
+      expect(missing.payload.code).toBe("sui_object_not_found");
+    } finally { lookup.mockRestore(); }
   });
 
   test("Sui transaction preview route returns a connected-wallet transaction review", async () => {

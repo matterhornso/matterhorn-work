@@ -18,6 +18,62 @@ const LAUNCHER_DESKS: MatterhornDeskTaskStarterDesk[] = [
 ];
 
 describe("desk task starters", () => {
+  test("keeps watch help visible without promising chat persistence or scheduling", () => {
+    for (const desk of ["bittensor", "hyperliquid", "polymarket"] satisfies MatterhornDeskTaskStarterDesk[]) {
+      const starters = groupMatterhornDeskTaskStarters(MATTERHORN_DESK_TASK_STARTERS[desk], { reviewedActions: false })
+        .flatMap((group) => group.starters);
+      const watches = starters.filter((starter) => ["create-watch", "price-watch", "funding-watch"].includes(starter.id));
+      expect(watches.length).toBeGreaterThan(0);
+      for (const starter of watches) {
+        expect(starter.title).toMatch(/^Plan /);
+        expect(starter.detail).toContain("chat does not save or schedule");
+        expect(starter.prompt).toContain("This chat does not save or schedule watches");
+        expect(starter.prompt).toContain("separate monitoring API or CLI");
+        expect(starter.prompt).toContain("Do not claim a watch was created");
+      }
+    }
+    const alertHelp = MATTERHORN_DESK_TASK_STARTERS.polymarket.find((starter) => starter.id === "review-watch-alerts");
+    expect(alertHelp?.prompt).toContain("cannot load saved watch alerts");
+    expect(alertHelp?.prompt).toContain("one current snapshot");
+  });
+
+  test("keeps receipt guidance visible without claiming chat verification or import", () => {
+    for (const desk of ["bittensor", "hyperliquid", "polymarket", "sui"] satisfies MatterhornDeskTaskStarterDesk[]) {
+      const starters = groupMatterhornDeskTaskStarters(MATTERHORN_DESK_TASK_STARTERS[desk], { reviewedActions: false })
+        .flatMap((group) => group.starters);
+      const receipt = starters.find((starter) => starter.id === "import-receipt");
+      expect(receipt).toBeDefined();
+      expect(receipt?.title).not.toMatch(/^Import /);
+      expect(receipt?.prompt).toContain("This chat cannot verify or import a receipt");
+      // A placeholder would replace this entire prompt with a generic question
+      // in the focused launcher, dropping the important capability limitation.
+      expect(receipt?.prompt).not.toMatch(/<(?:paste|describe) /);
+    }
+    expect(MATTERHORN_DESK_TASK_STARTERS.sui.find((starter) => starter.id === "import-receipt")?.prompt)
+      .toContain("Verify receipt button, when those tools are available");
+  });
+
+  test("offers an object-ID-only Sui metadata starter without a wallet action", () => {
+    const starter = MATTERHORN_DESK_TASK_STARTERS.sui.find((item) => item.id === "inspect-objects");
+    expect(starter?.prompt).toContain("<paste public Sui object ID>");
+    expect(starter?.prompt).toContain("mainnet or testnet");
+    expect(starter?.prompt).toContain("matterhorn_sui_get_object");
+    expect(starter).not.toHaveProperty("reviewedAction");
+    expect(MATTERHORN_RECOMMENDED_DESK_TASK_IDS.sui).toContain("inspect-objects");
+  });
+
+  test("keeps Sui fee previews behind the existing transfer gate and recommends a public read", () => {
+    const starter = MATTERHORN_DESK_TASK_STARTERS.sui.find((item) => item.id === "review-transfer-fees");
+    expect(starter).toMatchObject({ reviewedAction: "sui", reviewedActionOperation: "transfer_sui" });
+    expect(starter?.detail).toContain("wallet actions must be available");
+    expect(starter?.prompt).toContain("do not invent gas or bypass unavailable wallet actions");
+    expect(groupMatterhornDeskTaskStarters(MATTERHORN_DESK_TASK_STARTERS.sui, { reviewedActions: false })
+      .flatMap((group) => group.starters).some((item) => item.id === "review-transfer-fees")).toBe(false);
+    expect(groupMatterhornDeskTaskStarters(MATTERHORN_DESK_TASK_STARTERS.sui, { reviewedActions: true })
+      .find((group) => group.id === "wallet")?.starters.some((item) => item.id === "review-transfer-fees")).toBe(true);
+    expect(MATTERHORN_RECOMMENDED_DESK_TASK_IDS.sui).toContain("read-testnet-balance");
+  });
+
   test.each(LAUNCHER_DESKS)("gives %s at least ten distinct useful launchers", (desk) => {
     const starters = MATTERHORN_DESK_TASK_STARTERS[desk];
 

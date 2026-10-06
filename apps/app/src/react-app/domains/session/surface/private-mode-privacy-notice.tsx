@@ -10,6 +10,8 @@ export type PrivateModePrivacyNoticeProps = {
   privateModeAvailable?: boolean;
   privateModeEnabled?: boolean;
   privateModeUnavailableReason?: string | null;
+  accountMessageGateway?: boolean;
+  hasPrivateContext?: boolean;
   onPrivateModeChange?: (enabled: boolean) => void;
   onOpenPrivacyDetails?: () => void;
 };
@@ -22,18 +24,24 @@ export function PrivateModePrivacyNotice(props: PrivateModePrivacyNoticeProps) {
   let message: ReactNode;
   if (props.modelUnavailable) {
     message = <>No model connected · Connect a model to chat.</>;
+  } else if (providerPolicy?.allowed === false) {
+    const researchGateway = props.accountMessageGateway && !props.privateModeEnabled
+      && providerPolicy.providerId.trim().toLowerCase() !== "venice";
+    message = (
+      <>
+        {researchGateway ? "Provider privacy unverified" : "Sending blocked"} · {providerPolicy.providerName}&apos;s training and
+        retention terms are not verified.
+        {researchGateway ? props.hasPrivateContext
+          ? " Private context needs privacy review before sharing."
+          : " Public-only research may proceed after privacy checks; private context needs review."
+          : null}
+      </>
+    );
   } else if (props.privateModeEnabled) {
     message = (
       <>
         Private is on · Matterhorn does not train on your chats, and Venice
         does not retain this request or response.
-      </>
-    );
-  } else if (providerPolicy?.allowed === false) {
-    message = (
-      <>
-        Sending blocked · {providerPolicy.providerName}&apos;s training and
-        retention terms are not verified.
       </>
     );
   } else if (props.privateModeUnavailableReason) {

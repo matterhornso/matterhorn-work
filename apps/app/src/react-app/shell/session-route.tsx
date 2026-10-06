@@ -145,6 +145,8 @@ import {
 } from "../domains/session/sync/session-sync";
 import { CreateRemoteWorkspaceModal } from "../domains/workspace/create-remote-workspace-modal";
 import { CreateWorkspaceModal } from "../domains/workspace/create-workspace-modal";
+import { openLocalWorkspaceFolder } from "../domains/workspace/open-local-workspace";
+import type { CreateWorkspaceScreen } from "../domains/workspace/types";
 import { createProviderAuthStore, useProviderAuthStoreSnapshot } from "../domains/connections/provider-auth/store";
 import { useRemoteAccessRestart } from "../domains/workspace/remote-access-restart";
 import { RenameWorkspaceModal } from "../domains/workspace/rename-workspace-modal";
@@ -812,6 +814,8 @@ export function SessionRoute() {
   const [retryingWorkspaceIds, setRetryingWorkspaceIds] = useState<string[]>([]);
   const launchActivatedWorkspaceIdsRef = useRef(new Set<string>());
   const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
+  const [createWorkspaceInitialScreen, setCreateWorkspaceInitialScreen] =
+    useState<CreateWorkspaceScreen>("chooser");
   const [createWorkspaceBusy, setCreateWorkspaceBusy] = useState(false);
   const [createWorkspaceError, setCreateWorkspaceError] = useState<string | null>(null);
   const [createWorkspaceRemoteBusy, setCreateWorkspaceRemoteBusy] = useState(false);
@@ -3267,11 +3271,10 @@ export function SessionRoute() {
     token,
   ]);
 
-  const handleOpenCreateWorkspace = useCallback(() => {
+  const canAddWorkspace = useCallback(() => {
     // Respect the org-level `allowMultipleWorkspaces` restriction (dev
     // #1505). If the checker returns true, the admin has disabled
-    // adding further workspaces; surface a friendly notice instead of
-    // opening the modal.
+    // adding further workspaces; surface a friendly notice instead.
     if (
       workspaces.length > 0 &&
       checkDesktopRestriction({ restriction: "allowMultipleWorkspaces" })
@@ -3281,11 +3284,26 @@ export function SessionRoute() {
         message:
           "Your organization administrator has restricted access to adding additional workspaces.",
       });
-      return;
+      return false;
     }
+    return true;
+  }, [checkDesktopRestriction, restrictionNotice, workspaces.length]);
+
+  const openCreateWorkspaceModal = useCallback((screen: CreateWorkspaceScreen) => {
+    if (isDesktopRuntime() && !canAddWorkspace()) return;
+    setCreateWorkspaceInitialScreen(screen);
+    setCreateWorkspaceError(null);
     setCreateWorkspaceRemoteError(null);
     setCreateWorkspaceOpen(true);
-  }, [checkDesktopRestriction, restrictionNotice, workspaces.length]);
+  }, [canAddWorkspace]);
+
+  const handleOpenCreateWorkspace = useCallback(() => {
+    openCreateWorkspaceModal("chooser");
+  }, [openCreateWorkspaceModal]);
+
+  const handleOpenNewLocalWorkspace = useCallback(() => {
+    openCreateWorkspaceModal(isDesktopRuntime() ? "local" : "chooser");
+  }, [openCreateWorkspaceModal]);
 
   const handleOpenRenameWorkspace = useCallback((workspaceId: string) => {
     const workspace = workspaces.find((item) => item.id === workspaceId);
@@ -3671,8 +3689,40 @@ export function SessionRoute() {
     setWorkspaces((current) => orderRouteWorkspaces(current, nextOrderIds));
   }, []);
 
+  const handleSelectWorkspace = useCallback((workspaceId: string) => {
+    if (workspaceId === selectedWorkspaceId) return true;
+    setLegacySelectedWorkspaceId(workspaceId);
+    writeActiveWorkspaceId(workspaceId || null);
+    const workspace = workspaces.find((item) => item.id === workspaceId);
+    if (client && workspace && !sessionsByWorkspaceId[workspaceId]?.length) {
+      setRetryingWorkspaceIds((current) => Array.from(new Set([...current, workspaceId])));
+      void loadWorkspaceSessionsInBackground([workspace]);
+    }
+    // Bookkeeping should not stall workspace switches behind IPC roundtrips.
+    if (isDesktopRuntime()) {
+      void workspaceSetSelected(workspaceId).catch(() => undefined);
+      void workspaceSetRuntimeActive(workspaceId).catch(() => undefined);
+    }
+    // Activate the workspace so the engine reloads its existing configuration.
+    if (!publicBetaWeb && workspaceId && client) {
+      const endpoint = endpointForWorkspace(workspace ?? null);
+      if (endpoint) {
+        void endpoint.client.activateWorkspace(endpoint.workspaceId).catch(() => undefined);
+      }
+    }
+    const remembered = readLastSessionFor(workspaceId);
+    if (remembered && remembered !== selectedSessionId &&
+      sessionsByWorkspaceId[workspaceId]?.some((session) => session.id === remembered)) {
+      navigateToWorkspaceSession(workspaceId, remembered);
+    } else {
+      navigateToWorkspaceSession(workspaceId);
+    }
+    return true;
+  }, [client, endpointForWorkspace, loadWorkspaceSessionsInBackground, navigateToWorkspaceSession,
+    publicBetaWeb, selectedSessionId, selectedWorkspaceId, sessionsByWorkspaceId, workspaces]);
+
   const handleCreateWorkspace = useCallback(async (preset: WorkspacePreset, folder: string | null) => {
-    if (!folder || !isDesktopRuntime()) return;
+    if (!folder || !isDesktopRuntime()) return false;
     setCreateWorkspaceBusy(true);
     setCreateWorkspaceError(null);
     try {
@@ -3733,12 +3783,41 @@ export function SessionRoute() {
         navigateToWorkspaceSession(targetWorkspaceId, session?.id ?? null, { replace: true });
         if (session?.id) focusPromptSoon();
       }
+      return true;
     } catch (error) {
       setCreateWorkspaceError(describeWorkspaceCreateError(error));
+      return false;
     } finally {
       setCreateWorkspaceBusy(false);
     }
   }, [baseUrl, client, local, navigateToWorkspaceSession, publicBetaWeb, refreshRouteState, rememberPendingCreatedSession, token]);
+
+  const handleOpenLocalWorkspace = useCallback(async () => {
+    if (!isDesktopRuntime()) {
+      openCreateWorkspaceModal("chooser");
+      return;
+    }
+    if (!canAddWorkspace()) return;
+
+    setCreateWorkspaceError(null);
+    try {
+      const folder = await pickDirectory({ title: "Open a local workspace" });
+      if (typeof folder !== "string" || !folder.trim()) return;
+      const opened = await openLocalWorkspaceFolder(folder, {
+        workspaces: workspacesRef.current,
+        selectWorkspace: handleSelectWorkspace,
+        createWorkspace: (path) => handleCreateWorkspace("starter", path),
+      });
+      if (!opened) {
+        setCreateWorkspaceInitialScreen("local");
+        setCreateWorkspaceOpen(true);
+      }
+    } catch (error) {
+      setCreateWorkspaceError(describeWorkspaceCreateError(error));
+      setCreateWorkspaceInitialScreen("local");
+      setCreateWorkspaceOpen(true);
+    }
+  }, [canAddWorkspace, handleCreateWorkspace, handleSelectWorkspace, openCreateWorkspaceModal]);
 
   const handleCreateRemoteWorkspace = useCallback(async (input: {
     matterhornHostUrl?: string | null;
@@ -3902,49 +3981,7 @@ export function SessionRoute() {
         newTaskDisabled: !canCreateTask,
         sidebarHydratedFromCache: Object.values(sessionsByWorkspaceId).some((list) => list.length > 0),
         startupPhase: effectiveLoading ? "nativeInit" : "ready",
-        onSelectWorkspace: async (workspaceId) => {
-          if (workspaceId === selectedWorkspaceId) return true;
-          setLegacySelectedWorkspaceId(workspaceId);
-          writeActiveWorkspaceId(workspaceId || null);
-          const workspace = workspaces.find((item) => item.id === workspaceId);
-          if (client && workspace && !sessionsByWorkspaceId[workspaceId]?.length) {
-            setRetryingWorkspaceIds((current) => Array.from(new Set([...current, workspaceId])));
-            void loadWorkspaceSessionsInBackground([workspace]);
-          }
-          // Fire Tauri updates but don't await them — they're bookkeeping and
-          // awaiting 2 IPC roundtrips on every click used to stall rapid
-          // workspace switches behind a queue.
-          if (isDesktopRuntime()) {
-            void workspaceSetSelected(workspaceId).catch(() => undefined);
-            void workspaceSetRuntimeActive(workspaceId).catch(() => undefined);
-          }
-          // Tell the Matterhorn Desks server this workspace is now active so it can
-          // emit a config reload event that the OpenCode engine picks up.
-          // Without this, the permissions from opencode.jsonc are never
-          // applied on the workspace the user is already on at launch. See
-          // issue #870.
-          if (!publicBetaWeb && workspaceId && client) {
-            const workspace = workspaces.find((item) => item.id === workspaceId) ?? null;
-            const endpoint = endpointForWorkspace(workspace);
-            if (endpoint) {
-              void endpoint.client.activateWorkspace(endpoint.workspaceId).catch(() => undefined);
-            }
-          }
-          // If we remember what the user last opened here and that session
-          // still exists in our local list, navigate. Otherwise stay put.
-          const remembered = readLastSessionFor(workspaceId);
-          if (remembered && remembered !== selectedSessionId) {
-            const known = sessionsByWorkspaceId[workspaceId];
-            if (known?.some((session: any) => session?.id === remembered)) {
-              navigateToWorkspaceSession(workspaceId, remembered);
-            } else {
-              navigateToWorkspaceSession(workspaceId);
-            }
-          } else {
-            navigateToWorkspaceSession(workspaceId);
-          }
-          return true;
-        },
+        onSelectWorkspace: handleSelectWorkspace,
         onOpenWorkspaceHome: (workspaceId) => {
           writeActiveWorkspaceId(workspaceId || null);
           navigateToWorkspaceSession(workspaceId, null);
@@ -4258,6 +4295,8 @@ export function SessionRoute() {
           : (workspaceId) => runRemoteWorkspaceConnectionCheck(workspaceId, "test"),
         onEditWorkspaceConnection: publicBetaWeb ? undefined : remoteWorkspaceConnectionEditor.open,
         onForgetWorkspace: (id) => void handleForgetWorkspace(id),
+        onOpenLocalWorkspace: () => void handleOpenLocalWorkspace(),
+        onOpenNewLocalWorkspace: handleOpenNewLocalWorkspace,
         onOpenCreateWorkspace: handleOpenCreateWorkspace,
         onReorderWorkspaces: handleReorderWorkspaces,
       }}
@@ -4345,6 +4384,7 @@ export function SessionRoute() {
     </Suspense>
     <CreateWorkspaceModal
       open={createWorkspaceOpen}
+      initialScreen={createWorkspaceInitialScreen}
       onClose={() => {
         setCreateWorkspaceOpen(false);
         setCreateWorkspaceError(null);
@@ -4356,9 +4396,12 @@ export function SessionRoute() {
       localDisabledReason={
         isDesktopRuntime()
           ? undefined
-          : "Create local projects in the desktop app. Matterhorn Cloud provides projects for public web."
+          : "Local folders require Matterhorn Desks for desktop. Browser workspaces are managed by the connected Matterhorn server."
       }
-      onPickFolder={() => pickDirectory({ title: t("onboarding.authorize_folder") }) as Promise<string | null>}
+      onPickFolder={async () => {
+        const folder = await pickDirectory({ title: "Choose or create a folder for the workspace" });
+        return typeof folder === "string" ? folder : null;
+      }}
       submitting={createWorkspaceBusy}
       localError={createWorkspaceError}
       remoteSubmitting={createWorkspaceRemoteBusy}

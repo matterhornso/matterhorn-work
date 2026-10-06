@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { createHash, createHmac } from "node:crypto";
 import { mkdtemp, mkdir, readFile, realpath, rm, symlink, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { createServer as createHttpServer, request as httpRequest } from "node:http";
 import { connect } from "node:net";
@@ -602,7 +602,8 @@ async function waitUntil(predicate: () => boolean) {
 }
 
 async function createReadAuthorityFixture(beforeRead?: (pathname: string) => Promise<void>, holdEvent?: Promise<void>,
-  responseForRequest?: (pathname: string) => Response | undefined, hardModelUsageLimit?: number) {
+  responseForRequest?: (pathname: string) => Response | undefined, hardModelUsageLimit?: number,
+  approval?: ServerConfig["approval"]) {
   const workspaceRoot = await createWorkspaceRoot();
   process.env.MATTERHORN_AUTH_DB = join(workspaceRoot, "accounts.db");
   process.env.MATTERHORN_WORK_DATA_DIR = join(workspaceRoot, "data");
@@ -615,7 +616,7 @@ async function createReadAuthorityFixture(beforeRead?: (pathname: string) => Pro
   process.env.MATTERHORN_HOSTED_MCP_ACCESS_INTEGRITY_SECRET = "disposable-session-read-integrity-secret";
   const mock = startMockOpencode({ beforeRead, holdEvent, responseForRequest, sessionMessages: defaultSessionMessages() });
   const openwork = await startOpenworkServer({ workspaceRoot,
-    opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false, hardModelUsageLimit });
+    opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false, hardModelUsageLimit, approval });
   const base = `http://127.0.0.1:${openwork.server.port}`;
   const signup = await fetch(`${base}/api/auth/sign-up/email`, {
     method: "POST", headers: { "Content-Type": "application/json" },
@@ -653,6 +654,7 @@ async function createReadAuthorityFixture(beforeRead?: (pathname: string) => Pro
     }
   };
   return { base, workspaceId, workspaceRoot, cookie, accessToken: credential.accessToken, revoke,
+    hostToken: openwork.hostToken, token: openwork.token,
     streamAborts: mock.streamAborts, runtimeRequests: mock.requests };
 }
 
@@ -1257,6 +1259,7 @@ describe("workspace session read APIs", () => {
           else {
             expect(body).not.toContain("Hostname Check");
             expect(body).not.toContain("mock-host");
+            expect(body).not.toContain("awaitingOperatorApproval");
           }
         } finally {
           release.resolve();
@@ -1792,6 +1795,7 @@ describe("workspace session read APIs", () => {
     expect(statusBody.item.status).toEqual({ type: "busy" });
     expect(statusBody.item.busy).toBe(true);
     expect(typeof statusBody.item.observedAt).toBe("number");
+    expect(statusBody.item.awaitingOperatorApproval).toBe(false);
 
     const snapshotResponse = await fetch(`${base}/workspace/ws_1/sessions/ses_1/snapshot?limit=5`, {
       headers: auth(openwork.token),
@@ -1841,6 +1845,96 @@ describe("workspace session read APIs", () => {
     expect(body.items[0]?.directory).toBe(canonicalWorkspaceRoot);
     const listRequest = mock.requests.find((request) => request.pathname === "/session");
     expect(listRequest?.directory).toBe(canonicalWorkspaceRoot);
+  });
+
+  test("binds canonical runtime callbacks to a newly provisioned account workspace under a directory alias", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const actualDataRoot = join(workspaceRoot, "actual-data");
+    const aliasedDataRoot = join(workspaceRoot, "aliased-data");
+    await mkdir(actualDataRoot);
+    await symlink(actualDataRoot, aliasedDataRoot, process.platform === "win32" ? "junction" : "dir");
+    process.env.MATTERHORN_AUTH_DB = join(workspaceRoot, "accounts.db");
+    process.env.MATTERHORN_WORK_DATA_DIR = aliasedDataRoot;
+    process.env.MATTERHORN_WORK_MEMORY_ROOT = join(workspaceRoot, "memory");
+    process.env.MATTERHORN_SIGNUPS_ENABLED = "true";
+    process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "false";
+    process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED = "false";
+    process.env.MATTERHORN_HOSTED_PUBLIC_BETA = "false";
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "enforce";
+    process.env.MATTERHORN_AGENT_RUNTIME_SECRET = "synthetic-canonical-directory-runtime-secret";
+    const mock = startMockOpencode({ sessionMessages: [] });
+    const openwork = await startOpenworkServer({ workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false,
+      approval: { mode: "manual", timeoutMs: 3_000 } });
+    const base = `http://127.0.0.1:${openwork.server.port}`;
+    const signup = await fetch(`${base}/api/auth/sign-up/email`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "canonical-workspace@example.com", password: "disposable-canonical-password" }),
+    });
+    expect(signup.status).toBe(200);
+    const cookie = signup.headers.get("set-cookie")?.split(";")[0];
+    if (!cookie) throw new Error("Missing disposable account session");
+    const workspaces = await fetch(`${base}/workspaces`, { headers: { Cookie: cookie } });
+    expect(workspaces.status).toBe(200);
+    const workspaceId = (await workspaces.json()).items[0]?.id;
+    expect(workspaceId).toMatch(/^ws_web_/);
+    const message = "Explain public blockchain concepts without using tools.";
+    const pending = fetch(`${base}/workspace/${workspaceId}/sessions/ses_1/messages`, {
+      method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ message, executionMode: "discuss", privacyMode: "public_research",
+        model: { providerID: "openai", modelID: "gpt-4.1" } }),
+    });
+    let approvalId: string | undefined;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const queued = await fetch(`${base}/approvals`, { headers: { "x-matterhorn-host-token": openwork.hostToken } });
+      const approval = (await queued.json()).items[0];
+      if (approval) {
+        expect(approval).toMatchObject({ workspaceId, action: "session.prompt", summary: "Submit prompt to session ses_1" });
+        approvalId = approval.id;
+        break;
+      }
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    expect(approvalId).toBeDefined();
+    expect((await fetch(`${base}/approvals/${approvalId}`, {
+      method: "POST", headers: { "x-matterhorn-host-token": openwork.hostToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ reply: "allow" }),
+    })).status).toBe(200);
+    const sent = await pending;
+    expect(sent.status).toBe(202);
+    const accepted = await sent.json();
+    const upstream = mock.requests.find(request => request.pathname === "/session/ses_1/prompt_async");
+    const directory = upstream?.directory;
+    if (!directory) throw new Error("Missing canonical account runtime directory");
+    expect(directory.startsWith(await realpath(actualDataRoot))).toBe(true);
+    expect(directory.startsWith(aliasedDataRoot)).toBe(false);
+    const runtimeHeaders = { "Content-Type": "application/json",
+      "X-Matterhorn-Agent-Runtime-Secret": process.env.MATTERHORN_AGENT_RUNTIME_SECRET };
+    const providerMessages = { workspaceDirectory: directory, sessionId: "ses_1", messageId: accepted.messageId,
+      messages: [{ info: { id: accepted.messageId, role: "user", sessionID: "ses_1" }, parts: [{ type: "text", text: message }] }] };
+    const validate = (body: unknown, headers = runtimeHeaders) => fetch(`${base}/internal/agent-runs/provider-messages`, {
+      method: "POST", headers, body: JSON.stringify(body),
+    });
+    expect((await validate(providerMessages, { ...runtimeHeaders, "X-Matterhorn-Agent-Runtime-Secret": "wrong-secret" })).status).toBe(401);
+    const differentWorkspace = await validate({ ...providerMessages, workspaceDirectory: workspaceRoot });
+    expect(differentWorkspace.status).toBe(409);
+    await expect(differentWorkspace.json()).resolves.toMatchObject({ code: "agent_provider_messages_not_bound" });
+    expect((await validate({ ...providerMessages, workspaceDirectory: join(workspaceRoot, "unknown-workspace") })).status).toBe(404);
+    const childDirectory = join(directory, "nested");
+    await mkdir(childDirectory);
+    expect((await validate({ ...providerMessages, workspaceDirectory: childDirectory })).status).toBe(404);
+    for (const workspaceDirectory of [directory, join(aliasedDataRoot, relative(actualDataRoot, directory))]) {
+      const validated = await validate({ ...providerMessages, workspaceDirectory });
+      expect(validated.status).toBe(200);
+      await expect(validated.json()).resolves.toMatchObject({ accepted: true, runId: accepted.runId });
+    }
+    const system = await fetch(`${base}/internal/agent-runs/provider-system`, {
+      method: "POST", headers: runtimeHeaders,
+      body: JSON.stringify({ workspaceDirectory: directory, sessionId: "ses_1", expectedRunId: accepted.runId,
+        providerId: "openai", modelId: "gpt-4.1", purpose: "message" }),
+    });
+    expect(system.status).toBe(200);
+    await expect(system.json()).resolves.toMatchObject({ runId: accepted.runId, system: [expect.any(String)] });
   });
 
   test("streams bounded session events with snapshot and status frames", async () => {
@@ -2491,6 +2585,12 @@ describe("workspace session read APIs", () => {
       }
       expect(approvalId).toBeDefined();
       expect(mock.requests.filter((request) => request.method === "POST" && request.pathname.endsWith(dispatchPath))).toHaveLength(0);
+      const readStatus = async () => {
+        const response = await fetch(`${base}/workspace/ws_1/sessions/ses_1/status`, { headers: auth(openwork.token) });
+        expect(response.status).toBe(200);
+        return (await response.json()).item;
+      };
+      expect((await readStatus()).awaitingOperatorApproval).toBe(operation === "messages");
       const clientList = await fetch(`${base}/approvals`, { headers: auth(openwork.token) });
       expect(clientList.status).toBe(401);
       const clientApproval = await fetch(`${base}/approvals/${approvalId}`, {
@@ -2536,6 +2636,7 @@ describe("workspace session read APIs", () => {
       expect(mock.requests.filter((request) => request.method === "POST" && request.pathname.endsWith(dispatchPath))).toHaveLength(reply === "allow" ? 1 : 0);
       const after = await fetch(`${base}/approvals`, { headers: { "x-matterhorn-host-token": openwork.hostToken } });
       expect((await after.json()).items).toEqual([]);
+      expect((await readStatus()).awaitingOperatorApproval).toBe(false);
       if (reply === "stop" || reply === "disconnect") {
         const retried = fetch(`${base}/workspace/ws_1/sessions/ses_1/${operation}`, {
           method: "POST", headers: { ...auth(openwork.token), "Content-Type": "application/json" }, body: messageBody,
@@ -2560,6 +2661,78 @@ describe("workspace session read APIs", () => {
       }
     });
   }
+
+  test("account approval status is read-only, exact-scoped and reveals no pending request metadata", async () => {
+    const app = await createReadAuthorityFixture(undefined, undefined,
+      pathname => pathname === "/session/ses_1/message" ? Response.json([]) : undefined, undefined,
+      { mode: "manual", timeoutMs: 5_000 });
+    const secondSignup = await fetch(`${app.base}/api/auth/sign-up/email`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "approval-other@example.test", password: "disposable-other-account-password" }),
+    });
+    expect(secondSignup.status).toBe(200);
+    const secondCookie = secondSignup.headers.get("set-cookie")?.split(";")[0];
+    if (!secondCookie) throw new Error("Missing second disposable account");
+    const secondWorkspaces = await fetch(`${app.base}/workspaces`, { headers: { Cookie: secondCookie } });
+    const secondWorkspaceId = (await secondWorkspaces.json()).items[0]?.id;
+    expect(secondWorkspaceId).not.toBe(app.workspaceId);
+    const controller = new AbortController();
+    const pending = fetch(`${app.base}/workspace/${app.workspaceId}/sessions/ses_1/messages`, {
+      method: "POST", signal: controller.signal,
+      headers: { Cookie: app.cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "Synthetic public research request", executionMode: "discuss",
+        privacyMode: "public_research", model: { providerID: "openai", modelID: "gpt-4.1" } }),
+    }).catch(() => null);
+    let approvalId: string | undefined;
+    try {
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const queued = await fetch(`${app.base}/approvals`, { headers: { "x-matterhorn-host-token": app.hostToken } });
+        approvalId = (await queued.json()).items[0]?.id;
+        if (approvalId) break;
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      if (!approvalId) {
+        const response = await pending;
+        const error = await response?.json();
+        throw new Error(`Disposable approval fixture failed before queue: ${response?.status} ${error?.code}`);
+      }
+      expect(approvalId).toBeDefined();
+      const statusPath = `${app.base}/workspace/${app.workspaceId}/sessions/ses_1/status`;
+      const own = await fetch(statusPath, { headers: { Cookie: app.cookie } });
+      expect(own.status).toBe(200);
+      const { item } = await own.json();
+      expect(item.awaitingOperatorApproval).toBe(true);
+      expect(Object.keys(item).sort()).toEqual(["awaitingOperatorApproval", "busy", "observedAt", "session", "status"]);
+      expect(JSON.stringify(item)).not.toContain(approvalId);
+      expect(JSON.stringify(item)).not.toContain("Synthetic public research request");
+      // Account workspace authority remains exact; this status addition does
+      // not broaden the pre-existing denial of client-supplied aliases.
+      expect((await fetch(`${app.base}/workspace/rem_${app.workspaceId}/sessions/ses_1/status`, { headers: { Cookie: app.cookie } })).status).toBe(404);
+      const otherSubject = await fetch(statusPath, { headers: auth(app.token) });
+      expect(otherSubject.status).toBe(200);
+      expect((await otherSubject.json()).item.awaitingOperatorApproval).toBe(false);
+      expect((await fetch(statusPath, { headers: { Cookie: secondCookie } })).status).toBe(404);
+      const otherWorkspace = await fetch(`${app.base}/workspace/${secondWorkspaceId}/sessions/ses_1/status`, { headers: { Cookie: secondCookie } });
+      expect(otherWorkspace.status).toBe(200);
+      expect((await otherWorkspace.json()).item.awaitingOperatorApproval).toBe(false);
+      expect((await fetch(statusPath)).status).toBe(401);
+      expect((await fetch(`${app.base}/workspace/${app.workspaceId}/sessions/ses_missing/status`, { headers: { Cookie: app.cookie } })).status).toBe(404);
+      expect((await fetch(`${app.base}/approvals`, { headers: { Cookie: app.cookie } })).status).toBe(401);
+      expect((await fetch(`${app.base}/approvals/${approvalId}`, { method: "POST",
+        headers: { Cookie: app.cookie, "Content-Type": "application/json" }, body: JSON.stringify({ reply: "allow" }) })).status).toBe(401);
+      expect(app.runtimeRequests.filter(request => request.pathname.endsWith("/prompt_async"))).toHaveLength(0);
+      await app.revoke("cookie-revoked");
+      const revoked = await fetch(statusPath, { headers: { Cookie: app.cookie } });
+      expect(revoked.status).toBe(401);
+      expect(await revoked.text()).not.toContain("awaitingOperatorApproval");
+    } finally {
+      controller.abort();
+      await pending;
+      if (approvalId) await fetch(`${app.base}/approvals/${approvalId}`, { method: "POST",
+        headers: { "x-matterhorn-host-token": app.hostToken, "Content-Type": "application/json" },
+        body: JSON.stringify({ reply: "deny" }) });
+    }
+  });
 
   test("compacts through the Matterhorn privacy and usage gateway", async () => {
     const workspaceRoot = await createWorkspaceRoot();
@@ -5211,6 +5384,152 @@ describe("workspace session read APIs", () => {
     expect(JSON.stringify(ledgerBody)).not.toContain("Use the workspace default model");
   });
 
+  test("saves an unverified model preference without authorizing private prompts or provider dispatch", async () => {
+    process.env.MATTERHORN_PROVIDER_PRIVACY_MODE = "verified-only";
+    process.env.MATTERHORN_GUARDED_RUNTIME_MODE = "off";
+    delete process.env.MATTERHORN_CUDOS_TRAINING_USE;
+    delete process.env.MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS;
+    delete process.env.MATTERHORN_CUDOS_PRIVACY_POLICY_URL;
+    delete process.env.MATTERHORN_CUDOS_PRIVACY_VERIFIED_AT;
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode({ responseForRequest: pathname => pathname === "/provider"
+      ? Response.json({ all: [{ id: "cudos", name: "CUDOS", source: "api",
+        models: { "asi1-mini": { name: "ASI1 Mini" } } }],
+        default: { cudos: "asi1-mini" }, connected: ["cudos"] }) : undefined });
+    const openwork = await startOpenworkServer({ workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false, hardModelUsageLimit: 32_000 });
+    const base = `http://127.0.0.1:${openwork.server.port}`;
+    const headers = { ...auth(openwork.token), "Content-Type": "application/json" };
+    const selectionPath = `${base}/workspace/ws_1/backend/model-selection`;
+    const saved = await fetch(selectionPath, { method: "PATCH", headers,
+      body: JSON.stringify({ providerId: "cudos", modelId: "asi1-mini" }) });
+    expect(saved.status).toBe(200);
+    const savedBody = await saved.json();
+    const expectedSelection = { providerId: "cudos", modelId: "asi1-mini", source: "server_workspace_preference" };
+    const expectedPrivacy = { enforcementMode: "verified_only", providers: [expect.objectContaining({
+      providerId: "cudos", status: "unverified", trainingUse: "unknown", allowed: false,
+    })] };
+    expect(savedBody).toMatchObject({ selection: expectedSelection, effectiveModel: expectedSelection,
+      privacy: expectedPrivacy, storage: { auditLogged: true, containsSecrets: false } });
+    const readback = await fetch(selectionPath, { headers });
+    expect(readback.status).toBe(200);
+    expect(await readback.json()).toMatchObject({ selection: expectedSelection,
+      effectiveModel: expectedSelection, privacy: expectedPrivacy });
+
+    // Omitting the request model exercises the newly saved preference, not an
+    // unrelated explicit model. Saving is never consent to share private data.
+    const privateBody = JSON.stringify({ message: "Summarize my private workspace notes", privacyMode: "private_workspace" });
+    const preflight = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages/preflight`, {
+      method: "POST", headers, body: privateBody,
+    });
+    expect(preflight.status).toBe(200);
+    expect(await preflight.json()).toMatchObject({ decision: "consent_required", effectiveMode: "private_workspace",
+      provider: { id: "cudos", modelId: "asi1-mini", privacyStatus: "unverified" } });
+    const privatePrompt = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+      method: "POST", headers, body: privateBody,
+    });
+    expect(privatePrompt.status).toBe(409);
+    expect(await privatePrompt.json()).toMatchObject({ code: "agent_privacy_consent_required",
+      details: { decision: "consent_required", provider: { id: "cudos", modelId: "asi1-mini" } } });
+    const secretPrompt = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+      method: "POST", headers, body: JSON.stringify({ message: "PRIVATE_KEY=disposable-never-forward-this" }),
+    });
+    expect(secretPrompt.status).toBe(422);
+    expect(await secretPrompt.json()).toMatchObject({ code: "agent_privacy_blocked",
+      details: { decision: "blocked", detectedData: { labels: expect.arrayContaining(["secret"]) } } });
+    const rawPrompt = await fetch(`${base}/workspace/ws_1/opencode/session/ses_1/prompt_async`, {
+      method: "POST", headers, body: JSON.stringify({ parts: [{ type: "text", text: "Raw proxy must remain blocked" }] }),
+    });
+    expect(rawPrompt.status).toBe(403);
+    expect(await rawPrompt.json()).toMatchObject({ code: "provider_privacy_unverified" });
+    expect(mock.requests.filter(request => request.method === "POST"
+      && ["/session/ses_1/message", "/session/ses_1/prompt_async"].includes(request.pathname))).toHaveLength(0);
+    const usage = await fetch(`${base}/workspace/ws_1/model-usage/status`, { headers });
+    expect(usage.status).toBe(200);
+    expect(await usage.json()).toMatchObject({ status: {
+      daily: { chargedTokens: 0, usedTokens: 0 }, monthly: { chargedTokens: 0, usedTokens: 0 }, pendingRequests: 0,
+    } });
+  });
+
+  test("keeps the saved local model readable but rejects unchecked changes when its runtime is offline", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    let catalogAvailable = true;
+    const mock = startMockOpencode({ responseForRequest: pathname => pathname !== "/provider" ? undefined
+      : !catalogAvailable ? Response.json({ error: "offline" }, { status: 503 })
+        : Response.json({ all: [{ id: "ollama", name: "Ollama", source: "api",
+          models: { "local-chat": { name: "Local chat" } } }],
+          default: { ollama: "local-chat" }, connected: ["ollama"] }) });
+    const openwork = await startOpenworkServer({ workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false });
+    const selectionPath = `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/backend/model-selection`;
+    const headers = { ...auth(openwork.token), "Content-Type": "application/json" };
+    const saved = await fetch(selectionPath, { method: "PATCH", headers,
+      body: JSON.stringify({ providerId: "ollama", modelId: "local-chat" }) });
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toMatchObject({ selection: { providerId: "ollama", modelId: "local-chat" },
+      privacy: { providers: [expect.objectContaining({ providerId: "ollama", status: "local_processing", allowed: true })] } });
+    catalogAvailable = false;
+    const rejected = await fetch(selectionPath, { method: "PATCH", headers,
+      body: JSON.stringify({ providerId: "ollama", modelId: "unavailable-model" }) });
+    expect(rejected.status).toBe(503);
+    expect(await rejected.json()).toMatchObject({ code: "model_catalog_unavailable" });
+    const readback = await fetch(selectionPath, { headers });
+    expect(readback.status).toBe(200);
+    expect(await readback.json()).toMatchObject({ selection: { providerId: "ollama", modelId: "local-chat" } });
+    const reset = await fetch(selectionPath, { method: "DELETE", headers });
+    expect(reset.status).toBe(200);
+    expect(await reset.json()).toMatchObject({ selection: null });
+  });
+
+  test("isolates saved model preferences across account workspaces", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    process.env.MATTERHORN_AUTH_DB = join(workspaceRoot, "accounts.db");
+    process.env.MATTERHORN_WORK_DATA_DIR = join(workspaceRoot, "data");
+    process.env.MATTERHORN_WORK_MEMORY_ROOT = join(workspaceRoot, "memory");
+    process.env.MATTERHORN_SIGNUPS_ENABLED = "true";
+    process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "false";
+    process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED = "false";
+    process.env.MATTERHORN_HOSTED_PUBLIC_BETA = "false";
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({ workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`, readOnly: false });
+    const base = `http://127.0.0.1:${openwork.server.port}`;
+    const createAccount = async (email: string) => {
+      const signup = await fetch(`${base}/api/auth/sign-up/email`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: "disposable-model-preference-password" }),
+      });
+      expect(signup.status).toBe(200);
+      const cookie = signup.headers.get("set-cookie")?.split(";")[0];
+      if (!cookie) throw new Error("Missing disposable model-selection account cookie");
+      const headers = { Cookie: cookie, "Content-Type": "application/json" };
+      const workspaces = await fetch(`${base}/workspaces`, { headers });
+      expect(workspaces.status).toBe(200);
+      const { items } = await workspaces.json();
+      const workspaceId = items[0]?.id;
+      if (typeof workspaceId !== "string") throw new Error("Missing account workspace");
+      return { headers, workspaceId };
+    };
+    const first = await createAccount("model-first@example.test");
+    const second = await createAccount("model-second@example.test");
+    expect(first.workspaceId).not.toBe(second.workspaceId);
+    const selectionPath = `${base}/workspace/${first.workspaceId}/backend/model-selection`;
+    const saved = await fetch(selectionPath, { method: "PATCH", headers: first.headers,
+      body: JSON.stringify({ providerId: "openai", modelId: "gpt-4.1" }) });
+    expect(saved.status).toBe(200);
+    for (const method of ["GET", "PATCH", "DELETE"]) {
+      const denied = await fetch(selectionPath, { method, headers: second.headers,
+        ...(method === "PATCH" ? { body: JSON.stringify({ providerId: "openai", modelId: "gpt-4.1-mini" }) } : {}) });
+      expect(denied.status).toBe(404);
+    }
+    const firstRead = await fetch(selectionPath, { headers: first.headers });
+    expect(firstRead.status).toBe(200);
+    expect(await firstRead.json()).toMatchObject({ selection: { providerId: "openai", modelId: "gpt-4.1" } });
+    const secondRead = await fetch(`${base}/workspace/${second.workspaceId}/backend/model-selection`, { headers: second.headers });
+    expect(secondRead.status).toBe(200);
+    expect(await secondRead.json()).toMatchObject({ selection: null });
+  });
+
   test("submits stable route prompts with the saved workspace model when request omits model", async () => {
     const workspaceRoot = await createWorkspaceRoot();
     const mock = startMockOpencode();
@@ -5649,9 +5968,10 @@ describe("workspace session read APIs", () => {
     });
     const planPermission = (permissionUpdates[1]?.body as { permission?: unknown[] })?.permission ?? [];
     expect(Array.isArray(planPermission)).toBe(true);
-    expect(planPermission.slice(-2)).toEqual([
+    expect(planPermission.slice(-3)).toEqual([
       { permission: "*", pattern: "*", action: "deny" },
       { permission: "matterhorn-work_matterhorn_sui_get_balance", pattern: "*", action: "allow" },
+      { permission: "matterhorn-work_matterhorn_sui_get_object", pattern: "*", action: "allow" },
     ]);
   });
 
@@ -5920,9 +6240,10 @@ describe("workspace session read APIs", () => {
     const permissionUpdate = mock.requests.find((request) => request.pathname === "/session/ses_1" && request.method === "PATCH");
     const planPermission = (permissionUpdate?.body as { permission?: unknown[] })?.permission ?? [];
     expect(Array.isArray(planPermission)).toBe(true);
-    expect(planPermission.slice(-2)).toEqual([
+    expect(planPermission.slice(-3)).toEqual([
       { permission: "*", pattern: "*", action: "deny" },
       { permission: "matterhorn-work_matterhorn_sui_get_balance", pattern: "*", action: "allow" },
+      { permission: "matterhorn-work_matterhorn_sui_get_object", pattern: "*", action: "allow" },
     ]);
 
     const auditResponse = await fetch(`${base}/workspace/ws_1/audit?limit=10`, {

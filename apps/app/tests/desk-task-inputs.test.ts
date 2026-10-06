@@ -11,6 +11,19 @@ const VALID_SS58 = "5GrwvaEF5zXb26Fz9rcQpDWSi6q4zN9vX7K5Qm9P7rjY9uQF";
 const VALID_SUI_ADDRESS = `0x${"1".repeat(64)}`;
 
 describe("desk task required inputs", () => {
+  test("requests a public Sui object ID and network without treating it as a wallet address", () => {
+    const prompt = "Inspect <paste public Sui object ID>. Ask which network to use.";
+    const requirement = getDeskTaskInputRequirement(prompt);
+    expect(requirement).toMatchObject({ kind: "sui_object_id", fieldId: "objectId", label: "Public Sui object ID" });
+    if (!requirement) throw new Error("Expected object input");
+    expect(validateDeskTaskInput(requirement, "0x2")).toBeNull();
+    for (const invalid of ["0x", "not-an-id", `0x${"1".repeat(65)}`, "seed phrase fake"]) {
+      expect(validateDeskTaskInput(requirement, invalid)).toBe(requirement.invalidMessage);
+    }
+    expect(buildDeskTaskPromptWithInput(prompt, requirement, "0x2")).toContain("Inspect 0x2");
+    expect(buildDeskTaskPromptRequestingInput("Inspect objects", requirement)).toContain("network (mainnet or testnet)");
+  });
+
   test("detects SS58 placeholders and replaces them before launch", () => {
     const prompt = "Show my TAO balance for this SS58 public address: <paste public SS58 address>.";
     const requirement = getDeskTaskInputRequirement(prompt);
