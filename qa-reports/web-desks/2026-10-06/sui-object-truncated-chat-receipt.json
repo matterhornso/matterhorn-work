@@ -1,0 +1,147 @@
+{
+  "version": 1,
+  "capturedAt": "2026-10-05T23:27:06.663Z",
+  "workspaceId": "ws_web_bed34a27dae17e9d",
+  "sessionId": "ses_ef19e05b3ffe7hYsWZ23En03VO",
+  "scope": "Normal-account GET-only snapshot of an isolated local runtime. Model completion is not proof that requested tool work succeeded.",
+  "snapshotStatus": "idle",
+  "messages": [
+    {
+      "role": "user",
+      "completed": false,
+      "tokens": {
+        "cache": {}
+      }
+    },
+    {
+      "role": "assistant",
+      "modelId": "asi1",
+      "completed": true,
+      "finish": "tool-calls",
+      "tokens": {
+        "total": 2289,
+        "input": 2260,
+        "output": 29,
+        "reasoning": 0,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      }
+    },
+    {
+      "role": "assistant",
+      "modelId": "asi1",
+      "completed": true,
+      "finish": "length",
+      "tokens": {
+        "total": 2518,
+        "input": 1159,
+        "output": 75,
+        "reasoning": 4,
+        "cache": {
+          "read": 1280,
+          "write": 0
+        }
+      }
+    },
+    {
+      "role": "user",
+      "completed": false,
+      "tokens": {
+        "cache": {}
+      }
+    },
+    {
+      "role": "assistant",
+      "modelId": "asi1",
+      "completed": true,
+      "finish": "length",
+      "tokens": {
+        "total": 2214,
+        "input": 2155,
+        "output": 48,
+        "reasoning": 11,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      }
+    }
+  ],
+  "tools": [
+    {
+      "name": "matterhorn-work_matterhorn_sui_get_object",
+      "status": "completed",
+      "source": "sui.grpc",
+      "observedAt": "2026-10-05T23:25:22.280Z",
+      "network": "testnet"
+    }
+  ],
+  "toolCounts": {
+    "total": 1,
+    "completed": 1,
+    "errors": 0
+  },
+  "receipts": [
+    {
+      "runId": "agent_run_f82bfb2d-27cc-4503-9a06-c802bf9d8bb3",
+      "status": "partial",
+      "model": "asi1",
+      "usage": {
+        "inputTokens": 2155,
+        "outputTokens": 48,
+        "reasoningTokens": 11,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "estimatedCostUsd": 0
+      },
+      "privacyMode": "public_research",
+      "tools": []
+    },
+    {
+      "runId": "agent_run_998d71ad-df86-46aa-bcd7-1ccc9f818861",
+      "status": "partial",
+      "model": "asi1",
+      "usage": {
+        "inputTokens": 3419,
+        "outputTokens": 104,
+        "reasoningTokens": 4,
+        "cacheReadTokens": 1280,
+        "cacheWriteTokens": 0,
+        "estimatedCostUsd": 0
+      },
+      "privacyMode": "public_research",
+      "tools": [
+        {
+          "name": "matterhorn_sui_get_object",
+          "status": "success",
+          "source": "sui.grpc"
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "pendingRequests": 0,
+    "daily": {
+      "usedTokens": 22206,
+      "reservedTokens": 0,
+      "chargedTokens": 22206,
+      "limit": 100000,
+      "remainingTokens": 77794
+    },
+    "monthly": {
+      "usedTokens": 22206,
+      "reservedTokens": 0,
+      "chargedTokens": 22206,
+      "limit": 100000,
+      "remainingTokens": 77794
+    }
+  },
+  "safety": {
+    "requestMethod": "GET",
+    "newModelRequests": 0,
+    "adminCredentialsUsed": false,
+    "rawContentPersisted": false
+  }
+}

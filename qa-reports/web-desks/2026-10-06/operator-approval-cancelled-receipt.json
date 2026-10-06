@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "capturedAt": "2026-10-06T00:41:01.533Z",
+  "workspaceId": "ws_web_58c1823405d1a742",
+  "sessionId": "ses_ef15898c1ffeDUAYwd8ov2TR73",
+  "scope": "Normal-account GET-only snapshot of an isolated local runtime. Model completion is not proof that requested tool work succeeded.",
+  "snapshotStatus": "idle",
+  "messages": [],
+  "tools": [],
+  "toolCounts": {
+    "total": 0,
+    "completed": 0,
+    "errors": 0
+  },
+  "receipts": [],
+  "usage": {
+    "pendingRequests": 0,
+    "daily": {
+      "usedTokens": 0,
+      "reservedTokens": 0,
+      "chargedTokens": 0,
+      "limit": 100000,
+      "remainingTokens": 100000
+    },
+    "monthly": {
+      "usedTokens": 0,
+      "reservedTokens": 0,
+      "chargedTokens": 0,
+      "limit": 100000,
+      "remainingTokens": 100000
+    }
+  },
+  "safety": {
+    "requestMethod": "GET",
+    "newModelRequests": 0,
+    "adminCredentialsUsed": false,
+    "rawContentPersisted": false
+  }
+}

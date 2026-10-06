@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "capturedAt": "2026-10-05T23:05:17.374Z",
+  "workspaceId": "ws_web_1e20b6f98f1f3f5b",
+  "sessionId": "ses_ef1b71677ffe23Q7NU0Akaqw46",
+  "scope": "Normal-account GET-only snapshot of an isolated local runtime. Model completion is not proof that requested tool work succeeded.",
+  "snapshotStatus": "idle",
+  "messages": [
+    {
+      "role": "user",
+      "completed": false,
+      "tokens": {
+        "cache": {}
+      }
+    },
+    {
+      "role": "assistant",
+      "modelId": "asi1",
+      "completed": true,
+      "tokens": {
+        "total": 3547,
+        "input": 3427,
+        "output": 40,
+        "reasoning": 80,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      }
+    },
+    {
+      "role": "assistant",
+      "modelId": "asi1",
+      "completed": true,
+      "tokens": {
+        "total": 4841,
+        "input": 1756,
+        "output": 407,
+        "reasoning": 118,
+        "cache": {
+          "read": 2560,
+          "write": 0
+        }
+      }
+    }
+  ],
+  "tools": [
+    {
+      "name": "matterhorn-work_matterhorn_hyperliquid_get_orderbook",
+      "status": "completed",
+      "source": "hyperliquid.info",
+      "freshness": "live",
+      "observedAt": "2026-10-05T22:57:44.240Z"
+    },
+    {
+      "name": "matterhorn-work_matterhorn_hyperliquid_get_funding",
+      "status": "completed",
+      "source": "hyperliquid.info",
+      "freshness": "live",
+      "observedAt": "2026-10-05T22:57:44.336Z"
+    }
+  ],
+  "toolCounts": {
+    "total": 2,
+    "completed": 2,
+    "errors": 0
+  },
+  "receipts": [
+    {
+      "runId": "agent_run_d16d3444-6077-490c-8d1b-e81f236c3abc",
+      "status": "success",
+      "model": "asi1",
+      "usage": {
+        "inputTokens": 5183,
+        "outputTokens": 447,
+        "reasoningTokens": 198,
+        "cacheReadTokens": 2560,
+        "cacheWriteTokens": 0,
+        "estimatedCostUsd": 0
+      },
+      "privacyMode": "public_research",
+      "tools": [
+        {
+          "name": "matterhorn_hyperliquid_get_orderbook",
+          "status": "success",
+          "source": "hyperliquid.info",
+          "freshness": "live"
+        },
+        {
+          "name": "matterhorn_hyperliquid_get_funding",
+          "status": "success",
+          "source": "hyperliquid.info",
+          "freshness": "live"
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "pendingRequests": 0,
+    "daily": {
+      "usedTokens": 36376,
+      "reservedTokens": 0,
+      "chargedTokens": 36376,
+      "limit": 100000,
+      "remainingTokens": 63624
+    },
+    "monthly": {
+      "usedTokens": 36376,
+      "reservedTokens": 0,
+      "chargedTokens": 36376,
+      "limit": 100000,
+      "remainingTokens": 63624
+    }
+  },
+  "safety": {
+    "requestMethod": "GET",
+    "newModelRequests": 0,
+    "adminCredentialsUsed": false,
+    "rawContentPersisted": false
+  }
+}

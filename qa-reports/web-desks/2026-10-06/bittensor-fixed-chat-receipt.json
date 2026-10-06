@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "capturedAt": "2026-10-05T23:36:51.368Z",
+  "workspaceId": "ws_web_efd40f975cf546d8",
+  "sessionId": "ses_ef1951e6cffeMURKWNsiRg0GWy",
+  "scope": "Normal-account GET-only snapshot of an isolated local runtime. Model completion is not proof that requested tool work succeeded.",
+  "snapshotStatus": "idle",
+  "messages": [
+    {
+      "role": "user",
+      "completed": false,
+      "tokens": {
+        "cache": {}
+      }
+    },
+    {
+      "role": "assistant",
+      "modelId": "asi1",
+      "completed": true,
+      "finish": "tool-calls",
+      "tokens": {
+        "total": 3123,
+        "input": 3063,
+        "output": 60,
+        "reasoning": 0,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      }
+    },
+    {
+      "role": "assistant",
+      "modelId": "asi1",
+      "completed": true,
+      "finish": "stop",
+      "tokens": {
+        "total": 3669,
+        "input": 1487,
+        "output": 262,
+        "reasoning": 0,
+        "cache": {
+          "read": 1920,
+          "write": 0
+        }
+      }
+    }
+  ],
+  "tools": [
+    {
+      "name": "matterhorn-work_matterhorn_bittensor_chat",
+      "status": "completed"
+    }
+  ],
+  "toolCounts": {
+    "total": 1,
+    "completed": 1,
+    "errors": 0
+  },
+  "receipts": [
+    {
+      "runId": "agent_run_a7f12ec3-d019-448d-90cb-4c7b9604d588",
+      "status": "success",
+      "model": "asi1",
+      "usage": {
+        "inputTokens": 4550,
+        "outputTokens": 322,
+        "reasoningTokens": 0,
+        "cacheReadTokens": 1920,
+        "cacheWriteTokens": 0,
+        "estimatedCostUsd": 0
+      },
+      "privacyMode": "public_research",
+      "tools": [
+        {
+          "name": "matterhorn_bittensor_chat",
+          "status": "success"
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "pendingRequests": 0,
+    "daily": {
+      "usedTokens": 11650,
+      "reservedTokens": 0,
+      "chargedTokens": 11650,
+      "limit": 100000,
+      "remainingTokens": 88350
+    },
+    "monthly": {
+      "usedTokens": 11650,
+      "reservedTokens": 0,
+      "chargedTokens": 11650,
+      "limit": 100000,
+      "remainingTokens": 88350
+    }
+  },
+  "safety": {
+    "requestMethod": "GET",
+    "newModelRequests": 0,
+    "adminCredentialsUsed": false,
+    "rawContentPersisted": false
+  }
+}

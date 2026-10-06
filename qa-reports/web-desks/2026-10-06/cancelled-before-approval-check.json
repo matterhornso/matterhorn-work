@@ -1,0 +1,15 @@
+{
+  "capturedAt": "2026-10-05T23:05:17.668Z",
+  "sessionId": "ses_ef1b07976ffeXF3z5Cngxa40eP",
+  "status": "passed",
+  "checks": {
+    "sessionIdle": true,
+    "noRuntimeMessages": true,
+    "noRunReceipts": true,
+    "noToolCalls": true,
+    "noAccountPendingRequests": true,
+    "noDailyTokenHold": true,
+    "noMonthlyTokenHold": true
+  },
+  "scope": "No provider dispatch is observed in the normal-account runtime snapshot or run receipts, and account-level pending requests and reserved tokens are zero. This is not a direct provider-log audit."
+}

@@ -1,0 +1,32 @@
+{
+  "version": "matterhorn.final-source-verification.v1",
+  "startedAt": "2026-10-05T23:29:42.072Z",
+  "completedAt": "2026-10-05T23:30:06.650Z",
+  "environment": {
+    "inheritedVariables": false,
+    "bunEnvAutoload": false,
+    "credentials": "none supplied"
+  },
+  "existingPreviewOutputsModified": false,
+  "buildOutput": null,
+  "results": [
+    {
+      "id": "frontend-mcp",
+      "command": [
+        "bun",
+        "test",
+        "apps/app/tests",
+        "apps/server/src/managed-opencode-mcp.test.ts",
+        "apps/server/src/agent-token-budget.test.ts",
+        "apps/server/src/bittensor-chat-routes.e2e.test.ts"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 24574,
+      "log": "final-frontend-mcp-frontend-rerun.log",
+      "retainedBytes": 79,
+      "omittedLines": 2035
+    }
+  ],
+  "passed": true
+}

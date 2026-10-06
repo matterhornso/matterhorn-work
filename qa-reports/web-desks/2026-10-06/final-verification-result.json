@@ -1,0 +1,136 @@
+{
+  "version": "matterhorn.final-source-verification.v1",
+  "startedAt": "2026-10-06T00:44:13.067Z",
+  "completedAt": "2026-10-06T00:45:12.370Z",
+  "environment": {
+    "inheritedVariables": false,
+    "bunEnvAutoload": false,
+    "credentials": "none supplied"
+  },
+  "existingPreviewOutputsModified": false,
+  "buildOutput": "/private/tmp/matterhorn-final-verification-F2ptlr/web-build",
+  "results": [
+    {
+      "id": "sdk-build",
+      "command": [
+        "pnpm",
+        "--dir",
+        "packages/crypto-app-sdk",
+        "build"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 2208,
+      "log": "final-sdk-build.log",
+      "retainedBytes": 61,
+      "omittedLines": 18
+    },
+    {
+      "id": "ui-build",
+      "command": [
+        "pnpm",
+        "--dir",
+        "packages/ui",
+        "build"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 2115,
+      "log": "final-ui-build.log",
+      "retainedBytes": 118,
+      "omittedLines": 23
+    },
+    {
+      "id": "bittensor-gate",
+      "command": [
+        "pnpm",
+        "smoke:bittensor-beta"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 24249,
+      "log": "final-bittensor-gate.log",
+      "retainedBytes": 1199,
+      "omittedLines": 4
+    },
+    {
+      "id": "server-typecheck",
+      "command": [
+        "pnpm",
+        "--dir",
+        "apps/server",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.json",
+        "--noEmit"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 28188,
+      "log": "final-server-typecheck.log",
+      "retainedBytes": 0,
+      "omittedLines": 0
+    },
+    {
+      "id": "frontend-mcp",
+      "command": [
+        "bun",
+        "test",
+        "apps/app/tests",
+        "apps/server/src/managed-opencode-mcp.test.ts",
+        "apps/server/src/agent-token-budget.test.ts",
+        "apps/server/src/bittensor-chat-routes.e2e.test.ts"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 31034,
+      "log": "final-frontend-mcp.log",
+      "retainedBytes": 79,
+      "omittedLines": 2064
+    },
+    {
+      "id": "app-typecheck",
+      "command": [
+        "pnpm",
+        "--dir",
+        "apps/app",
+        "exec",
+        "tsc",
+        "-p",
+        "tsconfig.json",
+        "--noEmit"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 38252,
+      "log": "final-app-typecheck.log",
+      "retainedBytes": 0,
+      "omittedLines": 0
+    },
+    {
+      "id": "web-build",
+      "command": [
+        "pnpm",
+        "exec",
+        "vite",
+        "build",
+        "--outDir",
+        "/private/tmp/matterhorn-final-verification-F2ptlr/web-build"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 16694,
+      "log": "final-web-build.log",
+      "retainedBytes": 238,
+      "omittedLines": 243
+    },
+    {
+      "id": "public-guides",
+      "exitCode": 0,
+      "pages": 7,
+      "indexable": false
+    }
+  ],
+  "passed": true
+}

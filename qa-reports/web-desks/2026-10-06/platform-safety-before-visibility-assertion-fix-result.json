@@ -1,0 +1,21 @@
+{
+  "version": "matterhorn.platform-safety-qa.v1",
+  "startedAt": "2026-10-06T00:44:22.176Z",
+  "completedAt": "2026-10-06T00:45:22.192Z",
+  "command": ["pnpm", "test:matterhorn-platform-safety"],
+  "environment": {
+    "inheritedVariables": false,
+    "inheritedMatterhornOverrides": false,
+    "bunEnvAutoload": false,
+    "credentials": "none supplied",
+    "fixtureOverrides": "none"
+  },
+  "exitCode": 1,
+  "signal": null,
+  "finalStage": "[4/11] Desk depth",
+  "outputLines": 738,
+  "omittedLines": 711,
+  "retainedBytes": 1180,
+  "log": "platform-safety-before-visibility-assertion-fix.log",
+  "note": "Preserved failed full-run metadata before rerunning the gate. Only the log reference changes to this retained copy; original run metadata and bounded sanitized stage output are unchanged."
+}

@@ -1,0 +1,138 @@
+{
+  "checkedAt": "2026-10-05T22:56:04.978Z",
+  "ready": true,
+  "runtime": {
+    "pid": 14803,
+    "root": "/private/tmp/matterhorn-bittensor-qa.XPfoE0",
+    "url": "http://127.0.0.1:60914",
+    "mode": "python",
+    "network": "finney",
+    "startedAt": "2026-10-05T22:55:07.984Z",
+    "status": "live_public_chain_reads_verified",
+    "submission": "permanently_disabled",
+    "startupStatus": "process_started_chain_readiness_unverified",
+    "lastCheckedAt": "2026-10-05T22:56:04.978Z"
+  },
+  "checks": [
+    {
+      "round": 1,
+      "checkedAt": "2026-10-05T22:55:55.619Z",
+      "health": {
+        "httpStatus": 200,
+        "ready": false,
+        "mode": "python",
+        "network": "finney",
+        "status": "degraded",
+        "sdkAvailable": false,
+        "canRead": false,
+        "canPrepare": false,
+        "canSubmit": false,
+        "block": null,
+        "fetchedAt": "2026-10-05T22:55:47.607Z",
+        "message": "Python SDK health is warming. Retry shortly for live Subtensor health.",
+        "transportError": null
+      },
+      "subnets": {
+        "httpStatus": 200,
+        "ready": false,
+        "source": "bittensor-python-sdk",
+        "freshness": "unavailable",
+        "block": null,
+        "fetchedAt": "2026-10-05T22:55:55.617Z",
+        "count": 0,
+        "netuids": [],
+        "warnings": [
+          "Live subnet discovery is still warming. Retry shortly."
+        ],
+        "transportError": null
+      }
+    },
+    {
+      "round": 2,
+      "checkedAt": "2026-10-05T22:56:01.968Z",
+      "health": {
+        "httpStatus": 200,
+        "ready": false,
+        "mode": "python",
+        "network": "finney",
+        "status": "degraded",
+        "sdkAvailable": false,
+        "canRead": false,
+        "canPrepare": false,
+        "canSubmit": false,
+        "block": null,
+        "fetchedAt": "2026-10-05T22:55:58.626Z",
+        "message": "Python SDK health is warming. Retry shortly for live Subtensor health.",
+        "transportError": null
+      },
+      "subnets": {
+        "httpStatus": 200,
+        "ready": true,
+        "source": "bittensor-python-sdk",
+        "freshness": "live",
+        "block": 9219867,
+        "fetchedAt": "2026-10-05T22:56:00.341397Z",
+        "count": 3,
+        "netuids": [
+          0,
+          1,
+          2
+        ],
+        "warnings": [],
+        "transportError": null
+      }
+    },
+    {
+      "round": 3,
+      "checkedAt": "2026-10-05T22:56:04.978Z",
+      "health": {
+        "httpStatus": 200,
+        "ready": true,
+        "mode": "python",
+        "network": "finney",
+        "status": "healthy",
+        "sdkAvailable": true,
+        "canRead": true,
+        "canPrepare": true,
+        "canSubmit": false,
+        "block": 9219867,
+        "fetchedAt": "2026-10-05T22:56:04.976Z",
+        "message": "Official Bittensor SDK is available for public Finney reads. Submission remains disabled.",
+        "transportError": null
+      },
+      "subnets": {
+        "httpStatus": 200,
+        "ready": true,
+        "source": "bittensor-python-sdk",
+        "freshness": "live",
+        "block": 9219867,
+        "fetchedAt": "2026-10-05T22:56:00.341397Z",
+        "count": 3,
+        "netuids": [
+          0,
+          1,
+          2
+        ],
+        "warnings": [],
+        "transportError": null
+      }
+    }
+  ],
+  "safety": {
+    "methods": [
+      "GET"
+    ],
+    "walletAddressesRead": 0,
+    "signingRequests": 0,
+    "submitRequests": 0,
+    "serviceEnvironment": "env -i; READ_ONLY=1; PYTHONDONTWRITEBYTECODE=1; explicit sidecar variables only",
+    "submissionProof": "Source /submit returns 501 wallet_airlock_required; Python handler map has no submit action. Existing offline tests passed; no submit request sent."
+  },
+  "pinned": {
+    "python": "3.11.15",
+    "bittensor": "10.5.0",
+    "asyncSubstrateInterface": "2.2.1",
+    "cyscale": "0.5.0",
+    "requirementsSha256": "aefc90a3669d90bc06ff5cdcdcafdc8f8d76d2c2ec81ab577b8252e79b543eb4"
+  }
+}

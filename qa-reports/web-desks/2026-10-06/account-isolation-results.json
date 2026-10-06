@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "checkedAt": "2026-10-05T22:52:40.758Z",
+  "scope": "Two normal accounts in an isolated local runtime; console verification fixture, not production email delivery.",
+  "observations": [
+    {
+      "id": "first-account-note-readable",
+      "status": "passed",
+      "httpStatus": 200,
+      "matchingNotePresent": true
+    },
+    {
+      "id": "first-account-sessions-readable",
+      "status": "passed",
+      "httpStatus": 200
+    },
+    {
+      "id": "secondary-public-signup",
+      "status": "passed",
+      "httpStatus": 202,
+      "verificationRequired": true
+    },
+    {
+      "id": "secondary-public-verification",
+      "status": "passed",
+      "httpStatus": 200,
+      "emailVerified": true
+    },
+    {
+      "id": "secondary-own-workspace",
+      "status": "passed",
+      "httpStatus": 200,
+      "workspaceCount": 1,
+      "distinctFromFirst": true
+    },
+    {
+      "id": "cross-workspace-config",
+      "status": "passed",
+      "httpStatus": 404,
+      "denied": true
+    },
+    {
+      "id": "cross-workspace-notes",
+      "status": "passed",
+      "httpStatus": 404,
+      "denied": true
+    },
+    {
+      "id": "cross-workspace-exact-note",
+      "status": "passed",
+      "httpStatus": 404,
+      "denied": true
+    },
+    {
+      "id": "cross-workspace-sessions",
+      "status": "passed",
+      "httpStatus": 404,
+      "denied": true
+    },
+    {
+      "id": "cross-workspace-memory",
+      "status": "passed",
+      "httpStatus": 404,
+      "denied": true
+    },
+    {
+      "id": "cross-workspace-files",
+      "status": "passed",
+      "httpStatus": 404,
+      "denied": true
+    },
+    {
+      "id": "cross-workspace-integrations",
+      "status": "passed",
+      "httpStatus": 404,
+      "denied": true
+    },
+    {
+      "id": "cross-workspace-usage",
+      "status": "passed",
+      "httpStatus": 404,
+      "denied": true
+    },
+    {
+      "id": "cross-note-through-own-workspace",
+      "status": "passed",
+      "httpStatus": 404,
+      "denied": true
+    },
+    {
+      "id": "cross-workspace-exact-session",
+      "status": "passed",
+      "httpStatus": 404,
+      "denied": true
+    },
+    {
+      "id": "secondary-notes-empty",
+      "status": "passed",
+      "httpStatus": 200,
+      "count": 0
+    },
+    {
+      "id": "secondary-memory-empty",
+      "status": "passed",
+      "httpStatus": 200,
+      "count": 0
+    },
+    {
+      "id": "secondary-global-memory-empty",
+      "status": "passed",
+      "httpStatus": 200,
+      "count": 0
+    },
+    {
+      "id": "first-account-note-preserved",
+      "status": "passed",
+      "httpStatus": 200,
+      "unchanged": true
+    }
+  ],
+  "safety": {
+    "adminCredentialsUsed": false,
+    "authBypass": false,
+    "firstAccountWrites": 0,
+    "inferenceRequests": 0,
+    "walletActions": 0,
+    "responseContentsPersisted": false
+  },
+  "appUrl": "http://desks-qa.localhost:50631",
+  "firstWorkspaceId": "ws_web_101b932cbdeab015",
+  "secondaryWorkspaceId": "ws_web_f134633d4b7ef146",
+  "status": "passed"
+}

@@ -1,0 +1,35 @@
+{
+  "stage": "product.readiness",
+  "reproducedWithCleanEnvironment": true,
+  "failures": [
+    {
+      "file": "apps/server/src/session-read-model.e2e.test.ts",
+      "test": "enforces deny-by-default tools for Discuss and Plan prompts",
+      "finding": "Exact two-entry tail expected deny-all plus balance read; the new object read is appended. Expected inventory must retain deny-all and enumerate both read tools."
+    },
+    {
+      "file": "apps/server/src/session-read-model.e2e.test.ts",
+      "test": "enforces execution mode on the stable prompt route and audits changes",
+      "finding": "Same exact Sui read-tool inventory mismatch; prepare/write tools must remain denied."
+    },
+    {
+      "file": "apps/server/src/agent-token-budget.test.ts",
+      "test": "keeps the full managed MCP schema catalog bounded",
+      "expectedMaximumCharacters": 11000,
+      "observedCharacters": 11478,
+      "charactersWithoutNewSuiObjectTool": 10968,
+      "finding": "New schema budget regression. Preserve the budget and validation rules; reduce redundant descriptive text."
+    }
+  ],
+  "resolutionOwner": "shared_web_regressions",
+  "assertionsWeakened": false,
+  "subsequentVerification": {
+    "focusedChecksPassed": 3,
+    "focusedAssertions": 49,
+    "catalogCharactersAfterFix": 10994,
+    "catalogLimitUnchanged": 11000,
+    "gateRerunExitCode": 0,
+    "gateRerunResult": "platform-safety-desk.depth-product.readiness-result.json",
+    "scope": "Finalized Sui source. Subsequent Bittensor changes require their own affected verification."
+  }
+}

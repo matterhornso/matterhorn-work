@@ -1,0 +1,18 @@
+Matterhorn Bittensor beta release gate: READY
+Stages: 16 pass, 0 fail, 0 skip
+- PASS bittensor.beta_static_gate: Bittensor beta static release gate
+- PASS bittensor.customer_readiness: Bittensor customer readiness gate
+- PASS bittensor.receipt: Bittensor receipt check
+- PASS bittensor.watch_autopilot: Bittensor watch autopilot
+- PASS bittensor.watch_scheduler: Bittensor watch autopilot scheduler
+- PASS bittensor.signing_handoff: Bittensor external signing handoff check
+- PASS bittensor.evidence_bundle: Bittensor customer evidence bundle
+- PASS bittensor.evidence_verify: Bittensor customer evidence verifier
+- PASS bittensor.adapter_readonly_canary: Bittensor read-only adapter canary
+- PASS crypto.customer_readiness_ui: Customer readiness UI contract
+- PASS crypto.direct_prompt_safety: Direct venue credential prompt safety
+- PASS market.execution_safety: Market execution safety gate
+- PASS market.execution_readiness: Market execution-readiness security gate
+- PASS market.submit_sign_phase0_contract: Market submit/sign Phase 0 contract
+- PASS market.sign_request_phase1: Market sign-request Phase 1 gate
+- PASS market.artifact_validation_phase2: Market artifact validation Phase 2 gate

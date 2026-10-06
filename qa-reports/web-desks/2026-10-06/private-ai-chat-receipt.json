@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "capturedAt": "2026-10-05T23:05:17.275Z",
+  "workspaceId": "ws_web_1e20b6f98f1f3f5b",
+  "sessionId": "ses_ef1b84c53ffeq2pnv5prgZ62bA",
+  "scope": "Normal-account GET-only snapshot of an isolated local runtime. Model completion is not proof that requested tool work succeeded.",
+  "snapshotStatus": "idle",
+  "messages": [
+    {
+      "role": "user",
+      "completed": false,
+      "tokens": {
+        "cache": {}
+      }
+    },
+    {
+      "role": "assistant",
+      "modelId": "asi1",
+      "completed": true,
+      "tokens": {
+        "total": 6852,
+        "input": 6768,
+        "output": 84,
+        "reasoning": 0,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      }
+    }
+  ],
+  "tools": [],
+  "toolCounts": {
+    "total": 0,
+    "completed": 0,
+    "errors": 0
+  },
+  "receipts": [
+    {
+      "runId": "agent_run_737e22a6-8dd9-4d2a-bcf2-f8e077b094ed",
+      "status": "success",
+      "model": "asi1",
+      "usage": {
+        "inputTokens": 6768,
+        "outputTokens": 84,
+        "reasoningTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "estimatedCostUsd": 0
+      },
+      "privacyMode": "public_research",
+      "tools": []
+    }
+  ],
+  "usage": {
+    "pendingRequests": 0,
+    "daily": {
+      "usedTokens": 36376,
+      "reservedTokens": 0,
+      "chargedTokens": 36376,
+      "limit": 100000,
+      "remainingTokens": 63624
+    },
+    "monthly": {
+      "usedTokens": 36376,
+      "reservedTokens": 0,
+      "chargedTokens": 36376,
+      "limit": 100000,
+      "remainingTokens": 63624
+    }
+  },
+  "safety": {
+    "requestMethod": "GET",
+    "newModelRequests": 0,
+    "adminCredentialsUsed": false,
+    "rawContentPersisted": false
+  }
+}

@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "capturedAt": "2026-10-05T23:24:35.275Z",
+  "workspaceId": "ws_web_bed34a27dae17e9d",
+  "sessionId": "ses_ef19f1ed8ffeeweCpkm5i1s7Lg",
+  "scope": "Normal-account GET-only snapshot of an isolated local runtime. Model completion is not proof that requested tool work succeeded.",
+  "snapshotStatus": "idle",
+  "messages": [
+    {
+      "role": "user",
+      "completed": false,
+      "tokens": {
+        "cache": {}
+      }
+    },
+    {
+      "role": "assistant",
+      "modelId": "asi1",
+      "completed": true,
+      "tokens": {
+        "total": 3744,
+        "input": 3705,
+        "output": 39,
+        "reasoning": 0,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      }
+    },
+    {
+      "role": "assistant",
+      "modelId": "asi1",
+      "completed": true,
+      "tokens": {
+        "total": 4828,
+        "input": 1817,
+        "output": 451,
+        "reasoning": 0,
+        "cache": {
+          "read": 2560,
+          "write": 0
+        }
+      }
+    }
+  ],
+  "tools": [
+    {
+      "name": "matterhorn-work_matterhorn_polymarket_search_markets",
+      "status": "completed"
+    }
+  ],
+  "toolCounts": {
+    "total": 1,
+    "completed": 1,
+    "errors": 0
+  },
+  "receipts": [
+    {
+      "runId": "agent_run_2da245bf-671d-486d-a8ed-af494ea52b8b",
+      "status": "success",
+      "model": "asi1",
+      "usage": {
+        "inputTokens": 5522,
+        "outputTokens": 490,
+        "reasoningTokens": 0,
+        "cacheReadTokens": 2560,
+        "cacheWriteTokens": 0,
+        "estimatedCostUsd": 0
+      },
+      "privacyMode": "public_research",
+      "tools": [
+        {
+          "name": "matterhorn_polymarket_search_markets",
+          "status": "success"
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "pendingRequests": 0,
+    "daily": {
+      "usedTokens": 15185,
+      "reservedTokens": 0,
+      "chargedTokens": 15185,
+      "limit": 100000,
+      "remainingTokens": 84815
+    },
+    "monthly": {
+      "usedTokens": 15185,
+      "reservedTokens": 0,
+      "chargedTokens": 15185,
+      "limit": 100000,
+      "remainingTokens": 84815
+    }
+  },
+  "safety": {
+    "requestMethod": "GET",
+    "newModelRequests": 0,
+    "adminCredentialsUsed": false,
+    "rawContentPersisted": false
+  }
+}
