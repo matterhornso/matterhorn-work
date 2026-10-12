@@ -518,6 +518,54 @@ beforeEach(() => {
 });
 
 const operations: Array<"fork" | "revert"> = ["fork", "revert"];
+test.skipIf(["1", "true"].includes(process.env.VITE_MATTERHORN_RETRO_UI ?? "") || ["1", "true"].includes(process.env.VITE_MATTERHORN_MINIMAL_UI ?? ""))(
+  "default legacy layout keeps conversation, model picker and workspace tools visible",
+  async () => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    context.setDefaultTimeout(8000);
+    await context.route("**/*", route => {
+      const url = new URL(route.request().url());
+      if (url.origin !== server.url.origin) return route.abort();
+      if (url.pathname.endsWith("/backend/model-selection")) return route.fulfill({
+        json: { success: true, effectiveModel: { providerId: "fixture", modelId: "fixture", source: "server_default" } },
+      });
+      return route.continue();
+    });
+    const page = await context.newPage();
+    const errors: string[] = [];
+    page.on("pageerror", error => errors.push(error.message));
+    try {
+      await page.goto(`${server.url}workspace/ws_fixture/session/ses_fixture`);
+      await page.getByText("Synthetic completed answer. No provider was called.", { exact: true }).waitFor();
+      expect(await page.locator("html").getAttribute("data-matterhorn-ui")).toBeNull();
+      expect(await page.getByRole("button", { name: "Profile and account", exact: true }).isVisible()).toBe(true);
+      expect(await page.getByRole("button", { name: "Wallet details", exact: true }).isVisible()).toBe(true);
+      expect(await page.getByRole("button", { name: "Tools", exact: true }).isVisible()).toBe(true);
+      const model = page.getByRole("button", { name: /^Change model \(.+\)$/ });
+      await model.click();
+      await page.getByRole("option", { name: /Fixture model/ }).click();
+      const editor = page.getByRole("textbox").first();
+      await editor.fill("Unsent rollback fixture draft");
+      for (const [theme, width] of [["light", 1440], ["dark", 1440], ["light", 390], ["dark", 390]] satisfies [string, number][]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.emulateMedia({ reducedMotion: "reduce" });
+        await page.evaluate(value => {
+          document.documentElement.dataset.theme = value;
+          document.documentElement.classList.toggle("dark", value === "dark");
+        }, theme);
+        expect(await editor.isVisible()).toBe(true);
+        expect((await editor.innerText()).trim()).toBe("Unsent rollback fixture draft");
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        if (process.env.LEGACY_ROLLBACK_CAPTURES) {
+          await mkdir(process.env.LEGACY_ROLLBACK_CAPTURES, { recursive: true });
+          await page.screenshot({ path: join(process.env.LEGACY_ROLLBACK_CAPTURES, `legacy-${theme}-${width}.png`), fullPage: true });
+        }
+      }
+      expect(errors).toEqual([]);
+      expect(promptRequests).toEqual([]);
+    } finally { await context.close(); }
+  }, 30_000,
+);
 for (const operation of ["send", "retry", "continue"]) {
   for (const stage of ["preflight", "dispatch"]) {
   for (const stopResult of ["none", "accepted", "rejected"]) {

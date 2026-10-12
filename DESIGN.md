@@ -1,6 +1,6 @@
 ---
 name: Matterhorn
-description: A focused, desk-first retro workbench with light, dark and system themes and a legacy rollback option.
+description: A focused Matterhorn workspace with the pre-retro PR 1027 layout by default, light, dark and system themes, and optional minimal and retro previews.
 colors:
   brand-ice: "#D1F2FF"
   brand-ink: "#0C0C0C"
@@ -126,18 +126,20 @@ components:
 
 **Creative North Star: "Matterhorn workbench"**
 
-Matterhorn is a focused, desk-first workspace for doing useful work through chat. Preserve the real logo, protocol marks, readable incumbent type, theme preferences and explicit review boundaries. The retro workbench uses flat paper/charcoal planes, ink outlines, violet actions, ice selection and hard offset depth; it is not a rebrand or a simulated trading game.
+Matterhorn is a focused, desk-first workspace for doing useful work through chat. Preserve the real logo, protocol marks, readable incumbent type, theme preferences and explicit review boundaries. The opt-in retro workbench uses flat paper/charcoal planes, ink outlines, violet actions, ice selection and hard offset depth; it is a visual alternative, not a rebrand or a simulated trading game.
 
-Retro is the approved release default as of 30 September 2026. Styling remains scoped to the root marker, with an explicit build-time legacy rollback; both interfaces use the same routes, persisted chats, model selections and draft stores. This source-backed contract documents implementation, not hosted deployment, installed-app typography acceptance or real agent/chain execution.
+The pre-retro PR #1027 layout and theme styling are the approved default as of 12 October 2026. Both UI flags default off when absent or empty; only explicit `1` or `true` opts into a preview, and retro also enables the minimal layout. Existing deployments with old overrides must set both flags to `0` and rebuild to restore the default interface.
+
+Retro styling remains scoped to its opt-in root marker. Both interfaces use the same routes, persisted chats, model selections and draft stores; later runtime, security, consent and accounting behavior is preserved. Jev controls remain available so a remembered opt-in can still be inspected and removed. This source-backed contract documents implementation, not hosted deployment, installed-app typography acceptance or real agent/chain execution.
 
 **Key Characteristics:**
 
 - Familiar Matterhorn identity and compact operational typography.
-- Default retro geometry with separately preserved incumbent rollback styling.
+- Pre-retro PR #1027 layout and styling by default, with minimal and retro previews explicitly opt-in.
 - One focused conversation and contextual tools on demand.
 - Explicit focus, selection, unavailable states and reviewed-action boundaries.
 
-The durable product contract remains in [PRODUCT.md](PRODUCT.md) and [docs/ui/matterhorn-design-system.md](docs/ui/matterhorn-design-system.md). The scoped retro implementation plan and direction are recorded in [docs/ui/retro-ui-plan-2026-09-28.md](docs/ui/retro-ui-plan-2026-09-28.md) and [qa-reports/retro-ui/2026-09-28/direction-contract.md](qa-reports/retro-ui/2026-09-28/direction-contract.md). This merge does not migrate PRODUCT metadata or imply that the separate incumbent design-system document has been rewritten.
+The durable product contract remains in [PRODUCT.md](PRODUCT.md) and [docs/ui/matterhorn-design-system.md](docs/ui/matterhorn-design-system.md). The current default is recorded in [docs/ui/restore-pr1027-ui-2026-10-12.md](docs/ui/restore-pr1027-ui-2026-10-12.md), with scoped verification in [qa-reports/ui-rollback/2026-10-12/RESULTS.md](qa-reports/ui-rollback/2026-10-12/RESULTS.md). The optional retro implementation plan and direction remain in [docs/ui/retro-ui-plan-2026-09-28.md](docs/ui/retro-ui-plan-2026-09-28.md) and [qa-reports/retro-ui/2026-09-28/direction-contract.md](qa-reports/retro-ui/2026-09-28/direction-contract.md). This merge does not migrate PRODUCT metadata or imply that the separate incumbent design-system document has been rewritten.
 
 ## Colors
 
@@ -167,7 +169,7 @@ The sidecar's eight-step OKLCH tonal ramps are synthesized documentation swatche
 - Desk colors are accents, not full-page floods: Bittensor cyan/violet, Hyperliquid blue/green, Polymarket purple/amber, Longevity coral/mint and Memory gold/slate. Retro preserves these existing desk/protocol accents rather than replacing the marks.
 - Existing semantic `dls` tokens and theme preferences remain authoritative. The minimal-layout-only option introduces no new palette or decorative motion; retro is the separate, explicitly scoped alternative.
 
-**The Scope Rule.** Apply retro values only under the retro root marker; flag-off surfaces keep the incumbent semantic system.
+**The Scope Rule.** Apply retro values only under the opt-in root marker; flag-off surfaces keep the incumbent semantic system.
 
 ## Typography
 
@@ -185,11 +187,11 @@ Local fixture/distribution checks now compare the hydrated auth title's family, 
 
 ### Rollout and rollback
 
-Retro styling and the desk-first minimal layout are enabled when `VITE_MATTERHORN_RETRO_UI` is absent, empty, `1` or `true`. Set it explicitly to `0` or `false` and rebuild for legacy styling; other invalid values also remain off. `VITE_MATTERHORN_MINIMAL_UI=1` (or `true`) remains independently available for the minimal layout with incumbent styling. With both flags explicitly off, the existing layout and legacy right rail remain.
+Both `VITE_MATTERHORN_RETRO_UI` and `VITE_MATTERHORN_MINIMAL_UI` are off when absent, empty, `0`, `false` or any value other than `1` or `true`. Explicit retro opt-in also enables the desk-first minimal layout; explicit minimal-only opt-in keeps incumbent styling. With both flags off, the pre-retro PR #1027 workspace shell, sidebar, workspace content and desktop right rail remain, with existing responsive mobile navigation and overlays. Existing deployments with old overrides must set both flags to `0` and rebuild; restarting the backend alone does not change a built frontend. The Docker web build defaults retro to `0`, and generated public guides use incumbent styling unless retro is explicitly enabled.
 
-Settings → Appearance offers System, Light and Dark. System is the first-use default. The bootstrap reads the same canonical preference and legacy-key precedence as the hydrated app, before first paint. Existing choices are preserved on reload; the Settings sidebar inherits theme tokens instead of forcing a dark palette.
+Settings → Appearance offers System, Light and Dark. System is the first-use default. The bootstrap reads the same canonical preference and legacy-key precedence as the hydrated app, before first paint. Existing choices are preserved on reload. The retro Settings sidebar inherits theme tokens; the default legacy Settings sidebar retains its historical fixed palette.
 
-The app bootstrap and desktop overlay set `html[data-matterhorn-ui="retro"]`; the public auth build adds the same marker and critical retro CSS for first paint. Portals inherit root tokens. Disabling retro removes the marker and restores incumbent styling; a separately enabled minimal flag still keeps the minimal layout. These are build-time options, not stored account/workspace settings, and rollback does not migrate chats, drafts or model selections.
+When retro is enabled, the app bootstrap and desktop overlay set `html[data-matterhorn-ui="retro"]`; the public auth build adds the same marker and critical retro CSS for first paint. Portals inherit root tokens. Disabling retro removes the marker and restores incumbent styling; a separately enabled minimal flag still keeps the minimal layout. These are build-time options, not stored account/workspace settings, and rollback does not migrate chats, drafts or model selections.
 
 ### Desk-first layout (minimal or retro enabled)
 
@@ -218,7 +220,7 @@ Depth is structural and hard-edged: actions and the composer use a 3px by 3px ze
 
 The shell/header, sheets, command dialog, Memory articles, user messages and protocol results stay shadowless where explicitly scoped. Do not add hard shadows to every plane. Exact shadow and motion expressions are in the sidecar extensions, not unsupported frontmatter groups.
 
-**The Structural Depth Rule.** Use hard offsets to identify actions and raised work surfaces; keep reading and conversation planes quiet.
+**The Structural Depth Rule.** In retro mode, use hard offsets to identify actions and raised work surfaces; keep reading and conversation planes quiet.
 
 ## Shapes
 
@@ -231,6 +233,8 @@ Page sections are not nested cards. Use cards only for repeatable items, preview
 ## Components
 
 ### Buttons, fields and focus
+
+The geometry, focus outline and motion values in this subsection apply only to the opt-in retro styling; flag-off controls retain their incumbent styles and shared interaction behavior.
 
 Retro primary buttons use action colors; outline buttons use panel/ink; secondary buttons use ice/selection ink; destructive buttons use a panel surface with danger text and border. These four variants have hard borders and offset shadows. Ghost/link variants remain unraised. Outline/ghost hover uses the subtle surface; the primary hover uses its explicit theme token. Existing primitive dimensions, semantics, pending behavior and disabled opacity remain.
 
@@ -268,13 +272,13 @@ Response retry rechecks account and local request ownership before preparation a
 
 Stop cancels pending local preparation for the exact request, including ordinary sends, response retries and continuations. A delayed preparation or privacy-preflight response must not resume sending, even if the server Stop request fails. When a cancelled retry has already reverted the conversation, restore it only while that retry still owns the local request. Do not describe an already accepted dispatch as unsent or restore over it solely because Stop was clicked. Drafts remain editable and a fresh explicit send gets a new cancellation lifetime. Server-side cancellation and usage settlement remain separate obligations.
 
-Selected sidebar entries use ice/ink, 700 weight and a 2px inset line; selected tabs use ice/ink and a 2px action-colored underline. Picker options add a 2px inset outline and keep title, capability, identifier and checkmark on the same selection ink. Unavailable picker options stay disabled with 0.6 opacity and a not-allowed cursor. The full model list retains its separately scoped subtle selected treatment.
+In retro mode, selected sidebar entries use ice/ink, 700 weight and a 2px inset line; selected tabs use ice/ink and a 2px action-colored underline. Picker options add a 2px inset outline and keep title, capability, identifier and checkmark on the same selection ink. Unavailable picker options stay disabled with 0.6 opacity and a not-allowed cursor. The full model list retains its separately scoped subtle selected treatment.
 
-Dialogs, alert dialogs, popovers and menus use framed panels with panel depth. Sheets and command dialogs use the same geometry without that shadow. The mobile drawer keeps an explicit 44px close control. Shared badges remain compact inherited components, not invented readiness certifications.
+In retro mode, dialogs, alert dialogs, popovers and menus use framed panels with panel depth. Sheets and command dialogs use the same geometry without that shadow. The mobile drawer keeps an explicit 44px close control. Shared badges remain compact inherited components, not invented readiness certifications.
 
 ### Public and secondary surfaces
 
-Auth fields and mode controls share retro geometry; active auth modes use ice selection. In the retro auth surface, truthful Public beta status follows the description rather than appearing above the heading; flag-off disclosure placement is unchanged. Public trust navigation uses ice selection while article prose retains its reading hierarchy. Notes, Memory, integrations and settings inherit the scoped tokens without changing their capability gates or state contracts.
+With retro enabled, auth fields and mode controls share retro geometry; active auth modes use ice selection. In the retro auth surface, truthful Public beta status follows the description rather than appearing above the heading; flag-off disclosure placement is unchanged. Public trust navigation uses ice selection while article prose retains its reading hierarchy. Notes, Memory, integrations and settings inherit the scoped tokens without changing their capability gates or state contracts.
 
 ### Preserved product and interaction contract
 
@@ -297,7 +301,7 @@ The primary desks are Private AI, Bittensor, Hyperliquid, Polymarket, and Sui. M
 ### Do:
 
 - Do preserve the Matterhorn logo, protocol marks, existing type, user font preferences and both themes.
-- Do keep retro scoped to its release switch and distinguish minimal-only, retro and incumbent layouts.
+- Do keep retro and minimal scoped to their default-off build flags and preserve the PR #1027 layout when both are off.
 - Do keep required consent, source/freshness, transaction terms, signer boundaries and unavailable states explicit.
 - Do use server capability data rather than visual readiness assumptions.
 - Do preserve keyboard focus, reduced-motion behavior, editable drafts and contextual tool navigation.
