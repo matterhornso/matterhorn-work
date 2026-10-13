@@ -1,6 +1,4 @@
 /** @jsxImportSource react */
-import { MINIMAL_UI } from "@/app/lib/minimal-ui";
-import { RETRO_UI } from "@/app/lib/retro-ui";
 import type * as React from "react";
 import {
   ArrowLeft,
@@ -40,6 +38,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import {
   DropdownMenu,
@@ -49,7 +48,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { t } from "../../../../i18n";
 import type { SettingsTab } from "../../../../app/types";
-import { filterLaunchSettingsTabs } from "../../../../app/lib/launch-features";
+import { filterLaunchSettingsTabs, MATTERHORN_LAUNCH_FEATURES } from "../../../../app/lib/launch-features";
 import { isPublicBetaWebDeployment } from "../../../../app/lib/matterhorn-deployment";
 import type {
   MatterhornCapabilityStatus,
@@ -190,7 +189,9 @@ export function getSettingsTabDescription(tab: SettingsTab) {
     case "privacy":
       return "Provider processing, storage, feedback, and retention";
     case "cloud-account":
-      return t("settings.tab_description_cloud_account");
+      return MATTERHORN_LAUNCH_FEATURES.cloud
+        ? t("settings.tab_description_cloud_account")
+        : "Manage your profile, sign-in, and account security.";
     case "cloud-marketplaces":
       return t("settings.tab_description_cloud_marketplaces");
     case "cloud-workers":
@@ -370,6 +371,7 @@ export function getWorkspaceSettingsTabs(developerMode = false): SettingsTab[] {
 export function getGlobalSettingsTabs(developerMode: boolean): SettingsTab[] {
   const tabs: SettingsTab[] = [
     "overview",
+    "cloud-account",
     "ai",
     ...(isPublicBetaWebDeployment() ? [] : ["shell" as const]),
     "appearance",
@@ -383,8 +385,8 @@ export function getGlobalSettingsTabs(developerMode: boolean): SettingsTab[] {
 export function getCloudSettingsTabs(developerMode = false): SettingsTab[] {
   return filterLaunchSettingsTabs(
     developerMode && !isPublicBetaWebDeployment()
-      ? ["cloud-account", "cloud-workers"]
-      : ["cloud-account"],
+      ? ["cloud-workers"]
+      : [],
   );
 }
 
@@ -414,9 +416,7 @@ const SETTINGS_SIDEBAR_ITEM_CLASS =
   "rounded-md px-3 text-[rgb(var(--matterhorn-blue-rgb)/0.78)] transition-colors duration-150 hover:bg-[rgb(var(--matterhorn-blue-rgb)/0.07)] hover:text-[var(--matterhorn-blue)] data-active:bg-[rgb(var(--matterhorn-blue-rgb)/0.13)] data-active:font-semibold data-active:text-[var(--matterhorn-blue)] data-active:[&_svg]:text-[var(--matterhorn-blue)] mac:data-active:bg-[rgb(var(--matterhorn-blue-rgb)/0.13)] dark:mac:data-active:bg-[rgb(var(--matterhorn-blue-rgb)/0.13)]";
 
 const SETTINGS_SIDEBAR_HEADER_ITEM_CLASS =
-  RETRO_UI
-    ? "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-    : "text-[rgb(244_251_255/0.78)] hover:bg-[rgb(var(--matterhorn-blue-rgb)/0.09)] hover:text-[#f4fbff]";
+  "text-[rgb(244_251_255/0.78)] hover:bg-[rgb(var(--matterhorn-blue-rgb)/0.09)] hover:text-[#f4fbff]";
 
 const SETTINGS_SIDEBAR_STYLE = {
   "--sidebar": "var(--matterhorn-ink)",
@@ -458,26 +458,12 @@ type SettingsSidebarProps = Pick<SettingsPageProps, "activeTab" | "onSelectTab" 
   backendSettingsSections?: MatterhornSettingsSectionCapability[] | null;
 };
 
-export const MINIMAL_SETTINGS_GROUPS: { label: string; tabs: SettingsTab[] }[] = [
-  { label: "Account", tabs: ["cloud-account"] },
-  { label: "Models", tabs: ["ai"] },
-  { label: "Workspace", tabs: ["preferences", "extensions", "permissions"] },
-  { label: "Privacy & appearance", tabs: ["privacy", "appearance"] },
-];
-
-export function getMinimalSettingsGroups(developerMode = false) {
-  const primaryTabs = new Set(MINIMAL_SETTINGS_GROUPS.flatMap((group) => group.tabs));
-  const availableTabs: SettingsTab[] = [
-    "general",
-    ...getWorkspaceSettingsTabs(developerMode),
-    ...getGlobalSettingsTabs(developerMode),
-    ...getCloudSettingsTabs(developerMode),
-  ];
-  const moreTabs = [...new Set(availableTabs)].filter((tab) => !primaryTabs.has(tab));
-  return [...MINIMAL_SETTINGS_GROUPS, { label: "More settings", tabs: moreTabs }];
-}
-
 export function SettingsSidebar(props: SettingsSidebarProps) {
+  const { setOpenMobile } = useSidebar();
+  const selectTab = (tab: SettingsTab) => {
+    props.onSelectTab(tab);
+    setOpenMobile(false);
+  };
   const workspaceTabs = getWorkspaceSettingsTabs(props.developerMode);
   const globalTabs = getGlobalSettingsTabs(props.developerMode);
   const cloudTabs = getCloudSettingsTabs(props.developerMode);
@@ -485,7 +471,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
   return (
     <Sidebar
       className="matterhorn-settings-sidebar border-[rgb(var(--matterhorn-blue-rgb)/0.16)] mac:**:data-[sidebar=sidebar]:bg-transparent"
-      style={RETRO_UI ? undefined : SETTINGS_SIDEBAR_STYLE}
+      style={SETTINGS_SIDEBAR_STYLE}
     >
       <div className="hidden h-10 mac:block mac:titlebar-drag" />
       <SidebarHeader>
@@ -538,13 +524,6 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        {MINIMAL_UI ? getMinimalSettingsGroups(props.developerMode).map((group) => <SidebarGroup key={group.label}>
-          <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
-          <SidebarGroupContent><SidebarMenu>{group.tabs.map((tab) => {
-            const Icon = getSettingsTabIcon(tab);
-            return <SidebarMenuItem key={tab}><SidebarMenuButton isActive={props.activeTab === tab} aria-current={props.activeTab === tab ? "page" : undefined} onClick={() => props.onSelectTab(tab)}><Icon /><span>{tab === "cloud-account" ? "Account" : getSettingsTabLabel(tab)}</span></SidebarMenuButton></SidebarMenuItem>;
-          })}</SidebarMenu></SidebarGroupContent>
-        </SidebarGroup>) : <>
         {/* Top-level hub entry */}
         <SidebarGroup>
           <SidebarGroupContent>
@@ -555,7 +534,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                   isActive={props.activeTab === "general"}
                   aria-current={props.activeTab === "general" ? "page" : undefined}
                   className={SETTINGS_SIDEBAR_ITEM_CLASS}
-                  onClick={() => props.onSelectTab("general")}
+                  onClick={() => selectTab("general")}
                 >
                   <Cog />
                   <span>{getSettingsTabLabel("general")}</span>
@@ -578,7 +557,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                       isActive={props.activeTab === tab}
                       aria-current={props.activeTab === tab ? "page" : undefined}
                       className={SETTINGS_SIDEBAR_ITEM_CLASS}
-                      onClick={() => props.onSelectTab(tab)}
+                      onClick={() => selectTab(tab)}
                     >
                       <Icon />
                       <span>{getSettingsTabLabel(tab)}</span>
@@ -604,7 +583,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                       isActive={props.activeTab === tab}
                       aria-current={props.activeTab === tab ? "page" : undefined}
                       className={SETTINGS_SIDEBAR_ITEM_CLASS}
-                      onClick={() => props.onSelectTab(tab)}
+                      onClick={() => selectTab(tab)}
                     >
                       <Icon />
                       <span>{getSettingsTabLabel(tab)}</span>
@@ -631,7 +610,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                         isActive={props.activeTab === tab}
                         aria-current={props.activeTab === tab ? "page" : undefined}
                         className={SETTINGS_SIDEBAR_ITEM_CLASS}
-                        onClick={() => props.onSelectTab(tab)}
+                        onClick={() => selectTab(tab)}
                       >
                         <Icon />
                         <span>{getSettingsTabLabel(tab)}</span>
@@ -644,7 +623,6 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
             </SidebarGroupContent>
           </SidebarGroup>
         ) : null}
-        </>}
       </SidebarContent>
     </Sidebar>
   );

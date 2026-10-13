@@ -20,7 +20,7 @@ const reset = () => {
 beforeAll(async () => {
   const bundle = await build({ configFile: false, envDir: false, root: new URL("../", import.meta.url).pathname, logLevel: "error",
     resolve: { alias: { "@": new URL("../src", import.meta.url).pathname }, dedupe: ["react", "react-dom"] },
-    define: { "import.meta.env.VITE_MATTERHORN_RETRO_UI": JSON.stringify(process.env.RETRO_QA_FLAG === "1" ? "1" : "0"), "process.env.NODE_ENV": '"development"' }, plugins: [tailwindcss()],
+    define: { "process.env.NODE_ENV": '"development"' }, plugins: [tailwindcss()],
     build: { target: "esnext", write: false, minify: false, lib: { entry: new URL("./fixtures/stm-settings.tsx", import.meta.url).pathname, formats: ["es"] }, rollupOptions: { output: { inlineDynamicImports: true } } },
   });
   const built = Array.isArray(bundle) ? bundle[0] : bundle;
@@ -162,7 +162,7 @@ test("refresh closes stale replacement and next Replace uses the fresh persisted
 
 test("desktop/mobile/light/dark and 200 percent text size remain contained", async () => {
   const p = await page();
-  const output = process.env.RETRO_QA_CAPTURES;
+  const output = process.env.UI_QA_CAPTURES;
   if (output) await mkdir(output, { recursive: true });
   try {
     for (const width of [390, 768, 1280, 1440]) for (const theme of ["light", "dark"]) {

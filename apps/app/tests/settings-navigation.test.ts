@@ -4,22 +4,16 @@ import { isPublicBetaWebDeployment } from "../src/app/lib/matterhorn-deployment"
 import {
   getCloudSettingsTabs,
   getGlobalSettingsTabs,
-  getMinimalSettingsGroups,
   getWorkspaceSettingsTabs,
-  MINIMAL_SETTINGS_GROUPS,
 } from "../src/react-app/domains/settings/shell/settings-page";
 
-describe("minimal settings destination parity", () => {
+describe("restored settings destination parity", () => {
   for (const developerMode of [false, true]) {
     test(`retains each available legacy destination with developer mode ${developerMode}`, () => {
-      const groups = getMinimalSettingsGroups(developerMode);
-      const tabs = groups.flatMap((group) => group.tabs);
-      expect(groups.slice(0, 4)).toEqual(MINIMAL_SETTINGS_GROUPS);
-      expect(groups.at(-1)?.label).toBe("More settings");
+      const tabs = ["general", ...getWorkspaceSettingsTabs(developerMode), ...getGlobalSettingsTabs(developerMode), ...getCloudSettingsTabs(developerMode)];
       expect(new Set(tabs).size).toBe(tabs.length);
-      for (const tab of ["general", ...getWorkspaceSettingsTabs(developerMode), ...getGlobalSettingsTabs(developerMode), ...getCloudSettingsTabs(developerMode)]) {
-        expect(tabs).toContain(tab);
-      }
+      expect(tabs).toContain("cloud-account");
+      expect(tabs).toContain("ai");
       for (const tab of ["advanced", "environment", "recovery", "debug", "marketplace", "billing", "cloud-workers", "generated-media"]) {
         expect(tabs).not.toContain(tab);
       }
@@ -31,6 +25,7 @@ describe("minimal settings destination parity", () => {
 
   test("mobile and compact menus use the same gated destination groups", () => {
     const source = readFileSync(new URL("../src/react-app/domains/settings/shell/settings-shell.tsx", import.meta.url), "utf8");
-    expect(source).toContain("MINIMAL_UI ? getMinimalSettingsGroups(props.developerMode) : allSections");
+    expect(source).toContain("allSections.filter((section) => section.tabs.length > 0)");
+    expect(source).not.toContain("getMinimalSettingsGroups");
   });
 });

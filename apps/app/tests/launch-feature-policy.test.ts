@@ -8,7 +8,7 @@ import {
   isSettingsTabVisibleAtLaunch,
   resolveMatterhornLaunchFeaturePolicy,
 } from "../src/app/lib/launch-features";
-import { getCloudSettingsTabs } from "../src/react-app/domains/settings/shell/settings-page";
+import { getCloudSettingsTabs, getGlobalSettingsTabs, getSettingsTabDescription } from "../src/react-app/domains/settings/shell/settings-page";
 
 describe("stable launch feature policy", () => {
   test("defaults optional production services off", () => {
@@ -84,26 +84,34 @@ describe("stable launch feature policy", () => {
       "extensions",
       "billing",
       "cloud-account",
-    ], stablePolicy)).toEqual(["preferences", "extensions"]);
+    ], stablePolicy)).toEqual(["preferences", "extensions", "cloud-account"]);
     expect(isSettingsTabVisibleAtLaunch("wallet", stablePolicy)).toBe(true);
     expect(isSettingsTabVisibleAtLaunch("generated-media", stablePolicy)).toBe(false);
     expect(isSettingsTabVisibleAtLaunch("billing", stablePolicy)).toBe(false);
-    expect(isSettingsTabVisibleAtLaunch("cloud-account", stablePolicy)).toBe(false);
+    expect(isSettingsTabVisibleAtLaunch("cloud-account", stablePolicy)).toBe(true);
     expect(isSettingsTabVisibleAtLaunch("advanced", stablePolicy)).toBe(false);
     expect(isSettingsTabVisibleAtLaunch("debug", stablePolicy)).toBe(false);
     expect(isSettingsTabVisibleAtLaunch("environment", stablePolicy)).toBe(false);
     expect(isSettingsTabVisibleAtLaunch("marketplace", stablePolicy)).toBe(false);
     expect(isSettingsTabVisibleAtLaunch("recovery", stablePolicy)).toBe(false);
     expect(getCloudSettingsTabs()).toEqual([]);
+    expect(getGlobalSettingsTabs(false)).toContain("cloud-account");
+    expect(getSettingsTabDescription("cloud-account")).toBe("Manage your profile, sign-in, and account security.");
   });
 
-  test("blocks stale optional-service routes while preserving the embedded local Profile surface", () => {
+  test("keeps Account routes available with optional Cloud and billing services disabled", () => {
     const stablePolicy = resolveMatterhornLaunchFeaturePolicy(undefined);
-    expect(isSettingsTabRouteEnabledAtLaunch("cloud-account", stablePolicy)).toBe(false);
-    expect(isSettingsTabRouteEnabledAtLaunch("cloud-account", stablePolicy, { allowLocalProfile: true })).toBe(true);
+    expect(isSettingsTabRouteEnabledAtLaunch("cloud-account", stablePolicy)).toBe(true);
+    const hostedPolicy = resolveMatterhornLaunchFeaturePolicy({
+      VITE_MATTERHORN_DEPLOYMENT: "web",
+      VITE_MATTERHORN_PUBLIC_BETA: "1",
+    });
+    expect(isSettingsTabRouteEnabledAtLaunch("cloud-account", hostedPolicy)).toBe(true);
     expect(isSettingsTabRouteEnabledAtLaunch("generated-media", stablePolicy)).toBe(false);
     expect(isSettingsTabRouteEnabledAtLaunch("billing", stablePolicy)).toBe(false);
     expect(isSettingsTabRouteEnabledAtLaunch("cloud-workers", stablePolicy)).toBe(false);
+    expect(isSettingsTabRouteEnabledAtLaunch("cloud-providers", stablePolicy)).toBe(false);
+    expect(isSettingsTabRouteEnabledAtLaunch("cloud-marketplaces", stablePolicy)).toBe(false);
   });
 
   test("hides generated-media extensions unless the launch flag is enabled", () => {

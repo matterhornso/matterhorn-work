@@ -10,10 +10,8 @@ import { accountClientState } from "../../src/app/lib/account-client-state";
 import { createMatterhornServerClient } from "../../src/app/lib/matterhorn-server";
 import { useSessionDraftState, getSessionDraft } from "../../src/react-app/domains/session/sync/draft-store";
 import { getReactQueryClient } from "../../src/react-app/infra/query-client";
-import { applyRetroUi } from "../../src/app/lib/retro-ui";
 import "../../src/app/index.css";
 
-applyRetroUi(document.documentElement, true);
 document.documentElement.dataset.theme = "light";
 let queuedWrite: (() => void) | null = null;
 const client = createMatterhornServerClient({ baseUrl: location.origin });

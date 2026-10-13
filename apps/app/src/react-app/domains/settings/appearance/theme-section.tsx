@@ -65,7 +65,7 @@ function ThemePicker(props: ThemePickerProps) {
         }
       }}
       disabled={props.busy}
-      className={cn("w-full gap-6 max-w-xl", props.className)}
+      className={cn("w-full flex-wrap gap-6 max-w-xl", props.className)}
     >
       <ThemePickerItem value="system" label={t("settings.theme_system")}>
         <ThemePreview value="system" />

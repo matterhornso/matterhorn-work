@@ -4,7 +4,6 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { AiSettingsView, type AiSettingsViewProps } from "../src/react-app/domains/settings/pages/ai-view";
-import { MINIMAL_UI } from "../src/app/lib/minimal-ui";
 
 function renderReadySettings(overrides: Partial<AiSettingsViewProps> = {}, savedDefault = false) {
   const queryClient = new QueryClient();
@@ -65,25 +64,13 @@ describe("AI settings rendered hierarchy", () => {
     expect(html).not.toContain("Subscribe");
     expect(html).not.toContain("Shared model catalog");
     expect(html).not.toContain("Import cloud providers");
-    expect(html).toContain(MINIMAL_UI ? 'aria-label="Chat models"' : "Choose model");
+    expect(html).toContain("Choose model");
   });
 
   test("leads with one model choice and hides expert settings by default", () => {
     const html = renderReadySettings();
 
     expect(html).toContain("Choose a model");
-    if (MINIMAL_UI) {
-      expect(html).toContain("Search models");
-      expect(html).toContain("All providers");
-      expect(html).toContain('aria-label="Chat models"');
-      expect(html).toContain("ASI1 Mini");
-      expect(html).not.toContain("text-embedding-3");
-      expect(html).toContain("<summary");
-      expect(html).toContain("Provider privacy");
-      expect(html).toContain("Advanced model and provider settings</summary>");
-      expect(html).not.toContain('<details open=""');
-      return;
-    }
     expect(html).toContain(
       "Pick the AI that answers your chats. You can change it any time.",
     );
@@ -111,16 +98,6 @@ describe("AI settings rendered hierarchy", () => {
       html.indexOf("Selected model"),
     );
 
-    if (MINIMAL_UI) {
-      expect(html).toContain("Nothing has been sent.");
-      expect(html).toContain("Return to desk");
-      expect(html).toContain("No chat models are connected.");
-      expect(html).toContain("Your workspace owner manages this connection.");
-      expect(html).toContain("Refresh models");
-      expect(html).not.toContain(">Connect provider</button>");
-      expect(html).not.toContain('aria-label="Chat models"');
-      return;
-    }
 
     expect(handoff).toContain("AI is not available in this workspace yet.");
     expect(handoff).toContain("Return to desk");
@@ -134,7 +111,7 @@ describe("AI settings rendered hierarchy", () => {
       pendingDeskTask: { deskId: "bittensor", title: "Explore subnets" },
     });
 
-    expect(html).toContain(MINIMAL_UI ? 'aria-label="Chat models"' : "Choose model");
+    expect(html).toContain("Choose model");
     expect(html).toContain("Return to desk");
     expect(html).not.toContain("Connect AI");
   });
@@ -150,7 +127,6 @@ describe("AI settings rendered hierarchy", () => {
     expect(html).toContain("Update CUDOS key");
     expect(html).toContain("Disconnect");
     expect(html).not.toContain("Subscribe");
-    if (MINIMAL_UI) expect(html).toContain("Advanced model and provider settings</summary>");
   });
 
   test("never exposes credential editing or disconnect for hosted managed providers", () => {
@@ -173,12 +149,7 @@ describe("AI settings rendered hierarchy", () => {
       modelBehaviorOptions: [{ value: "low", label: "Low", description: "Less reasoning" }, { value: "high", label: "High", description: "More reasoning" }],
       onCurrentAppModelVariantChange: () => undefined,
     }, true);
-    if (MINIMAL_UI) {
-      expect(html).toContain('aria-label="Chat models"');
-      expect(html).toContain("Clear saved default");
-      expect(html).toContain("Use saved default");
-      expect(html).toContain("New chats</div>");
-      expect(html).toContain("This app</div>");
-    }
+    expect(html).toContain("Choose model");
+    expect(html).toContain("More model settings");
   });
 });

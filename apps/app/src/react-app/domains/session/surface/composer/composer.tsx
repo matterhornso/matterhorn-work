@@ -29,7 +29,6 @@ import {
   type ComposerExtensionReadiness,
 } from "./extension-readiness";
 import { ChatOptionsControl } from "./chat-options-control";
-import { MINIMAL_UI } from "@/app/lib/minimal-ui";
 
 type MentionItem = {
   id: string;
@@ -1684,10 +1683,6 @@ export function ReactSessionComposer(props: ComposerProps) {
           >
             <div ref={modeMenuRef}>
               <ChatOptionsControl
-                extraOptions={MINIMAL_UI ? <>
-                  <PrivateModelControl busy={props.busy} privateModeAvailable={props.privateModeAvailable} privateModeEnabled={props.privateModeEnabled} privateModeUnavailableReason={props.privateModeUnavailableReason} onPrivateModeChange={props.onPrivateModeChange} />
-                  <ModelBehaviorSelect value={props.modelVariant} label={props.modelVariantLabel} title={props.modelBehaviorTitle} options={props.modelBehaviorOptions} onChange={props.onModelVariantChange} disabled={props.busy} isProviderDefault={props.modelBehaviorIsProviderDefault} defaultLabel={props.modelBehaviorDefaultLabel} />
-                </> : null}
                 busy={props.busy}
                 executionMode={props.executionMode}
                 executionModesEnabled={props.executionModesEnabled}
@@ -1788,13 +1783,13 @@ export function ReactSessionComposer(props: ComposerProps) {
               ) : null}
             </div>
 
-            {!MINIMAL_UI ? <PrivateModelControl
+            <PrivateModelControl
               busy={props.busy}
               privateModeAvailable={props.privateModeAvailable}
               privateModeEnabled={props.privateModeEnabled}
               privateModeUnavailableReason={props.privateModeUnavailableReason}
               onPrivateModeChange={props.onPrivateModeChange}
-            /> : null}
+            />
 
             {props.showModelPicker !== false ? (
               <ModelSelect
@@ -1823,7 +1818,7 @@ export function ReactSessionComposer(props: ComposerProps) {
               </button>
             ) : null}
 
-            {!MINIMAL_UI ? <ModelBehaviorSelect
+            <ModelBehaviorSelect
               value={props.modelVariant}
               label={props.modelVariantLabel}
               title={props.modelBehaviorTitle}
@@ -1832,7 +1827,7 @@ export function ReactSessionComposer(props: ComposerProps) {
               disabled={props.busy}
               isProviderDefault={props.modelBehaviorIsProviderDefault}
               defaultLabel={props.modelBehaviorDefaultLabel}
-            /> : null}
+            />
           </div>
 
           {/* Status label removed — redundant with the footer bar */}

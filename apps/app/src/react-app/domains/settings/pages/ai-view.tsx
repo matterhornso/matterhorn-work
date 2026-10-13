@@ -34,8 +34,6 @@ import {
 } from "../settings-layout";
 import { notifyWorkspaceModelSelectionChanged } from "../model-selection-events";
 import { PrivateModelSetup } from "./private-model-setup";
-import { MinimalModels } from "./minimal-models";
-import { MINIMAL_UI } from "@/app/lib/minimal-ui";
 import {
   buildModelReadinessSummary,
   countConnectedCatalogModels,
@@ -50,7 +48,6 @@ type ConnectedProvider = {
 };
 
 export type AiSettingsViewProps = {
-  onModelSelected?: (firstSelection: boolean, model: { providerId: string; modelId: string }) => void | Promise<void>;
   privateSetupRequested?: boolean;
   busy: boolean;
   providerAuthBusy: boolean;
@@ -173,7 +170,7 @@ function usageResetLabel(value: string): string {
 
 export function AiSettingsView(props: AiSettingsViewProps) {
   const runtimeWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
-  const [modelDetailsOpen, setModelDetailsOpen] = useState(MINIMAL_UI);
+  const [modelDetailsOpen, setModelDetailsOpen] = useState(false);
   const [providerDetailsOpen, setProviderDetailsOpen] = useState(false);
   const [localModelStatus, setLocalModelStatus] = useState<string | null>(null);
   const [workspaceVariantDraft, setWorkspaceVariantDraft] = useState<
@@ -417,28 +414,9 @@ export function AiSettingsView(props: AiSettingsViewProps) {
             ? "Workspace default reset."
             : null);
 
-  const minimalModels = <MinimalModels client={props.matterhornServerClient} workspaceId={runtimeWorkspaceId} catalog={catalog} selection={workspaceSelection} policies={providerPrivacyPolicies} loading={providerStateLoading} failed={catalogQueryFailed} managed={props.providerCredentialsManaged} onConnect={props.onOpenProviderAuth} onRefresh={() => { void (runtimeWorkspaceId ? workspaceBackendModelsQuery.refetch() : backendModelsQuery.refetch()); }} onSelected={async (first, model) => {
-    await props.onUseWorkspaceDefault?.();
-    await props.onModelSelected?.(first, model);
-  }}>
-    {props.pendingDeskTask ? (
-      <section className="flex flex-wrap items-center justify-between gap-3 border-b border-dls-border pb-4" data-testid="pending-desk-task-handoff" aria-label="Return to desk setup">
-        <div className="min-w-0 text-sm">
-          <p className="font-semibold">{props.pendingDeskTask.title}</p>
-          <p className="text-dls-secondary">Nothing has been sent.</p>
-        </div>
-        {props.onResumePendingDeskTask ? <Button variant="outline" onClick={() => void props.onResumePendingDeskTask?.()}>
-          <ArrowLeft data-icon="inline-start" />Return to desk
-        </Button> : null}
-      </section>
-    ) : null}
-    {props.privateSetupRequested ? <PrivateModelSetup catalog={catalog} policy={providerPrivacyPolicies.find((policy) => policy.providerId === "venice")} loading={providerStateLoading} failed={catalogQueryFailed} onChooseModel={props.onOpenModelPicker} /> : null}
-    {workspaceModelUsageQuery.data?.status ? <details className="text-sm"><summary className="cursor-pointer">Usage & allowance</summary><div className="space-y-2 py-3">{[{ label: "Today", period: workspaceModelUsageQuery.data.status.daily }, { label: "This month", period: workspaceModelUsageQuery.data.status.monthly }].map(({ label, period }) => <p key={label}>{label}: {compactTokenCount(period.chargedTokens)} used{period.limit === null ? "" : ` of ${compactTokenCount(period.limit)} weighted tokens`}. Resets {usageResetLabel(period.resetsAt)}.</p>)}{!workspaceModelUsageQuery.data.status.enabled ? <p>Usage protection is not active in this deployment.</p> : null}</div></details> : null}
-  </MinimalModels>;
-
-  const detailedSettings = (
+  return (
     <LayoutStack className="gap-y-8">
-      {!MINIMAL_UI && props.privateSetupRequested ? <PrivateModelSetup
+      {props.privateSetupRequested ? <PrivateModelSetup
         catalog={catalog}
         policy={providerPrivacyPolicies.find((policy) => policy.providerId === "venice")}
         loading={workspaceBackendModelsQuery.isFetching || backendModelsQuery.isFetching}
@@ -450,12 +428,12 @@ export function AiSettingsView(props: AiSettingsViewProps) {
       /> : null}
       <LayoutSection>
         <LayoutSectionHeader>
-          <LayoutSectionTitle>{MINIMAL_UI ? "Model defaults" : "Choose a model"}</LayoutSectionTitle>
+          <LayoutSectionTitle>Choose a model</LayoutSectionTitle>
           <LayoutSectionDescription>
             Pick the AI that answers your chats. You can change it any time.
           </LayoutSectionDescription>
         </LayoutSectionHeader>
-        {!MINIMAL_UI && props.pendingDeskTask ? (
+        {props.pendingDeskTask ? (
           <div
             className="mt-4 flex flex-col gap-4 rounded-lg border border-dls-accent/30 bg-dls-surface-raised/70 p-4 sm:flex-row sm:items-center sm:justify-between"
             data-testid="pending-desk-task-handoff"
@@ -1062,17 +1040,5 @@ export function AiSettingsView(props: AiSettingsViewProps) {
 
       {!props.providerCredentialsManaged ? props.cloudProvidersView : null}
     </LayoutStack>
-  );
-
-  if (!MINIMAL_UI) return detailedSettings;
-
-  return (
-    <div className="mx-auto w-full max-w-3xl space-y-6">
-      {minimalModels}
-      <details className="border-t border-dls-border py-3">
-        <summary className="cursor-pointer text-sm">Advanced model and provider settings</summary>
-        <div className="pt-6">{detailedSettings}</div>
-      </details>
-    </div>
   );
 }

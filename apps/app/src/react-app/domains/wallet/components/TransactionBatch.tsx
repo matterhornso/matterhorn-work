@@ -222,7 +222,7 @@ export function TransactionBatch({
       </div>
 
       {/* Actions */}
-      <div data-slot="transaction-actions" className="flex gap-3">
+      <div data-slot="transaction-actions" className="flex flex-wrap gap-3">
         {!state.allDone ? (
           <>
             <Button

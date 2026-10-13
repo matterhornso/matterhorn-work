@@ -1,0 +1,10 @@
+# Keep full local capture evidence; publish only representative review images.
+captures/**
+!captures/app/
+!captures/app/home-dark-1440.png
+!captures/app/home-light-390.png
+!captures/app/menu-light-390.png
+!captures/app/profile-dark-1440.png
+!captures/components/
+!captures/components/picker-light-390.png
+!captures/components/settings-dark-390.png

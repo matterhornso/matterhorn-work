@@ -21,6 +21,13 @@ test("both ends of the affected rustls range and duplicate graph entries fail", 
   }
 });
 
+test("vulnerable quinn-proto versions cannot return to the resolved graph", () => {
+  for (const version of ["0.11.0", "0.11.15", "0.11.18"]) {
+    assert.throws(() => validateRustDependencyGraph(`${root}quinn-proto v0.11.19\nquinn-proto v${version} (*)\n`), /quinn-proto/);
+  }
+  assert.doesNotThrow(() => validateRustDependencyGraph(`${root}quinn-proto v0.11.19\n`));
+});
+
 test("empty, non-text and incomplete output cannot count as clean", () => {
   for (const output of [undefined, null, "", "warning: nothing to print", "rustls v0.23.45"]) {
     assert.throws(() => validateRustDependencyGraph(output), /missing or incomplete/);

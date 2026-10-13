@@ -15,7 +15,7 @@ beforeAll(async () => {
     root: new URL("../", import.meta.url).pathname,
     logLevel: "error",
     resolve: { alias: { "@": new URL("../src", import.meta.url).pathname }, dedupe: ["react", "react-dom"] },
-    define: { "import.meta.env.VITE_MATTERHORN_RETRO_UI": JSON.stringify(process.env.RETRO_QA_FLAG === "1" ? "1" : "0"), "process.env.NODE_ENV": '"development"' },
+    define: { "process.env.NODE_ENV": '"development"' },
     build: {
       target: "esnext",
       write: false,
@@ -91,17 +91,7 @@ test("header picker labels search and selection while retaining the unsent draft
     await page.getByRole("button", { name: "Change model", exact: true }).click();
     await page.getByRole("img", { name: "Selected model", exact: true }).waitFor();
     expect(await page.getByText("Embedding only", { exact: true }).count()).toBe(0);
-    if (process.env.RETRO_QA_FLAG === "1") {
-      expect(await page.getByRole("option").evaluate(el => getComputedStyle(el).minHeight)).toBe("44px");
-    }
-    const directory = process.env.RETRO_QA_CORE_CAPTURES;
-    if (process.env.RETRO_QA_FLAG === "1") {
-      for (const theme of ["light", "dark"]) {
-        await page.locator("html").evaluate((el, value) => { el.setAttribute("data-theme", value); }, theme);
-        await page.waitForFunction(expected => getComputedStyle(document.querySelector('[data-slot="popover-content"]')!).backgroundColor === expected,
-          theme === "light" ? "rgb(255, 255, 255)" : "rgb(35, 33, 40)");
-      }
-    }
+    const directory = process.env.RESTORED_UI_CORE_CAPTURES;
     if (directory) {
       await page.addStyleTag({ content: "*, *::before, *::after { animation: none !important; transition: none !important; }" });
       await mkdir(directory, { recursive: true });
@@ -219,7 +209,10 @@ test("all five real desk buttons are keyboard reachable and do not submit a draf
   try {
     await page.goto(`${server.url}?launcher`);
     const desks = page.getByRole("region", { name: "Desks", exact: true });
-    expect(await desks.getByRole("button").count()).toBe(5);
+    expect(await desks.locator('button[data-testid^="open-"]').evaluateAll(buttons => buttons.map(button => button.getAttribute("data-testid")))).toEqual([
+      "open-private_ai-desk", "open-bittensor-desk", "open-hyperliquid-desk", "open-polymarket-desk", "open-sui-desk",
+    ]);
+    expect(await desks.locator('[data-testid^="open-"][data-testid$="-desk"]').count()).toBe(5);
     for (const id of ["private_ai", "bittensor", "hyperliquid", "polymarket", "sui"]) {
       const button = page.getByTestId(`open-${id}-desk`);
       await button.focus();
@@ -231,7 +224,7 @@ test("all five real desk buttons are keyboard reachable and do not submit a draf
   } finally { await page.close(); }
 });
 
-test.skipIf(process.env.RETRO_QA_FLAG !== "1")("mobile sidebar closes after navigation and restores its trigger focus", async () => {
+test("restored mobile sidebar closes after conversation navigation and restores trigger focus", async () => {
   const page = await fixturePage();
   try {
     await page.setViewportSize({ width: 390, height: 844 });
@@ -239,9 +232,9 @@ test.skipIf(process.env.RETRO_QA_FLAG !== "1")("mobile sidebar closes after navi
     await page.getByRole("button", { name: "Toggle Sidebar", exact: true }).click();
     const drawer = page.getByRole("dialog", { name: "Workspace navigation", exact: true });
     await drawer.waitFor();
-    await drawer.getByRole("button", { name: "Bittensor", exact: true }).click();
+    await drawer.getByRole("button", { name: "Research draft", exact: true }).click();
     await drawer.waitFor({ state: "hidden" });
-    expect(await page.getByRole("status").filter({ hasText: "Bittensor" }).innerText()).toBe("Bittensor");
+    expect(await page.getByRole("status").filter({ hasText: "Conversation selected" }).innerText()).toBe("Conversation selected");
     await page.getByRole("button", { name: "Toggle Sidebar", exact: true }).click();
     await drawer.waitFor();
     await page.keyboard.press("Escape");
@@ -254,8 +247,8 @@ test.skipIf(process.env.RETRO_QA_FLAG !== "1")("mobile sidebar closes after navi
   } finally { await page.close(); }
 });
 
-test.skipIf(!process.env.RETRO_QA_CAPTURES)("capture real launcher and composer in both themes and responsive sizes", async () => {
-  const directory = process.env.RETRO_QA_CAPTURES;
+test.skipIf(!process.env.RESTORED_UI_CAPTURES)("capture restored desks and composer in both themes and responsive sizes", async () => {
+  const directory = process.env.RESTORED_UI_CAPTURES;
   if (!directory) return;
   await mkdir(directory, { recursive: true });
   for (const theme of ["light", "dark"]) {
@@ -270,14 +263,12 @@ test.skipIf(!process.env.RETRO_QA_CAPTURES)("capture real launcher and composer 
         await verifyBundledFonts(page);
         await page.screenshot({ path: `${directory}/launcher-composer-${theme}-${width}.png`, fullPage: true });
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-        if (process.env.RETRO_QA_FLAG === "1") {
-          await page.goto(`${server.url}?sidebar&launcher&theme=${theme}`);
-          await page.getByRole("textbox", { name: "Test prompt" }).waitFor();
-          if (width < 768) await page.getByRole("button", { name: "Toggle Sidebar", exact: true }).click();
-          await verifyBundledFonts(page);
-          await page.screenshot({ path: `${directory}/sidebar-${theme}-${width}.png`, fullPage: true });
-          expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-        }
+        await page.goto(`${server.url}?sidebar&launcher&theme=${theme}`);
+        await page.getByRole("textbox", { name: "Test prompt" }).waitFor();
+        if (width < 768) await page.getByRole("button", { name: "Toggle Sidebar", exact: true }).click();
+        await verifyBundledFonts(page);
+        await page.screenshot({ path: `${directory}/sidebar-${theme}-${width}.png`, fullPage: true });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         await page.goto(`${server.url}?busy&empty&theme=${theme}`);
         await page.getByRole("button", { name: "Stop generating", exact: true }).waitFor();
         await verifyBundledFonts(page);

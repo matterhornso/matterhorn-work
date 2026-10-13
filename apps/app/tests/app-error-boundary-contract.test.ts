@@ -97,8 +97,8 @@ describe("Matterhorn surface error boundary", () => {
     expect(source).toContain("<SurfaceErrorBoundary");
     expect(source).toContain("source={`SessionSidePanel:${visibleSidePanel ?? \"unknown\"}`}");
     expect(source).toContain("title={`${sidePanelTitle} stopped working`}");
-    // Docked, legacy overlay, and flag-gated accessible dialog share recovery.
-    expect(source.match(/\{guardedSidePanelContent\}/g)?.length).toBe(3);
+    // Both supported presentations (docked and overlay) share recovery.
+    expect(source.match(/\{guardedSidePanelContent\}/g)?.length).toBe(2);
     expect(source).not.toContain("{sidePanelContent}\n                  </Suspense>");
   });
 

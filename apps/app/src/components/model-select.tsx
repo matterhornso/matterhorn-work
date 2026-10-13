@@ -1,5 +1,5 @@
 "use client";
-import { isChatModelId } from "@/app/lib/minimal-ui";
+import { isChatModelId } from "@/app/lib/chat-models";
 
 import * as React from "react";
 import { Check, ChevronDown } from "lucide-react";

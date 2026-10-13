@@ -34,7 +34,6 @@ import {
 import { createClient, unwrap } from "../../../../app/lib/opencode";
 import { abortSession, revertSession, unrevertSession } from "../../../../app/lib/opencode-session";
 import { MATTERHORN_LAUNCH_FEATURES } from "../../../../app/lib/launch-features";
-import { MINIMAL_UI } from "../../../../app/lib/minimal-ui";
 import { Button } from "@/components/ui/button";
 import { isPublicBetaWebDeployment } from "../../../../app/lib/matterhorn-deployment";
 import {
@@ -3395,7 +3394,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       props.activeQuestion ||
       hasTodoContent ||
       props.activePermission ||
-      (activeDeskMode && !MINIMAL_UI) ||
+      activeDeskMode ||
       bittensorContext ||
       agentFileContext ||
       coworkerContext ||
@@ -3497,19 +3496,6 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   onConfirmPrivacy={handleConfirmPrivacy}
                   confirmingPrivacy={confirmingPrivacy}
                 />
-              ) : MINIMAL_UI ? (
-                <section className="matterhorn-conversation-starters mx-auto w-full max-w-3xl px-4 py-8" aria-label="Conversation starters">
-                  {activeDeskStartBlocker ? <p role="status" className="mb-4 text-sm text-dls-secondary">{activeDeskStartBlocker}</p> : null}
-                  {activeDeskMode ? <>
-                    <h2 className="mb-3 text-base font-semibold">What would you like to explore?</h2>
-                    <div className="flex flex-wrap gap-2">
-                      {groupMatterhornDeskTaskStarters(MATTERHORN_DESK_TASK_STARTERS[activeDeskMode], { reviewedActions: MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions }).flatMap((group) => group.starters).slice(0, 3).map((starter) => <Button key={starter.id} variant="outline" disabled={Boolean(draft.trim())} onClick={() => {
-                        setComposerDraft(props.sessionId, starter.prompt);
-                        props.onDraftChange(buildDraft(starter.prompt, attachments));
-                      }}>{starter.title}</Button>)}
-                    </div>
-                  </> : <h2 className="text-base font-semibold">What would you like to work on?</h2>}
-                </section>
               ) : activeDeskMode ? (
                 <div className="space-y-2">
                   {activeDeskStartBlocker ? (
@@ -3696,7 +3682,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
         modelUnavailable={Boolean(props.modelUnavailable)}
         onOpenAiProviders={props.onOpenAiProviders}
         statusLabel={statusLabel(snapshot ?? undefined, chatStreaming)}
-        showModelPicker={!MINIMAL_UI && shellConfig.modelPicker && !props.modelUnavailable}
+        showModelPicker={shellConfig.modelPicker && !props.modelUnavailable}
         modelPickerOpen={props.modelPickerOpen}
         selectedModel={props.selectedModel}
         privateModeAvailable={Boolean(props.privateModeAvailable)}
@@ -3787,7 +3773,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     />
                   </Suspense>
                 ) : null}
-                {activeDeskMode && !MINIMAL_UI ? (
+                {activeDeskMode ? (
                   <MatterhornDeskSessionStrip mode={activeDeskMode} />
                 ) : null}
                 {bittensorContext ? (

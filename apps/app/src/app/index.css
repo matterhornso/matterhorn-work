@@ -2,11 +2,10 @@
 @config "../../tailwind.config.ts";
 
 @import "../styles/colors.css";
-@import "../styles/retro.css";
 
 @import "tw-animate-css";
 
-@import "shadcn/tailwind.css";
+@import "../styles/vendor/shadcn-tailwind.css";
 
 @import "@fontsource-variable/geist";
 
@@ -774,5 +773,28 @@ select:disabled {
     min-height: 0;
     max-height: none;
     flex: 1;
+  }
+}
+
+/* Keep settings actions readable when panels are narrow or text is enlarged. */
+@container settings (max-width: 40rem) {
+  [data-slot="settings-item-header"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  [data-slot="settings-item-header"] > [data-slot="item-header-actions"] {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+    max-width: 100%;
+    min-width: 0;
+    margin-block-start: 8px;
+  }
+
+  [data-slot="item-header-actions"] > [data-slot="button"] {
+    max-width: 100%;
+    height: auto;
+    min-height: 2.25rem;
+    white-space: normal;
   }
 }
