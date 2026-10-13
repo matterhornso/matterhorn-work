@@ -35,7 +35,7 @@ function renderSidebar(overrides: Partial<AppSidebarProps> = {}) {
   );
 }
 
-describe("default retro sidebar preserves legacy navigation", () => {
+describe("restored sidebar navigation", () => {
   test("renders selected descendants, imported roots, activity and shared session actions", () => {
     const html = renderSidebar();
     for (const title of ["Parent conversation", "Child conversation", "Grandchild conversation", "Imported conversation"])
@@ -46,7 +46,10 @@ describe("default retro sidebar preserves legacy navigation", () => {
     expect(html).toContain("Show 1 more");
     expect(html).toContain('aria-haspopup="menu"');
     expect(html).toContain("Resize workspace column");
-    expect(html).not.toContain("opacity-0");
+    // Restored desktop actions reveal on hover and keyboard focus. The
+    // controls stay in the tab order; they are not display:none placeholders.
+    expect(html).toContain('aria-label="Workspace options"');
+    expect(html).toContain("focus-visible:opacity-100");
     expect(html).not.toMatch(/<ul\b[^>]*>\s*<div/);
   });
 

@@ -3,7 +3,6 @@ import * as React from "react";
 import ReactDOM from "react-dom/client";
 
 import { bootstrapTheme } from "../app/theme";
-import { applyRetroUi } from "../app/lib/retro-ui";
 import { ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut } from "./context-menu";
 import "../app/index.css";
 
@@ -118,7 +117,6 @@ function OverlayApp() {
 }
 
 bootstrapTheme();
-applyRetroUi(document.documentElement);
 
 type OverlayRootElement = HTMLElement & {
   __matterhornReactRoot?: ReturnType<typeof ReactDOM.createRoot>;

@@ -188,7 +188,7 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
-          className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+          className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>[data-slot=sheet-close]]:size-11"
           style={
             {
               "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
@@ -196,11 +196,11 @@ function Sidebar({
           }
           side={side}
         >
-          <SheetHeader className="sr-only">
-            <SheetTitle>Workspace navigation</SheetTitle>
-            <SheetDescription>Displays the mobile sidebar.</SheetDescription>
+          <SheetHeader className="min-h-19 shrink-0 justify-center py-4 pe-18 ps-4">
+            <SheetTitle className="text-sidebar-foreground">Workspace navigation</SheetTitle>
+            <SheetDescription className="sr-only">Displays the mobile sidebar.</SheetDescription>
           </SheetHeader>
-          <div className="flex h-full w-full flex-col">{children}</div>
+          <div className="flex min-h-0 w-full flex-1 flex-col">{children}</div>
         </SheetContent>
       </Sheet>
     )
@@ -259,8 +259,9 @@ function Sidebar({
 function SidebarTrigger({
   className,
   onClick,
+  label,
   ...props
-}: React.ComponentProps<typeof Button>) {
+}: React.ComponentProps<typeof Button> & { label?: string }) {
   const { toggleSidebar } = useSidebar()
 
   return (
@@ -276,8 +277,8 @@ function SidebarTrigger({
       }}
       {...props}
     >
-      <PanelLeftIcon className="rtl:rotate-180 size-3.5" />
-      <span className="sr-only">Toggle Sidebar</span>
+      <PanelLeftIcon className="rtl:rotate-180 size-3.5 shrink-0" aria-hidden="true" />
+      <span className={label ? undefined : "sr-only"}>{label ?? "Toggle Sidebar"}</span>
     </Button>
   )
 }

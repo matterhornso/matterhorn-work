@@ -17,7 +17,6 @@ import {
 import { useQuery } from "@tanstack/react-query";
 
 import { SUGGESTED_PLUGINS } from "../../app/constants";
-import { readStoredSessionChoiceOverrides, withSessionChoiceOverride, writeStoredSessionChoiceOverrides } from "../kernel/model-config";
 import type { EnablementContext } from "../../app/enablement";
 import { createClient } from "../../app/lib/opencode";
 import {
@@ -705,9 +704,8 @@ const UNSUPPORTED_HOSTED_SETTINGS_TABS: ReadonlySet<SettingsTab> = new Set([
 
 function applyLaunchSettingsRoutePolicy(
   route: ReturnType<typeof parseSettingsPath>,
-  options: { allowLocalProfile?: boolean } = {},
 ): ReturnType<typeof parseSettingsPath> {
-  if (isSettingsTabRouteEnabledAtLaunch(route.tab, undefined, options))
+  if (isSettingsTabRouteEnabledAtLaunch(route.tab))
     return route;
   return { tab: "overview", redirectPath: "overview" };
 }
@@ -741,7 +739,6 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     props.embedded
       ? parseSettingsPath(`/settings/${embeddedPath}`)
       : parseSettingsPath(location.pathname),
-    { allowLocalProfile: props.embedded },
   );
   const route: ReturnType<typeof parseSettingsPath> = publicBetaWeb
     && UNSUPPORTED_HOSTED_SETTINGS_TABS.has(launchRoute.tab)
@@ -2990,13 +2987,6 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       case "ai":
         return (
           <AiSettingsView
-            onModelSelected={(firstSelection, model) => {
-              const state = location.state;
-              const sessionId = !firstSelection && state && typeof state === "object" && state.workspaceId === selectedWorkspaceId && typeof state.sessionId === "string" ? state.sessionId : null;
-              if (sessionId) writeStoredSessionChoiceOverrides(selectedWorkspaceId, withSessionChoiceOverride(readStoredSessionChoiceOverrides(selectedWorkspaceId), sessionId, { model: { providerID: model.providerId, modelID: model.modelId }, variant: null }));
-              if (props.onClose && !firstSelection) props.onClose();
-              else navigate(workspaceSessionRoute(selectedWorkspaceId, sessionId));
-            }}
             privateSetupRequested={new URLSearchParams(location.search).get("setup") === "private"}
             busy={busy}
             providerAuthBusy={providerAuthSnapshot.providerAuthBusy}

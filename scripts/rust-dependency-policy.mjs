@@ -17,6 +17,11 @@ export function validateRustDependencyGraph(output) {
       throw new Error("RUSTSEC-2026-0285 requires rustls 0.23.45 or later in the 0.23 line.");
     }
   }
+  for (const match of output.matchAll(/^quinn-proto v0\.11\.(\d+)(?:\s|$)/gm)) {
+    if (Number(match[1]) < 19) {
+      throw new Error("quinn-proto 0.11 requires 0.11.19 or later for the September 2026 peer denial-of-service fixes.");
+    }
+  }
 }
 
 export function checkRustDependencyPolicy(run = spawnSync) {

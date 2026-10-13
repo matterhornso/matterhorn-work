@@ -6,10 +6,8 @@ import { createMatterhornServerClient } from "../../src/app/lib/matterhorn-serve
 import { useJevChat } from "../../src/react-app/domains/session/surface/use-jev-chat";
 import { JevChatControl } from "../../src/react-app/domains/session/surface/jev-chat-control";
 import { Button } from "../../src/components/ui/button";
-import { applyRetroUi } from "../../src/app/lib/retro-ui";
 import "../../src/app/index.css";
 
-applyRetroUi(document.documentElement, true);
 document.documentElement.dataset.theme = new URLSearchParams(location.search).get("theme") === "dark" ? "dark" : "light";
 function Fixture() {
   const [account, setAccount] = useState("alice");

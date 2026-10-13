@@ -326,10 +326,9 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("Models could not load");
     expect(source).toContain("buildModelReadinessSummary");
     expect(source).toContain(
-      '<LayoutSectionTitle>{MINIMAL_UI ? "Model defaults" : "Choose a model"}</LayoutSectionTitle>',
+      '<LayoutSectionTitle>Choose a model</LayoutSectionTitle>',
     );
-    expect(source).toContain("Advanced model and provider settings</summary>");
-    expect(source).toContain('<div className="pt-6">{detailedSettings}</div>');
+    expect(source).toContain("More model settings");
     expect(source).toContain(
       "Pick the AI that answers your chats. You can change it any time.",
     );

@@ -5,8 +5,8 @@ import { extname, resolve, sep } from "node:path";
 
 const root = await realpath(new URL("../dist", import.meta.url).pathname);
 const html = await readFile(resolve(root, "index.html"), "utf8");
-if (!html.includes('data-matterhorn-ui="retro"') || !html.includes("public-auth-shell")) {
-  throw new Error("Build the retro public-web variant first (run-check.mjs build-web 1).");
+if (html.includes('data-matterhorn-ui="retro"') || !html.includes("public-auth-shell")) {
+  throw new Error("Build the public-web application first (pnpm --filter @matterhorn-work/app build:web).");
 }
 const pages = new Set(["/", "/session", "/privacy", "/terms", "/security", "/support", "/status"]);
 const contentTypes: Record<string, string> = {
@@ -33,4 +33,4 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) 
     return Response.json({ error: "No backend in this read-only visual preview." }, { status: 503, headers: securityHeaders });
   }
 } });
-console.log(`Read-only retro public preview: ${server.url}`);
+console.log(`Read-only public preview: ${server.url}`);

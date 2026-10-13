@@ -18,6 +18,13 @@ describe("responsive accessibility regressions", () => {
     expect(item).not.toContain("setOpen(false)");
     expect(item.match(/onClick=\{openSession\}/g)).toHaveLength(2);
   });
+  test("mobile navigation keeps a touch-sized close action clear of its content", () => {
+    const sidebar = readAppFile("src/components/ui/sidebar.tsx");
+    expect(sidebar).not.toContain("[&>button]:hidden");
+    expect(sidebar).toContain("[&>[data-slot=sheet-close]]:size-11");
+    expect(sidebar).toContain("min-h-19 shrink-0 justify-center py-4 pe-18 ps-4");
+    expect(sidebar).toContain('className="flex min-h-0 w-full flex-1 flex-col"');
+  });
   test("blank sessions start at the top while populated transcripts keep sticky-bottom behavior", () => {
     const surface = readAppSource("domains/session/surface/session-surface.tsx");
     const controller = readAppSource("domains/session/surface/scroll-controller.ts");
@@ -39,7 +46,7 @@ describe("responsive accessibility regressions", () => {
   test("active settings sidebar entries expose current-page semantics", () => {
     const settings = readAppSource("domains/settings/shell/settings-page.tsx");
 
-    expect(settings.match(/aria-current=\{props\.activeTab === (?:tab|\"general\") \? \"page\" : undefined\}/g)?.length).toBe(5);
+    expect(settings.match(/aria-current=\{props\.activeTab === (?:tab|\"general\") \? \"page\" : undefined\}/g)?.length).toBe(4);
   });
 
   test("mobile shell actions provide 44px hit areas without enlarging their icons", () => {
@@ -50,15 +57,16 @@ describe("responsive accessibility regressions", () => {
     expect(sessionPage).toContain('SidebarTrigger className="size-11 md:size-8');
     expect(sessionPage).toContain("size-11 shrink-0 text-dls-secondary");
     expect(statusBar.match(/min-h-11 min-w-11/g)?.length).toBeGreaterThanOrEqual(4);
-    expect(settingsShell).toContain('SidebarTrigger className="size-11');
+    expect(settingsShell).toContain('SidebarTrigger className="h-11');
+    expect(settingsShell).toContain('label="Settings" aria-label="Toggle settings navigation"');
     expect(settingsShell).toContain('className="flex size-11 items-center');
   });
 
   test("mobile sessions expose the workspace tools and every crypto desk hidden by the desktop rail", () => {
     const sessionPage = readAppSource("domains/session/chat/session-page.tsx");
 
-    expect(sessionPage).toContain('title={MINIMAL_UI ? "Workspace tools" : "Open workspace menu"}');
-    expect(sessionPage).toContain('className="size-11 text-dls-secondary');
+    expect(sessionPage).toContain('title="Open workspace menu"');
+    expect(sessionPage).toContain("size-11 text-dls-secondary");
     expect(sessionPage).toContain("lg:hidden");
     expect(sessionPage).toContain('<nav aria-label="Workspace menu"');
     expect(sessionPage).toContain('label="Coworkers"');

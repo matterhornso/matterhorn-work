@@ -12,10 +12,8 @@ import { DesktopConfigProvider } from "../../src/react-app/domains/cloud/desktop
 import { DenAuthProvider } from "../../src/react-app/domains/cloud/den-auth-provider";
 import { RestrictionNoticeProvider } from "../../src/react-app/domains/cloud/restriction-notice-provider";
 import { createMatterhornServerClient } from "../../src/app/lib/matterhorn-server";
-import { applyRetroUi } from "../../src/app/lib/retro-ui";
 import "../../src/app/index.css";
 
-applyRetroUi(document.documentElement, true);
 document.documentElement.dataset.theme = "light";
 const client = createMatterhornServerClient({ baseUrl: location.origin, token: "disposable-fixture" });
 const query = new QueryClient({ defaultOptions: { queries: { retry: false } } });

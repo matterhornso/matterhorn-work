@@ -618,7 +618,7 @@ describe("Shared primitives UI contract", () => {
     const sidebar = readAppSource("domains/session/sidebar/app-sidebar.tsx");
     expect(composer).toContain("props.showModelPicker !== false");
     expect(sessionSurface).toContain(
-      "showModelPicker={!MINIMAL_UI && shellConfig.modelPicker && !props.modelUnavailable}",
+      "showModelPicker={shellConfig.modelPicker && !props.modelUnavailable}",
     );
     expect(sidebar).toContain("shellConfig.addWorkspace ?");
   });
@@ -1158,7 +1158,7 @@ describe("Shared primitives UI contract", () => {
     expect(accountView).toContain("hover:bg-dls-surface-muted/[0.46]");
     expect(accountView).toContain("bg-dls-surface-muted/[0.18] px-2.5 py-1.5");
     expect(accountView).toContain("{cloudAvailable ? <section");
-    expect(accountView).toContain("{cloudAvailable ? <SettingsSection>");
+    expect(accountView).toContain("{isSignedIn || cloudAvailable ? <SettingsSection>");
     expect(
       readAppSource("domains/profile/profile-capability-status.tsx"),
     ).toContain("bg-dls-surface-muted/[0.20]");

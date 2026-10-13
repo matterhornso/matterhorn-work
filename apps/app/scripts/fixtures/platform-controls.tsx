@@ -12,10 +12,7 @@ import { Checkbox } from "../../src/components/ui/checkbox";
 import { Switch } from "../../src/components/ui/switch";
 import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription } from "../../src/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../src/components/ui/tabs";
-import { applyRetroUi } from "../../src/app/lib/retro-ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MinimalModels } from "../../src/react-app/domains/settings/pages/minimal-models";
-import { PrivateModePrivacyNotice } from "../../src/react-app/domains/session/surface/private-mode-privacy-notice";
 import { MemoryRouter } from "react-router";
 import { PublicTrustRoute } from "../../src/react-app/domains/public/public-trust-route";
 import { NotesPage } from "../../src/react-app/domains/notes/notes-page";
@@ -32,52 +29,20 @@ import type { Language } from "../../src/i18n";
 import "../../src/react-app/domains/cloud/public-web-signin.css";
 import { StatusToastsProvider, StatusToastsViewport } from "../../src/react-app/domains/shell-feedback/status-toasts";
 import { createMatterhornServerClient } from "../../src/app/lib/matterhorn-server";
-import type { MatterhornBackendModelCatalogSnapshot, MatterhornBackendModelSelectionRecord, MatterhornProviderPrivacyPolicy } from "@matterhorn-work/types/backend-models";
 import "../../src/app/index.css";
 
 const params = new URLSearchParams(location.search);
-applyRetroUi(document.documentElement, params.get("retro") !== "0");
 document.documentElement.dataset.theme = params.get("theme") === "dark" ? "dark" : "light";
-if (params.has("settings")) bootstrapTheme();
+if (params.has("settings")) {
+  const requestedTheme = params.get("theme");
+  if (requestedTheme === "dark" || requestedTheme === "light") setThemeMode(requestedTheme);
+  else bootstrapTheme();
+}
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 const client = createMatterhornServerClient({ baseUrl: location.origin });
 const authConfig = { baseUrl: location.origin, apiBaseUrl: `${location.origin}/fixture-auth`, requireSignin: true };
 const onFixtureSignedIn = () => { throw new Error("This fixture must never authenticate"); };
-const catalog: MatterhornBackendModelCatalogSnapshot = {
-  status: "ready", label: "Synthetic catalog", source: "matterhorn_backend_registry",
-  serverFetched: true, providerCount: 3, connectedProviderCount: 2, modelCount: 4,
-  connectedProviderIds: ["cudos", "venice"], defaultModels: {},
-  providers: [
-    { id: "cudos", name: "ASI:Cloud", connected: true, modelCount: 2, modelIds: ["asi1-mini", "text-embedding-3"], sampleModels: [] },
-    { id: "venice", name: "Venice", connected: true, modelCount: 1, modelIds: ["fixture-chat"], sampleModels: [] },
-    { id: "unconnected", name: "Disconnected fixture", connected: false, modelCount: 1, modelIds: ["unconnected-chat"], sampleModels: [] },
-  ],
-};
-const policy: MatterhornProviderPrivacyPolicy = {
-  providerId: "cudos", providerName: "ASI:Cloud", status: "unverified", trainingUse: "unknown",
-  retentionDays: null, policyUrl: null, verifiedAt: null, allowed: false,
-  label: "Unverified fixture", description: "Synthetic policy: training and retention terms are not verified.",
-};
-function ModelsFixture() {
-  const [selection, setSelection] = useState<MatterhornBackendModelSelectionRecord | null>(null);
-  const [navigation, setNavigation] = useState("");
-  const [action, setAction] = useState("");
-  return <main className="mx-auto max-w-3xl space-y-6 p-6">
-    <p>Isolated model fixture. No real providers or model requests.</p>
-    <MinimalModels client={client} workspaceId="fixture" catalog={params.has("empty") ? undefined : catalog}
-      selection={selection} loading={params.has("loading")} failed={params.has("failed")}
-      managed={!params.has("local")} policies={[policy]}
-      onConnect={() => setAction("Connect requested")} onRefresh={() => setAction("Refresh requested")}
-      onSelected={(first, model) => {
-        setSelection({ ...model, source: "server_workspace_preference", savedAt: "2026-09-28T00:00:00Z" });
-        setNavigation(first ? "Desk launcher requested" : "Return to conversation requested");
-      }} />
-    <p data-testid="model-navigation">{navigation}</p><p data-testid="model-action">{action}</p>
-    <PrivateModePrivacyNotice providerPrivacyPolicy={policy} onOpenPrivacyDetails={() => setAction("Privacy details requested")} />
-  </main>;
-}
-
 function WalletFixture() {
   const [attempts, setAttempts] = useState(0);
   const [dismissed, setDismissed] = useState(false);
@@ -178,7 +143,7 @@ createRoot(root).render(<QueryClientProvider client={queryClient}><MemoryRouter 
     {params.has("picker") ? <PickerFixture /> : params.has("settings") ? <SettingsFixture /> : params.has("auth") ? <PublicWebSigninPage config={authConfig} onSignedIn={onFixtureSignedIn} /> : params.has("wallet") ? <WalletFixture /> : params.has("integrations") ? <IntegrationsFixture /> : params.has("public") ? <PublicTrustRoute /> : params.has("notes") ?
       <div className="mx-auto h-dvh max-w-3xl"><NotesPage client={client} workspaceId="fixture" /></div> :
       params.has("memory") ? <div className="mx-auto h-dvh max-w-3xl"><MemoryPanel client={client} workspaceId="fixture" sessionId={null} onClose={() => undefined} /></div> :
-      params.has("models") ? <ModelsFixture /> : params.has("chat") ? <ChatFixture /> : <Fixture />}
+      params.has("chat") ? <ChatFixture /> : <Fixture />}
     <StatusToastsViewport />
   </StatusToastsProvider>
 </MemoryRouter></QueryClientProvider>);

@@ -7,21 +7,17 @@ import { useComposerSubmission } from "../../src/react-app/domains/session/surfa
 import { SigninBoundary } from "../../src/react-app/shell/signin-boundary";
 import { useComposerStateStore } from "../../src/react-app/domains/session/surface/composer-state-store";
 import type { DenAuthStatus } from "../../src/react-app/domains/cloud/den-auth-provider";
-import { applyRetroUi, RETRO_UI } from "../../src/app/lib/retro-ui";
-import { PrimaryDeskLauncher } from "../../src/react-app/domains/session/workflows/primary-desk-launcher";
+import { HomeCapabilityOverview } from "../../src/react-app/domains/session/chat/session-page";
 import { AppSidebar } from "../../src/react-app/domains/session/sidebar/app-sidebar";
 import { ShellConfigProvider } from "../../src/react-app/shell/shell-config";
 import { SidebarProvider, SidebarTrigger } from "../../src/components/ui/sidebar";
-import { Button } from "../../src/components/ui/button";
 import { ModelSelect } from "../../src/components/model-select";
 import { WorkspaceProvider } from "../../src/react-app/shell/workspace-provider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { providerListQueryKey } from "../../src/react-app/domains/connections/provider-list-query";
-import { PRIMARY_DESKS } from "../../src/app/lib/minimal-ui";
 import type { WorkspaceSessionGroup } from "../../src/app/types";
 import "../../src/app/index.css";
 
-applyRetroUi(document.documentElement, RETRO_UI);
 document.documentElement.dataset.theme = new URLSearchParams(location.search).get("theme") === "dark" ? "dark" : "light";
 
 const noop = () => {};
@@ -58,9 +54,8 @@ function SidebarFixture() {
     <AppSidebar workspaceSessionGroups={fixtureGroups} selectedWorkspaceId="fixture" selectedSessionId="fixture-chat"
       developerMode={false} connectingWorkspaceId={null} workspaceConnectionStateById={{}} newTaskDisabled={false}
       onSelectWorkspace={() => setAction("Workspace selected")} onOpenSession={() => setAction("Conversation selected")}
-      onCreateTaskInWorkspace={() => setAction("New chat requested")} onOpenSettings={() => setAction("Settings requested")}
-      onOpenRenameWorkspace={noop} onShareWorkspace={noop} onRevealWorkspace={noop} onForgetWorkspace={noop} onOpenCreateWorkspace={() => setAction("Workspace setup requested")}
-      deskNavigation={<nav aria-label="Desks" className="grid gap-1">{PRIMARY_DESKS.map(desk => <Button key={desk.id} variant="ghost" className="justify-start" onClick={() => setAction(desk.name)}>{desk.name}</Button>)}</nav>} />
+      onCreateTaskInWorkspace={() => setAction("New chat requested")}
+      onOpenRenameWorkspace={noop} onShareWorkspace={noop} onRevealWorkspace={noop} onForgetWorkspace={noop} onOpenCreateWorkspace={() => setAction("Workspace setup requested")} />
     <div className="min-w-0 flex-1">
       <header className="matterhorn-workspace-header flex items-center gap-3 p-4"><SidebarTrigger /><h1 className="text-base font-semibold">Isolated workspace navigation</h1></header>
       <p role="status" className="px-6">{action}</p>
@@ -112,7 +107,7 @@ function Fixture() {
   const managedSend = () => submission.send().catch(() => setResult("retry_available"));
   return <main className="mx-auto max-w-3xl space-y-6 p-6">
     <p>Isolated desk/composer fixture. No account, provider or chain requests.</p>
-    {params.has("launcher") ? <><PrimaryDeskLauncher onOpenDesk={setDesk} /><output data-testid="selected-desk">{desk}</output></> : null}
+    {params.has("launcher") ? <><HomeCapabilityOverview onOpenCapability={setDesk} /><output data-testid="selected-desk">{desk}</output></> : null}
     <ReactSessionComposer
       draft={params.has("empty") ? "" : draft}
       placeholder="Test prompt"

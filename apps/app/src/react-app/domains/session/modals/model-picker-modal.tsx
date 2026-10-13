@@ -24,7 +24,7 @@ import type { ModelOption, ModelRef } from "../../../../app/types";
 import { isDefaultVisibleModel, isRecommendedModel } from "../../../../app/defaults";
 import { ProviderIcon } from "../../../design-system/provider-icon";
 import { t } from "../../../../i18n";
-import { isChatModelId } from "@/app/lib/minimal-ui";
+import { isChatModelId } from "@/app/lib/chat-models";
 
 const HIDDEN_MODELS_KEY = "openwork.hiddenModels";
 const HIDDEN_MODELS_SEEDED_KEY = "openwork.hiddenModelsSeeded";
