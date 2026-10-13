@@ -6,7 +6,7 @@ Status: active source-backed companion to [DESIGN.md](../../DESIGN.md), refreshe
 
 The approved restored workspace is the only supported layout. The retro/minimal switches, alternate branches and retro stylesheet have been removed. Do not enable old flags, follow superseded rollout plans or recreate the removed component examples. This is visual restoration, not a repository reset to #1027, a data migration or a change to backend authorization, consent, accounting or model state.
 
-Desktop retains conversation/project navigation, the central workspace and tool/desk access on the right. Mobile uses existing navigation menus and overlays. Home preserves model setup/status, five desks, workflow/project controls and activity. The primary desks remain Private AI, Bittensor, Hyperliquid, Polymarket and Sui. Memory, notes, wallet and integrations remain workspace tools; Longevity stays standalone and non-medical.
+Desktop retains conversation/project navigation, the central workspace and tool/desk access on the right. Mobile uses existing navigation menus and overlays. Home preserves model setup/status, five desks, workflow/project controls and activity. The primary desks are Private AI, Bittensor, Hyperliquid, Polymarket, and Sui. Memory, notes, wallet and integrations are workspace tools. Longevity is standalone and outside the primary crypto experience. Capability descriptions below are not deployment-readiness evidence.
 
 Model selection, Profile, Account, sign-out, wallet and Settings access must remain available. Account navigation is independent of optional Cloud visibility. Suggestions fill editable drafts and never send automatically. Retain persisted chats, models, drafts and preferences.
 
@@ -39,13 +39,17 @@ Tonal ramps are generated documentation swatches only. They must not become addi
 
 ## Preserved product and safety boundaries
 
+- Keep the desk-first workflow and the Matterhorn logo alongside protocol marks. Existing accent descriptions remain semantic roles, not a replacement palette: Bittensor electric cyan, Hyperliquid blue / green, Polymarket purple / amber, Longevity coral / mint, and memory gold / slate. Bind to the active source variables and accompany color with meaningful text.
 - Surface availability follows server capability and existing launch/permission gates. Generated-media publishing, billing, Cloud and STM are not enabled by this documentation; STM stays off.
 - Provider privacy/consent, account/workspace isolation, request ownership, Stop/retry and usage accounting remain unchanged. Jev is optional and revocable, never an authorization shortcut.
 - Read/preview cards disclose source, freshness, missing context and whether they can submit. Reviewed wallet paths require the supported exact ticket and explicit signer approval; never infer signing from a card or badge.
-- Polymarket compliance-blocked previews must not expose executable price, size or share fields. Research-only venues and unsupported protocol writes must stay labelled unavailable.
-- Memory suggestions remain visible and user-controlled with provenance and confirm/edit/dismiss actions; no hidden saves.
+- The Safety Strip must make submission boundaries explicit: **Can submit**, **Live submission**, and **External signer/client required** where applicable. Non-executing previews must report no submission capability, not a successful transaction; supported execution still requires the exact reviewed terms and explicit approval.
+- Bittensor address and signer context distinguishes SS58 addresses, coldkey and hotkey roles. **Prepare stake preview**, **Prepare unstake preview** and **Prepare transfer preview** are preparation labels, not execution claims. Show only supported actions and disclose service, network and signer blockers.
+- Compliance-blocked previews must not expose executable price, size, or share fields. Polymarket research-only paths and unsupported protocol writes must stay accurately labelled; a design change cannot renew an expired policy or enable live submission.
+- Memory follows **No hidden saves** and **No hidden memory saves**: suggestions remain visible and user-controlled with provenance and confirm/edit/dismiss actions.
 - Never solicit wallet private keys, seed phrases, mnemonics or raw signing material. Privileged credential-management flows retain their separately reviewed controls; this guide introduces none.
-- Longevity remains non-medical and does not gain payment, email, hosting or token-gating capabilities through styling.
+- Longevity remains non-medical, limited to supported safe offline optimization workflows, and does not gain payment, email, hosting or token-gating capabilities through styling.
+- Layout acceptance requires **No horizontal overflow** of the page and confirmation that the **composer does not overlap cards**. Intentional bounded content scrollers must retain readable controls and keyboard access.
 
 ## Current verification entry points
 

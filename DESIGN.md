@@ -162,6 +162,8 @@ Signed-out auth is a separate entry path: [index.html](apps/app/index.html) supp
 
 ## Layout
 
+The primary desks are Private AI, Bittensor, Hyperliquid, Polymarket, and Sui. Memory, notes, wallet and integrations are workspace tools. Longevity is standalone and outside the primary crypto experience. Capability descriptions below are not deployment-readiness evidence.
+
 The workspace retains its left conversation/project navigation, central header and content, and right-side desktop tool/desk access. Home contains the existing model setup/status row, desk choices, workflow/project controls and activity areas. Suggestions populate an editable draft and never send automatically. Model, Profile, Account, wallet and Settings access must remain available through supported paths.
 
 The active mobile hook switches below 1024px. Context panels are full-screen below 1024px, sheets from 1024 through 1279px and docked from 1280px. Shared Sidebar has 16rem desktop, 18rem mobile and 3rem icon defaults; the workspace can supply persisted width overrides. Do not confuse a component's 768px Tailwind utility breakpoint with the shell's 1024px mobile policy.

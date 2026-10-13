@@ -87,6 +87,16 @@ review, repository security, Rust audit/compile and public-beta container builds
 passed. The corrected final head must complete its own CI; do not substitute the
 earlier head's outcomes.
 
+The following CI run cleared CodeQL, including zero open findings on the PR ref,
+and all dependency, repository-security, Rust, Linux/macOS, crypto and container
+checks. Full platform safety reached the documentation gate and caught omitted
+navigation/safety contract statements in the new restored-only guide. Those
+statements were restored; the gate was not weakened. The targeted design gate
+passes. The final full local safety rerun then passed all 11 stages with isolated
+localhost test servers permitted outside the sandbox bind restriction. An
+independent documentation review found no issues and confirmed sidecar narrative
+parity. Exact-head CI results must be verified separately on PR #1035.
+
 Representative normal-auth captures (disposable local account; no model engine):
 
 - [Desktop dark](captures/app/home-dark-1440.png)
