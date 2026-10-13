@@ -1,5 +1,7 @@
 # Matterhorn retro UI — four-hour implementation plan
 
+> Superseded on 13 October 2026 by the [restored UI guide](matterhorn-design-system.md) and [DESIGN.md](../../DESIGN.md). Retained as historical evidence only: the alternate UI flags, styling instructions and old test commands below are not current implementation or deployment guidance. See the restored guide for the renamed platform-controls suite.
+
 ## Goal and working agreement
 
 Replace the visual language across Matterhorn Desks with the user's explicit

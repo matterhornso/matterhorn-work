@@ -49,7 +49,7 @@ try {
 
   await downloader.download("http://electron-fixture.invalid/proxy", join(temporary, "proxy"), options);
   assert.equal(await readFile(join(temporary, "proxy"), "utf8"), payload);
-  assert.ok(hits.includes("http://electron-fixture.invalid/proxy"));
+  assert.deepEqual(hits, ["http://electron-fixture.invalid/proxy"]);
   const beforeBypass = hits.length;
   await downloader.download(`http://127.0.0.1:${direct.address().port}/direct`, join(temporary, "direct"), options);
   assert.equal(bypasses, 1);

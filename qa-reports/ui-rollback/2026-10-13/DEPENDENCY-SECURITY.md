@@ -55,4 +55,6 @@ The package smoke coverage includes URI normalization, brace expansion, Axios re
 
 ## Release condition
 
+PR #1035 follow-up: CodeQL alert #224 flagged the proxy fixture's array-membership assertion as URL substring validation. Replaced it with an exact deep comparison of the entire request list, which also rejects unexpected or duplicate requests. No dismissal or suppression was added. The same Node 24 dependency/Rust command passed **17/17** after this change; new-head CodeQL must confirm the alert is gone.
+
 Re-run the full dependency audit and new-head CI on the published candidate, including frontend build/regression and security jobs. No dependency advisory remains at this observation, but full packaged desktop acceptance and hosted acceptance are separate checks. Do not merge/deploy by bypassing the audit, disabling optional dependency scanning, ignoring an advisory, or changing the severity threshold. Hosted deployment remains the tech team's action.

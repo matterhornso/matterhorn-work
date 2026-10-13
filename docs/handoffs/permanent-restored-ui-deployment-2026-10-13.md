@@ -10,7 +10,7 @@ Prepared on 13 October 2026 for the tech team operating `https://desks.matterhor
 | Candidate branch | `codex/permanent-restored-ui-2026-10-13` |
 | Implementation base | `origin/dev` at `ff0fee42b375e3dc58cbc73918d0093fa2eded40`, merged PR #1033 |
 | Candidate PR | [#1035](https://github.com/matterhornso/matterhorn-work/pull/1035), targeting `dev` |
-| Tested implementation commit | `d688fdeed02c26f77cbc8008a9d0dba783e13f45` (subsequent evidence commit changes documentation/images only) |
+| Tested UI implementation commit | `d688fdeed02c26f77cbc8008a9d0dba783e13f45`; subsequent commits add documentation and CI-test corrections, not UI/backend production behavior |
 | Exact approved release commit | **PENDING: fill the full 40-character commit actually built after merge** |
 | Final candidate and merge CI | **PENDING: fill exact-head check links and results** |
 
@@ -31,6 +31,8 @@ The complete JavaScript lockfile audit went from **16 advisories to zero**, incl
 GitHub default-branch Dependabot alert #43 (`http-cache-semantics <=4.2.0`) was still open when this branch was pushed. This candidate pins 4.3.0, outside that range. The alert has not been manually dismissed: verify GitHub's reevaluation after the approved merge reaches the tracked branch.
 
 Local browser evidence covers normal-auth UI only, without an engine or provider. It does not establish real inference, production login, usage settlement, inbox delivery or backup recovery. Safari, Firefox and packaged desktop acceptance remain unverified. Desktop dependency smoke tests do not certify a packaged installer or its proxy behavior on a customer's machine.
+
+**Polymarket trade-preparation limitation:** the existing server-owned jurisdiction policy's review deadline was `2026-10-04T00:00:00.000Z`. It now intentionally denies new-position preparation with `policy_review_required` / `capability_polymarket_jurisdiction_denied`. This PR does not extend that policy, change restricted jurisdictions or bypass venue checks. An authorized policy owner must review current official venue restrictions and approve a separately tested policy update before claiming trade preparation is available. Read-only market research acceptance is separate. A CI test had incorrectly assumed the policy was current on every wall-clock date; it now tests both the allowed historical interval and the expired denial using isolated storage, restoring the clock afterward.
 
 From a clean checkout of the approved revision, use pinned pnpm **10.27.0** and the supported Node/Bun toolchain. Dependency smoke evidence used Node **24.20.0**; the existing production Dockerfiles use Node **22** and the API image pins Bun **1.3.11**, so successful target-image builds remain required. Run tests with disposable data and permitted loopback networking:
 
@@ -110,7 +112,7 @@ Record Safari, Firefox and packaged desktop results separately if those platform
 
 ## Hold criteria and rollback
 
-Hold the release if any release placeholder remains unresolved; exact-head or merge CI fails; dependency/security gates fail; source SHA or artifact identity differs between tiers; hosting branch/domain ownership is ambiguous; backups cannot be restored; auth/isolation/consent fails; the retired UI reappears; or required real desk responses, usage reconciliation or email/reset evidence is missing. Assign an owner and remedy without bypassing checks.
+Hold the release if any release placeholder remains unresolved; exact-head or merge CI fails; dependency/security gates fail; source SHA or artifact identity differs between tiers; hosting branch/domain ownership is ambiguous; backups cannot be restored; auth/isolation/consent fails; the retired UI reappears; or required real desk responses, usage reconciliation or email/reset evidence is missing. Hold any Polymarket new-position/trade-preparation claim until the expired policy has been separately reviewed and updated. Assign an owner and remedy without bypassing checks.
 
 For a serious regression, stop cutover, drain active requests and preserve all durable state. Roll back only to a recorded, compatible, security-reviewed artifact set with an explicitly accepted interface. The observed pre-release artifact contains the rejected retro UI and older dependencies: do not automatically restore it or call it a safe visual rollback. If no acceptable restored-interface artifact exists, hold deployment and prepare a reviewed corrective artifact from this candidate. An incident rollback to a known-risk artifact requires a separate explicit incident decision and disclosure of its UI/security consequences.
 

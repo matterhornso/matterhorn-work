@@ -1,5 +1,7 @@
 # Minimal workspace — staged implementation
 
+> Superseded on 13 October 2026 by the [restored UI guide](matterhorn-design-system.md) and [DESIGN.md](../../DESIGN.md). Retained as historical evidence only: the alternate UI flags, styling instructions and old test commands below are not current implementation or deployment guidance. See the restored guide for the renamed platform-controls suite.
+
 Release flag: `VITE_MATTERHORN_MINIMAL_UI=1`. Default off. No data migration.
 
 ## Direction contract

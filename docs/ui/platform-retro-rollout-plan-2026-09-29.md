@@ -1,5 +1,7 @@
 # Matterhorn Desks — platform-wide retro UI delivery plan
 
+> Superseded on 13 October 2026 by the [restored UI guide](matterhorn-design-system.md) and [DESIGN.md](../../DESIGN.md). Retained as historical evidence only: the alternate UI flags, styling instructions and old test commands below are not current implementation or deployment guidance. See the restored guide for the renamed platform-controls suite.
+
 Date: 29 September 2026. Status: proposed implementation plan; no rollout authorized by this document.
 
 ## 1. Outcome and scope

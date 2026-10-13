@@ -1,5 +1,7 @@
 # Retro platform surface and action inventory
 
+> Superseded on 13 October 2026 by the [restored UI guide](matterhorn-design-system.md) and [DESIGN.md](../../DESIGN.md). Retained as historical evidence only: the alternate UI flags, styling instructions and old test commands below are not current implementation or deployment guidance. See the restored guide for the renamed platform-controls suite.
+
 Source baseline: `d941e234843ab0e6c5832bc34e315016e0a1d6f2`. Scope: first three slices of the [rollout plan](platform-retro-rollout-plan-2026-09-29.md). An inventory row is not acceptance. UI status and backend acceptance must be recorded separately.
 
 All source paths below are relative to `apps/app/src/react-app`, except shared primitives (`apps/app/src/components/ui`) and tokens (`apps/app/src/styles/retro.css`). Routes verified from `shell/app-root.tsx`; settings dispatch from `shell/settings-route.tsx`. Settings visibility remains controlled by launch/deployment/permission gates; file existence is not a capability.

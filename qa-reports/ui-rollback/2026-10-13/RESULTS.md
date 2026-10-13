@@ -66,6 +66,27 @@ component captures, ran 42 targeted tests/227 assertions and reviewed dependency
 compatibility. This is not authorization to merge/deploy or a claim of live
 inference acceptance.
 
+### CI feedback and corrections
+
+Initial published-head CI surfaced two findings despite local passes:
+
+1. CodeQL #224 interpreted an array `.includes()` assertion in the new isolated
+   Electron proxy fixture as URL substring validation. Replaced it with exact
+   full-request-list equality, also rejecting unexpected/duplicate proxy requests.
+   The 17 dependency/Rust regressions pass; no dismissal or suppression was used.
+2. The existing Polymarket capability test assumed the dated jurisdiction policy
+   remained current on the wall clock. CI correctly denied preparation after its
+   4 October review deadline. The regression now exercises both sides of that
+   deadline with isolated databases and restores the test clock in `finally`.
+   Runtime/policy tests: **58 passed**, 266 assertions. Production policy and
+   authorization are unchanged; new-position preparation remains denied pending
+   a separately authorized policy review. This is not proof of trading readiness.
+
+On the initial published head, Linux/macOS tests, crypto gates, dependency
+review, repository security, Rust audit/compile and public-beta container builds
+passed. The corrected final head must complete its own CI; do not substitute the
+earlier head's outcomes.
+
 Representative normal-auth captures (disposable local account; no model engine):
 
 - [Desktop dark](captures/app/home-dark-1440.png)
@@ -98,10 +119,9 @@ setup was missing. Existing approved previews and their chats were not changed.
 - Safari, Firefox and full packaged-desktop acceptance were not run here.
 - The inherited light-theme wallet warning palette is pale; review found no
   introduced regression. Do not claim a fresh WCAG certification.
-- Historical retro plans and existing DESIGN.md/sidecar are not deployment
-  instructions for this candidate. Replacing those design documents was asked
-  separately; until approved, the user-approved permanent-UI contract and the
-  deployment handoff govern this release. No retired UI code remains available.
+- The user explicitly approved updating DESIGN.md/sidecar and active examples to
+  document only the restored UI. Historical redesign plans are superseded, not
+  instructions to restore retired flags or layouts. No retired UI code remains available.
 - No merge, deployment, production secret/configuration change, account reset,
   provider-policy bypass, STM activation, or signing was performed.
 

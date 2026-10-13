@@ -1,37 +1,29 @@
 ---
 name: Matterhorn
-description: A focused, desk-first retro workbench with light, dark and system themes and a legacy rollback option.
+description: The approved restored workspace with semantic light and dark themes, compact controls, conversation navigation and desktop tool rails.
 colors:
   brand-ice: "#D1F2FF"
   brand-ink: "#0C0C0C"
   light-canvas: "#f6f9ff"
+  light-panel: "#ffffff"
+  light-sidebar: "#f5fbff"
+  light-muted-surface: "#eaf4ff"
+  light-secondary-text: "#41495a"
+  light-muted-text: "#4c5566"
+  light-border: "#b9dceb"
+  light-input: "#9fcad9"
+  light-accent: "#e0f7ff"
   dark-canvas: "#05070b"
-  retro-light-paper: "#f7f5f0"
-  retro-light-panel: "#ffffff"
-  retro-light-ink: "#18171c"
-  retro-light-muted: "#55505f"
-  retro-light-line: "#24212c"
-  retro-light-action: "#6d28d9"
-  retro-light-action-hover: "#5b21b6"
-  retro-selection: "#d1f2ff"
-  retro-selection-text: "#18171c"
-  retro-light-subtle: "#ece7f2"
-  retro-light-danger: "#b91c1c"
-  retro-light-warning: "#8a4b08"
-  retro-light-success: "#166534"
-  retro-dark-paper: "#18171c"
-  retro-dark-panel: "#232128"
-  retro-dark-ink: "#faf8f3"
-  retro-dark-muted: "#d3cedb"
-  retro-dark-line: "#aaa2b5"
-  retro-dark-shadow: "#09080c"
-  retro-dark-action: "#c4a0ff"
-  retro-dark-action-hover: "#d4bcff"
-  retro-dark-subtle: "#35313e"
-  retro-dark-active: "#453657"
-  retro-dark-danger: "#ffb4ad"
-  retro-dark-warning: "#ffd583"
-  retro-dark-success: "#86efac"
+  dark-surface: "#0b0f14"
+  dark-sidebar: "#101720"
+  dark-panel: "#151d26"
+  dark-overlay: "#1d2834"
+  dark-muted-surface: "#263442"
+  dark-text: "#fafcff"
+  dark-secondary-text: "#dbe4ee"
+  dark-muted-text: "#d2dbe5"
+  dark-accent: "#172434"
+  focus-sky: "#38bdf8"
 typography:
   body:
     fontFamily: "Aeonik, IBM Plex Sans, Geist, Avenir Next, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, Apple Color Emoji, Segoe UI Emoji"
@@ -43,80 +35,77 @@ typography:
     fontFamily: "Aeonik, IBM Plex Sans Variable, sans-serif"
   public-auth:
     fontFamily: "Avenir Next, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
-  retro-title:
-    fontWeight: 700
-    letterSpacing: "-0.02em"
-  retro-public-heading:
-    fontWeight: 750
-    letterSpacing: "-0.03em"
-  retro-button:
+  button:
     fontSize: "0.875rem"
-    fontWeight: 650
+    fontWeight: 500
     lineHeight: "1.25rem"
+  card-title:
+    fontSize: "1rem"
+    fontWeight: 500
+    lineHeight: "1.5rem"
+  label:
+    fontSize: "0.75rem"
+    fontWeight: 500
+    lineHeight: "1rem"
 rounded:
-  control: "8px"
+  base: "0.45rem"
+  control: "calc(0.45rem * 0.8)"
+  small: "calc(0.45rem * 0.6)"
   dls-control: "10px"
   dls-panel: "12px"
-  retro-control: "3px"
-  retro-square: "0px"
-  retro-switch-thumb: "1px"
+  soft-button: "0.5rem"
+  soft-panel: "0.75rem"
 spacing:
-  tight: "4px"
-  compact: "8px"
-  control: "12px"
-  panel-small: "16px"
-  desk-inline: "20px"
-  section: "24px"
+  tight: "0.25rem"
+  compact: "0.5rem"
+  control: "0.75rem"
+  panel-small: "1rem"
+  wide-control: "1.25rem"
+  section: "1.5rem"
 components:
-  retro-button-primary:
-    backgroundColor: "{colors.retro-light-action}"
-    textColor: "{colors.retro-light-panel}"
-    typography: "{typography.retro-button}"
-    rounded: "{rounded.retro-control}"
+  button-primary:
+    backgroundColor: "{colors.brand-ink}"
+    textColor: "{colors.brand-ice}"
+    typography: "{typography.button}"
+    rounded: "{rounded.control}"
     height: "2.25rem"
     padding: "0 0.75rem"
-  retro-button-primary-hover:
-    backgroundColor: "{colors.retro-light-action-hover}"
-  retro-button-primary-dark:
-    backgroundColor: "{colors.retro-dark-action}"
-    textColor: "{colors.retro-light-ink}"
-  retro-button-primary-dark-hover:
-    backgroundColor: "{colors.retro-dark-action-hover}"
-  retro-button-outline:
-    backgroundColor: "{colors.retro-light-panel}"
-    textColor: "{colors.retro-light-ink}"
-    rounded: "{rounded.retro-control}"
-  retro-button-secondary:
-    backgroundColor: "{colors.retro-selection}"
-    textColor: "{colors.retro-selection-text}"
-    rounded: "{rounded.retro-control}"
-  retro-button-destructive:
-    backgroundColor: "{colors.retro-light-panel}"
-    textColor: "{colors.retro-light-danger}"
-    rounded: "{rounded.retro-control}"
-  retro-button-ghost:
-    rounded: "{rounded.retro-control}"
-    typography: "{typography.retro-button}"
-  retro-button-link:
-    textColor: "{colors.retro-light-action}"
-    typography: "{typography.retro-button}"
-  retro-input:
-    backgroundColor: "{colors.retro-light-panel}"
-    textColor: "{colors.retro-light-ink}"
-    rounded: "{rounded.retro-control}"
+  button-primary-dark:
+    backgroundColor: "{colors.brand-ice}"
+    textColor: "{colors.brand-ink}"
+  button-outline:
+    typography: "{typography.button}"
+    rounded: "{rounded.control}"
+  button-secondary:
+    backgroundColor: "{colors.light-muted-surface}"
+    typography: "{typography.button}"
+    rounded: "{rounded.control}"
+  button-ghost:
+    typography: "{typography.button}"
+    rounded: "{rounded.control}"
+  button-destructive:
+    typography: "{typography.button}"
+    rounded: "{rounded.control}"
+  button-link:
+    typography: "{typography.button}"
+    rounded: "{rounded.control}"
+  input:
+    backgroundColor: "{colors.light-canvas}"
+    rounded: "{rounded.control}"
     height: "2.25rem"
     padding: "0.25rem 0.75rem"
-  retro-navigation-selected:
-    backgroundColor: "{colors.retro-selection}"
-    textColor: "{colors.retro-selection-text}"
-    rounded: "{rounded.retro-control}"
-  retro-card:
-    backgroundColor: "{colors.retro-light-panel}"
-    textColor: "{colors.retro-light-ink}"
-    rounded: "{rounded.retro-control}"
-  retro-badge:
-    backgroundColor: "{colors.retro-light-action}"
-    textColor: "{colors.retro-light-panel}"
+  navigation-selected:
+    backgroundColor: "{colors.light-muted-surface}"
+    rounded: "{rounded.control}"
+  card:
+    backgroundColor: "{colors.light-panel}"
+    rounded: "{rounded.base}"
+    padding: "1.5rem 0"
+  badge:
+    backgroundColor: "{colors.brand-ink}"
+    textColor: "{colors.brand-ice}"
+    typography: "{typography.label}"
+    rounded: "{rounded.control}"
     padding: "0.125rem 0.5rem"
 ---
 
@@ -126,162 +115,115 @@ components:
 
 **Creative North Star: "Matterhorn workbench"**
 
-Matterhorn is a focused, desk-first workspace for doing useful work through chat. Preserve the real logo, protocol marks, readable incumbent type, theme preferences and explicit review boundaries. The retro workbench uses flat paper/charcoal planes, ink outlines, violet actions, ice selection and hard offset depth; it is not a rebrand or a simulated trading game.
+Matterhorn is a focused workspace for doing useful work through chat. The approved restored interface keeps the real logo, protocol marks, compact sans-serif type, softly separated surfaces and visible work controls. Conversation navigation and desktop tool rails frame the main workspace; mobile uses the existing menus and overlays.
 
-Retro is the approved release default as of 30 September 2026. Styling remains scoped to the root marker, with an explicit build-time legacy rollback; both interfaces use the same routes, persisted chats, model selections and draft stores. This source-backed contract documents implementation, not hosted deployment, installed-app typography acceptance or real agent/chain execution.
+The restored interface is the only supported layout. The retired retro and minimal UI switches, alternate branches and retro stylesheet are removed; old environment values do not select another design. This restores the approved visual language associated with PR #1027 without resetting later runtime, security, consent, accounting or stored user data. System, Light and Dark preferences remain available.
 
 **Key Characteristics:**
 
-- Familiar Matterhorn identity and compact operational typography.
-- Default retro geometry with separately preserved incumbent rollback styling.
-- One focused conversation and contextual tools on demand.
-- Explicit focus, selection, unavailable states and reviewed-action boundaries.
+- Familiar Matterhorn ink and ice identity with semantic light and dark surfaces.
+- Restored workspace navigation, main content and desktop tool rails.
+- Compact rounded controls, subtle borders and component-specific soft depth.
+- Visible focus, selection, unavailable states and explicit review boundaries.
 
-The durable product contract remains in [PRODUCT.md](PRODUCT.md) and [docs/ui/matterhorn-design-system.md](docs/ui/matterhorn-design-system.md). The scoped retro implementation plan and direction are recorded in [docs/ui/retro-ui-plan-2026-09-28.md](docs/ui/retro-ui-plan-2026-09-28.md) and [qa-reports/retro-ui/2026-09-28/direction-contract.md](qa-reports/retro-ui/2026-09-28/direction-contract.md). This merge does not migrate PRODUCT metadata or imply that the separate incumbent design-system document has been rewritten.
+This is an implementation contract, not hosted, accessibility or real-inference certification. [PRODUCT.md](PRODUCT.md) retains product context; the [implementation companion](docs/ui/matterhorn-design-system.md) maps controls to source and current checks. Historical redesign plans are superseded and must not be treated as implementation instructions.
 
 ## Colors
 
-Frontmatter primitives are normative; `retro-light-*` and `retro-dark-*` are theme-specific alternatives, never unscoped replacements. Runtime source is [apps/app/src/styles/retro.css](apps/app/src/styles/retro.css); the incumbent semantic tokens remain in [apps/app/src/app/index.css](apps/app/src/app/index.css).
-
-The sidecar's eight-step OKLCH tonal ramps are synthesized documentation swatches, not additional shipped palette tokens. Component specimens bind to root CSS variables with light-preview fallbacks; the explicitly labelled incumbent row remains a separate specimen.
+The frontmatter records literal active values from [index.css](apps/app/src/app/index.css). Runtime semantic variables remain authoritative; theme-specific entries are alternatives, not a second palette. [colors.css](apps/app/src/styles/colors.css) supplies Radix scales, including display-P3 overrides: preserve these native bindings rather than replacing them with approximate hex colors.
 
 ### Primary
 
-- **Incumbent brand ink and ice:** retain the existing logo, ink/ice brand anchors and blue/cyan-tinted semantic theme surfaces when retro is off.
-- **Retro violet action:** light action/hover use the light violet pair; dark action/hover use the lighter violet pair with ink action text. Light action text uses the light panel color. Light focus uses the action color; dark focus uses ice.
+Ink actions with ice text in light mode invert to ice actions with ink text in dark mode. Shared controls use `--primary` and `--primary-foreground`; the older soft-button wrapper uses `--dls-accent` and `--dls-accent-fg`. Their hover expressions differ, so do not replace one with the other merely because their resting colors match.
 
 ### Secondary
 
-- **Ice selection:** selected picker options, sidebar navigation, tabs and public navigation use ice with the fixed selection-text ink in both themes. Selected descendants inherit this pair; dark primary text must not leak onto ice.
-- **Status:** danger, warning and success remain separately named semantic feedback. Their theme-specific tokens support readable error, transaction-warning and integration-readiness text; color never replaces a label or server evidence.
+Muted surfaces, accent surfaces and the sky focus token provide selection and interaction feedback. The active sidebar uses `--sidebar-accent`, not a universal ice fill. Desk and status accents retain their named source variables; color must accompany truthful labels, source/freshness and capability state.
 
 ### Neutral
 
-- **Paper / charcoal:** the page and sidebar plane; **panel:** the working plane; **ink / muted:** main and supporting text; **line:** structural boundaries; **subtle:** hover and quiet conversation surfaces.
-- The separate full model-list selected row uses the subtle surface with an inset line; it is not the picker-option ice pair. Dark `dls-active` retains its explicit plum fallback. Do not infer that every active surface has the same background.
-- Light hard shadows use the light line token; dark shadows use the dark-shadow token.
+Canvas, sidebar, working panel and overlay have distinct roles. Light primary text binds to `--slate-12`; dark primary text uses the explicit dark-text value. Dark secondary text and muted text are distinct current values, not the older guide's cached palette. Dark borders and inputs retain their source alpha expressions over the ice RGB token.
 
-### Incumbent contract (retro off)
+The Settings sidebar deliberately keeps its existing fixed ink palette through `SETTINGS_SIDEBAR_STYLE`, including in Light mode. Do not claim that this sidebar follows every main-canvas theme change.
 
-- Use light and dark themes. Do not make either theme a one-note black/cyan page.
-- Desk colors are accents, not full-page floods: Bittensor cyan/violet, Hyperliquid blue/green, Polymarket purple/amber, Longevity coral/mint and Memory gold/slate. Retro preserves these existing desk/protocol accents rather than replacing the marks.
-- Existing semantic `dls` tokens and theme preferences remain authoritative. The minimal-layout-only option introduces no new palette or decorative motion; retro is the separate, explicitly scoped alternative.
+The sidecar's eight-step tonal ramps are synthesized documentation swatches, not shipped tokens. Its component snippets bind to native CSS variables; literal fallbacks support isolated light previews and do not override the application theme.
 
-**The Scope Rule.** Apply retro values only under the retro root marker; flag-off surfaces keep the incumbent semantic system.
+**The Semantic Color Rule.** Use the existing semantic variable for the component and theme; do not replace the palette or infer runtime readiness from color.
 
 ## Typography
 
-No font is introduced by retro. The frontmatter records the existing main body stack, the separate sans/heading utility stacks, the existing public-auth stack, and only the weight/tracking overrides actually present in retro CSS. Main app body sizing remains relative to the user's root font-size preference; operational copy stays normal case. Large display type belongs on first-run welcome, not routine workspace controls or long chat/legal text.
+The body remains the existing Aeonik-first fallback stack at the relative body size and line height in frontmatter. Root sizing reads the user's `--openwork-font-size` preference. Sans and heading utilities separately reference the bundled Geist Variable and IBM Plex Sans Variable families. No new font, uppercase-label system or pixel typography is introduced.
 
-Retro card/dialog titles use the compact title role; public page/auth headings use the heavier public-heading role. Buttons use the retro-button role, while shared sizing remains in the existing primitive. Headings do not require uppercase labels or pixel lettering.
+Shared buttons use the button role, card titles use the card-title role, and compact badges use the label role. Shared inputs use 1rem text below the 768px utility breakpoint and 0.875rem at or above it. These are existing component values, not a claim that every control meets a universal target size.
 
-Typography has two existing entry paths. The signed-out `PublicSigninBootstrap` intentionally does not load the main app stylesheet: it inherits the Avenir Next/system stack from the critical style in [apps/app/index.html](apps/app/index.html). Main app content and public Security load the main stylesheet, which imports Geist Variable and IBM Plex Sans Variable assets; its unlayered body stack also names non-Variable families. Do not inject main-app CSS into an auth fixture or change production font families to make fixtures agree.
+Signed-out auth is a separate entry path: [index.html](apps/app/index.html) supplies its critical Avenir Next/system stack, while the main app/public-content stylesheet imports the bundled Variable faces. Preserve that separation and saved font choices; do not inject main-app CSS into auth solely to make fixtures look identical.
 
-Local fixture/distribution checks now compare the hydrated auth title's family, size, weight and line-height and verify that both bundled Variable faces load on public Security with matching body-family declarations. This is scoped local browser evidence, not a claim that a particular bundled face supplies every glyph or that installed/native text metrics are accepted; current results remain in the dated QA evidence.
-
-**The Inherited Type Rule.** Preserve existing font assets, family preferences and readable text hierarchy; the retro flag changes geometry and emphasis, not font identity.
+**The Inherited Type Rule.** Preserve existing font assets, user sizing and readable hierarchy; document the actual entry path rather than inventing a universal rendered face.
 
 ## Layout
 
-### Rollout and rollback
+The workspace retains its left conversation/project navigation, central header and content, and right-side desktop tool/desk access. Home contains the existing model setup/status row, desk choices, workflow/project controls and activity areas. Suggestions populate an editable draft and never send automatically. Model, Profile, Account, wallet and Settings access must remain available through supported paths.
 
-Retro styling and the desk-first minimal layout are enabled when `VITE_MATTERHORN_RETRO_UI` is absent, empty, `1` or `true`. Set it explicitly to `0` or `false` and rebuild for legacy styling; other invalid values also remain off. `VITE_MATTERHORN_MINIMAL_UI=1` (or `true`) remains independently available for the minimal layout with incumbent styling. With both flags explicitly off, the existing layout and legacy right rail remain.
+The active mobile hook switches below 1024px. Context panels are full-screen below 1024px, sheets from 1024 through 1279px and docked from 1280px. Shared Sidebar has 16rem desktop, 18rem mobile and 3rem icon defaults; the workspace can supply persisted width overrides. Do not confuse a component's 768px Tailwind utility breakpoint with the shell's 1024px mobile policy.
 
-Settings → Appearance offers System, Light and Dark. System is the first-use default. The bootstrap reads the same canonical preference and legacy-key precedence as the hydrated app, before first paint. Existing choices are preserved on reload; the Settings sidebar inherits theme tokens instead of forcing a dark palette.
+Keep the composer inside its content column, preserve draft/request ownership on navigation, and allow long content to wrap or use its intentional bounded scroller. Settings action headers reflow under their 40rem container query. The compact tool menu has a separate maximum-height 420px viewport adaptation.
 
-The app bootstrap and desktop overlay set `html[data-matterhorn-ui="retro"]`; the public auth build adds the same marker and critical retro CSS for first paint. Portals inherit root tokens. Disabling retro removes the marker and restores incumbent styling; a separately enabled minimal flag still keeps the minimal layout. These are build-time options, not stored account/workspace settings, and rollback does not migrate chats, drafts or model selections.
-
-### Desk-first layout (minimal or retro enabled)
-
-- One left navigation column with workspace, New chat, five desks, recent chats and Settings.
-- Header: conversation or launcher title, model, Workspace tools. No permanent right rail in the minimal layout.
-- Below 768px, navigation is a labelled drawer. Contextual tools are full-screen below 1024px, a sheet up to 1279px, and a docked pane from 1280px. Only one contextual tool opens at a time.
-- Launcher uses open, divided rows. Secondary project information is collapsed. Chat suggestions fill drafts, never send.
-- Models use a searchable list with a provider filter, pending/error feedback and server-persisted selection.
-- The composer remains visible without overlapping content. Back to chat, Home, Profile and Settings stay discoverable.
-
-### Retro adaptations
-
-The desk launcher is one framed group, not a card per desk: rows have a minimum height of 76px, horizontal padding from `spacing.desk-inline`, and 5px trailing/bottom clearance for the panel shadow. Picker options have a minimum height of 44px. Wrapping conversation starters, integration actions and narrow transaction buttons retain a 44px minimum height; this is not a claim that every existing button is 44px tall.
-
-At viewport widths up to 639px, transaction actions stack, ticket padding uses `spacing.panel-small`, and managed-tool headings wrap. Up to 480px, note filters become one column and Memory view navigation wraps with a 12px row gap. Settings item headers use a separate container query at a maximum of 40rem: actions move to the next row with an 8px top gap. These are distinct from the inherited shell breakpoints.
+System is the first-use theme preference; startup and hydration use the same saved preference precedence. Public auth, guides and portals use the restored styling without a retired root marker. Theme changes do not migrate chats, drafts or model selections.
 
 ## Elevation & Depth
 
-### Incumbent (retro off)
+The active depth vocabulary is soft semantic layering: `--dls-shell-shadow`, `--dls-card-shadow` and `--dls-overlay-shadow` have separate light/dark definitions recorded in the sidecar. Shared Card explicitly uses card depth; its outline variant is shadowless.
 
-Keep the existing semantic shell/card/overlay shadows and soft tonal layering. The retro hard-shadow vocabulary does not replace these defaults globally.
+Do not apply those shadows to every similarly named wrapper. The later `.ow-soft-card` declaration resolves its shadow to `--dls-glow`, currently none. In a right-side panel that wrapper is also borderless, square and transparent. Shared buttons have no hard offset shadow; ordinary focus rings are interaction feedback, not decorative elevation.
 
-### Retro enabled
-
-Depth is structural and hard-edged: actions and the composer use a 3px by 3px zero-blur offset; overlays, the launcher and the transaction batch use a 5px by 5px zero-blur offset. Enabled non-ghost/non-link buttons compress to a 1px by 1px shadow on press with a 2px by 2px translation. Disabled/aria-disabled buttons have no shadow and no translation.
-
-The shell/header, sheets, command dialog, Memory articles, user messages and protocol results stay shadowless where explicitly scoped. Do not add hard shadows to every plane. Exact shadow and motion expressions are in the sidecar extensions, not unsupported frontmatter groups.
-
-**The Structural Depth Rule.** Use hard offsets to identify actions and raised work surfaces; keep reading and conversation planes quiet.
+**The Component Depth Rule.** Follow the active component and CSS cascade; a shared shadow token does not make every workspace surface raised.
 
 ## Shapes
 
-The incumbent contract remains gently curved (8–12px cards/controls), with existing semantic control/panel radii and component-specific values. Avoid giant pill cards except small badges.
+The shared radius base is 0.45rem; medium controls use the source 0.8 multiplier and shared cards use the base. Keep the source formulas rather than documenting every control as 8px. Existing DLS wrappers separately retain 10px/12px values, and soft-button/panel classes retain their rem radii.
 
-Retro explicitly styled controls, cards, panels and selected navigation use `rounded.retro-control`. Tabs rails, note fields and the mobile sidebar keep square edges; the switch thumb uses its own small corner. Shared badges inherit the existing radius formula (`calc(var(--radius) * 0.8)`), not a fabricated universal 3px override. Structural outlines are 2px; transaction steps use 1px except the active step at 2px.
-
-Page sections are not nested cards. Use cards only for repeatable items, previews, receipts, memory suggestions and focused tool panels.
+Borders are ordinarily subtle single-pixel boundaries. Rounded badges stay compact. Preserve the existing distinction between open workspace sections, shared cards, overlays and tools; do not add nested card shells or hard-outline geometry.
 
 ## Components
 
-### Buttons, fields and focus
+### Buttons
 
-Retro primary buttons use action colors; outline buttons use panel/ink; secondary buttons use ice/selection ink; destructive buttons use a panel surface with danger text and border. These four variants have hard borders and offset shadows. Ghost/link variants remain unraised. Outline/ghost hover uses the subtle surface; the primary hover uses its explicit theme token. Existing primitive dimensions, semantics, pending behavior and disabled opacity remain.
+The shared [Button](apps/app/src/components/ui/button.tsx) keeps six variants: primary, outline, secondary, ghost, destructive and link. Outline is a tinted muted surface with a transparent border, not an outlined white card. Destructive uses semantic danger text/border and a tinted hover, not a solid danger fill.
 
-Fields/select triggers use a panel surface, ink text, muted placeholders, a 2px line border and no shadow. Invalid fields use the danger border. The composer changes its border on focus-within. Checkbox/switch checked state uses action/action-text; native checkboxes use the action accent.
+Default buttons are 2.25rem high with compact inline padding. Focus changes the border to the ring color and adds a 2px ring at 35% opacity. Existing enabled press feedback scales to 0.98; reduced motion removes that scale and transition. Disabled controls retain pointer suppression and 0.5 opacity. Preserve Base UI semantics when composing triggers.
 
-Keyboard focus is independent of press feedback: the scoped focus-visible selector gives buttons, links, fields, summaries, role-buttons/tabs and editable content a 3px focus-color outline with 3px offset. Launcher rows inset that outline by 5px to keep it visible within the group. Preserve Base UI focus return, escape, ARIA and keyboard behavior.
+### Inputs and fields
 
-Button background/shadow/translation transitions are 120ms ease-out. Reduced motion removes pressed translation and switch/sidebar transitions; the existing global reduced-motion policy collapses other transition/animation durations to 0.01ms and one iteration. Do not claim still captures prove motion behavior.
+The shared [Input](apps/app/src/components/ui/input.tsx) has a one-pixel input border, semantic background/text, medium radius and labelled placeholder. Dark mode uses the background at 40% opacity. Focus uses the same 2px ring vocabulary; invalid and disabled states remain independent. Do not replace field labels with placeholders.
 
-### Navigation, selection and overlays
+### Navigation and overlays
 
-Selected sidebar entries use ice/ink, 700 weight and a 2px inset line; selected tabs use ice/ink and a 2px action-colored underline. Picker options add a 2px inset outline and keep title, capability, identifier and checkmark on the same selection ink. Unavailable picker options stay disabled with 0.6 opacity and a not-allowed cursor. The full model list retains its separately scoped subtle selected treatment.
+[Sidebar](apps/app/src/components/ui/sidebar.tsx) selected rows use the sidebar accent and medium weight; focus remains separately visible. Preserve current-page semantics, menu keyboard behavior, Escape and focus return. Account and sign-out access do not depend on optional Cloud. Dialogs, sheets and popovers keep their current Base UI behavior and theme inheritance; the documentation specimens are not substitutes for those interactive primitives.
 
-Dialogs, alert dialogs, popovers and menus use framed panels with panel depth. Sheets and command dialogs use the same geometry without that shadow. The mobile drawer keeps an explicit 44px close control. Shared badges remain compact inherited components, not invented readiness certifications.
+### Cards and badges
 
-### Public and secondary surfaces
+[Card](apps/app/src/components/ui/card.tsx) uses a 45%-opacity semantic border, card background, card shadow and default 1.5rem vertical spacing; headers/content use matching inline padding. Its smaller variant uses 1rem spacing. [Badge](apps/app/src/components/ui/badge.tsx) is a compact text label with the shared medium radius, not proof of readiness or execution.
 
-Auth fields and mode controls share retro geometry; active auth modes use ice selection. In the retro auth surface, truthful Public beta status follows the description rather than appearing above the heading; flag-off disclosure placement is unchanged. Public trust navigation uses ice selection while article prose retains its reading hierarchy. Notes, Memory, integrations and settings inherit the scoped tokens without changing their capability gates or state contracts.
+The sidecar contains ten source-backed, self-contained specimens: six button variants, input, selected sidebar row, badge and card. They expand the existing utilities into scoped CSS for the documentation panel, preserve theme-variable bindings, and intentionally contain no application actions.
 
-### Preserved product and interaction contract
+### Preserved interaction boundaries
 
-The primary desks are Private AI, Bittensor, Hyperliquid, Polymarket, and Sui. Memory, notes, wallet and integrations are workspace tools. Longevity is standalone and outside the primary crypto experience. Capability descriptions below are not deployment-readiness evidence.
-
-- **Home** is the launcher. It creates a session, opens a desk, or starts a workflow with an editable prompt. It never auto-sends.
-- **Bittensor** supports public SS58 wallet reads, subnet discovery, validator comparison, watches, receipt import, and coldkey/hotkey explanations. TAO transfers, staking, and unstaking move from an agent-prepared draft into a separate Finney transaction ticket, where an installed Bittensor-compatible extension reviews, signs, and broadcasts the exact call. Delegation and advanced runtime calls remain unavailable until each adapter and review contract is audited.
-- **Hyperliquid** supports account/orderbook/funding/open-order reads, watches, previews, receipt evidence, and manual connected-wallet execution in its dedicated trade ticket. Chat, MCP, CLI, and watches never auto-submit. Every order uses explicit review, a short-lived one-time intent, connected-wallet signing, and the deployment kill switch; testnet is the default and mainnet requires an additional typed confirmation.
-- **Polymarket** supports market discovery, outcome probability context, liquidity/orderbook reads, compliance state, watches, reviewed buy and sell orders, cancellation, and receipt evidence. A complete, compliance-allowed EOA order continues in a separate Polygon wallet ticket for exact review and wallet-authorized submission. Proxy accounts, watch-triggered orders, and unattended execution are unsupported. Compliance-blocked previews must not show executable price, size, or share fields.
-- **Longevity** is standalone. It is not Web3, not a market desk, and not medical care. It creates safe offline optimization workflows and client artifacts without diagnosis, prescription, treatment claims, guaranteed outcomes, live payment, live email, live hosting, or token-gating claims.
-- **Memory** is visible and user-controlled. No hidden saves. Every suggestion shows why suggested, source, sensitivity, confidence, and confirm/edit/dismiss controls.
-- **MCPs** explains how to use Matterhorn Desks tools outside the app in Codex, Claude Code, Claude Desktop, Cursor, and compatible MCP clients.
-
-- Every serious action uses agent draft -> separate exact review -> connected-wallet approval -> public receipt. Matterhorn never hides signing or signs on behalf of users. The current reviewed wallet paths are Hyperliquid place/cancel/modify/close actions, compliance-allowed Polymarket buy/sell/cancel actions, Bittensor TAO transfer/stake/unstake actions, and Sui coin/object/batch transfers. Advanced protocol calls stay unavailable until they receive their own audited adapter and review contract.
-- Empty, loading, degraded-provider, and no-wallet states must explain what still works and what to try next.
-- Stable launch navigation includes only production-approved surfaces. Generated-media publishing, billing, and Matterhorn Cloud stay hidden unless their explicit build flags are enabled.
+Keep provider consent, account/workspace isolation, model persistence, attachment preparation, request cancellation and safe retry behavior intact. Jev remains optional and revocable; it is not authorization. Protocol actions retain exact review, supported signer boundaries and honest source/freshness. Memory saves remain explicit and user-controlled. Feature gates and actual server capability data determine availability, not the appearance of an example.
 
 ## Do's and Don'ts
 
 ### Do:
 
-- Do preserve the Matterhorn logo, protocol marks, existing type, user font preferences and both themes.
-- Do keep retro scoped to its release switch and distinguish minimal-only, retro and incumbent layouts.
-- Do keep required consent, source/freshness, transaction terms, signer boundaries and unavailable states explicit.
-- Do use server capability data rather than visual readiness assumptions.
-- Do preserve keyboard focus, reduced-motion behavior, editable drafts and contextual tool navigation.
+- Do preserve the approved restored layout, Matterhorn marks, existing fonts, user preferences and both themes.
+- Do reuse active semantic tokens and shared components, including their component-specific radius and depth.
+- Do keep model, Profile, Account, wallet and Settings access available at supported widths.
+- Do preserve consent, keyboard focus, reduced motion, editable drafts and explicit review boundaries.
+- Do distinguish local UI evidence from hosted, packaged-desktop and real-provider acceptance.
 
 ### Don't:
 
-- Don't treat a local opt-in, a synthetic screenshot or this document as deployed rollout, installed-app typography acceptance or real execution proof.
-- Don't enable the minimal or retro layout for production before live runtime acceptance.
-- Don't introduce new fonts, pixel body text, decorative dashboards, gradients, duplicate navigation rails or fabricated statistics.
-- Don't use customer-facing Crypto workspace, Services, Computer Use, OpenWork or unexplained OpenCode copy.
-- Don't collect seed phrases, private keys, mnemonics, raw signatures, signed payloads, wallet exports, API secrets or exchange secrets in UI fields.
-- Don't allow agent-initiated, watch-triggered, unattended or unreviewed submission; Polymarket submission without explicit allowed compliance; unsupported Bittensor write submission; or hidden signing claims.
-- Don't ship trapped rails, horizontal overflow, nested scrolling inside cards, composer overlap, clipped button text or cards inside cards.
+- Don't reintroduce the removed retro/minimal flags, alternate layouts, hard shadows or obsolete component examples.
+- Don't invent readiness, statistics, signing success or permission from a visual state.
+- Don't introduce new fonts, decorative dashboards, nested cards or a replacement visual direction.
+- Don't hide errors, transaction terms, consent controls or account recovery to simplify the layout.
+- Don't ship trapped rails, unintended horizontal overflow, composer overlap or clipped action labels.
