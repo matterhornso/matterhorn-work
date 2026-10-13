@@ -62,7 +62,7 @@ function renderSection(section, index) {
   </section>`;
 }
 
-export function renderGuide(guide, { indexable = false, buildCommit = "", retro = true } = {}) {
+export function renderGuide(guide, { indexable = false, buildCommit = "", retro = false } = {}) {
   if (buildCommit && !/^[a-f0-9]{40}$/i.test(buildCommit)) throw new Error("Guide build commit must be a full SHA");
   const url = `${PUBLIC_ORIGIN}${guidePath(guide)}`;
   const breadcrumbs = [{ "@type": "ListItem", position: 1, name: "Matterhorn guides", item: `${PUBLIC_ORIGIN}/learn` }];
@@ -137,7 +137,7 @@ export async function buildPublicGuides({ outDir = resolve(appRoot, "dist"), env
   const indexable = searchPublication(env);
   const buildCommit = env.VITE_MATTERHORN_BUILD_COMMIT?.trim() ?? "";
   const retroFlag = env.VITE_MATTERHORN_RETRO_UI;
-  const retro = retroFlag === undefined || retroFlag === "" || retroFlag === "1" || retroFlag === "true";
+  const retro = retroFlag === "1" || retroFlag === "true";
   // Render and validate everything before writing any generated files.
   const pages = publicGuides.map((guide) => ({ name: guide.slug || "index", html: renderGuide(guide, { indexable, buildCommit, retro }) }));
   const output = join(outDir, "learn");

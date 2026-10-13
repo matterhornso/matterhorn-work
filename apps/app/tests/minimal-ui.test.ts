@@ -7,16 +7,18 @@ import {
 } from "../src/app/lib/minimal-ui";
 
 describe("minimal workspace release", () => {
-  test("defaults to desk-first through retro and preserves explicit legacy rollback", () => {
-    expect(resolveMinimalUi(undefined)).toBe(true);
+  test("restores the PR 1027 layout while retaining explicit preview options", () => {
+    expect(resolveMinimalUi(undefined)).toBe(false);
+    expect(resolveMinimalUi({})).toBe(false);
     for (const value of [undefined, "", "0", "false", false, true])
-      expect(resolveMinimalUi({ VITE_MATTERHORN_RETRO_UI: "0", VITE_MATTERHORN_MINIMAL_UI: value })).toBe(
+      expect(resolveMinimalUi({ VITE_MATTERHORN_MINIMAL_UI: value })).toBe(
         false,
       );
     for (const value of ["1", "true"])
       expect(resolveMinimalUi({ VITE_MATTERHORN_RETRO_UI: "0", VITE_MATTERHORN_MINIMAL_UI: value })).toBe(
         true,
       );
+    expect(resolveMinimalUi({ VITE_MATTERHORN_RETRO_UI: "1", VITE_MATTERHORN_MINIMAL_UI: "0" })).toBe(true);
   });
   test("keeps the five primary desks in the approved order", () => {
     expect(PRIMARY_DESKS.map((desk) => desk.id)).toEqual([

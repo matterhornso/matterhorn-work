@@ -1,6 +1,8 @@
 import React from "react";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import { spawnSync } from "node:child_process";
+import { MINIMAL_UI } from "../src/app/lib/minimal-ui";
 import { AppSidebar, type AppSidebarProps } from "../src/react-app/domains/session/sidebar/app-sidebar";
 import { ShellConfigProvider } from "../src/react-app/shell/shell-config";
 import { SidebarProvider } from "../src/components/ui/sidebar";
@@ -36,7 +38,27 @@ function renderSidebar(overrides: Partial<AppSidebarProps> = {}) {
   );
 }
 
-describe("default retro sidebar preserves legacy navigation", () => {
+if (!MINIMAL_UI) describe("restored legacy sidebar", () => {
+  test("retains workspace, creation and navigation controls before hydration", () => {
+    const html = renderSidebar();
+    for (const label of ["Parity project", "Add workspace", "Workspace options", "Resize workspace column"])
+      expect(html).toContain(label);
+    expect(html).not.toContain('aria-label="Primary desks"');
+  });
+
+  test("explicit retro preview still passes the complete sidebar parity contract", () => {
+    const child = spawnSync(process.execPath, ["--no-env-file", "test", import.meta.path], {
+      env: { ...process.env, VITE_MATTERHORN_RETRO_UI: "1", VITE_MATTERHORN_MINIMAL_UI: "0" },
+      encoding: "utf8", timeout: 30_000,
+    });
+    expect(child.error).toBeUndefined();
+    expect(child.status).toBe(0);
+    expect(child.stderr).toContain("4 pass");
+    expect(child.stderr).toContain("0 fail");
+  });
+});
+
+if (MINIMAL_UI) describe("opt-in retro sidebar preserves legacy navigation", () => {
   test("renders selected descendants, imported roots, activity and shared session actions", () => {
     const html = renderSidebar();
     for (const title of ["Parent conversation", "Child conversation", "Grandchild conversation", "Imported conversation"])

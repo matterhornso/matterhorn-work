@@ -612,10 +612,10 @@
   ],
   "narrative": {
     "northStar": "Matterhorn workbench",
-    "overview": "Matterhorn is a focused, desk-first workspace for doing useful work through chat. Preserve the real logo, protocol marks, readable incumbent type, theme preferences and explicit review boundaries. The opt-in retro workbench uses flat paper/charcoal planes, ink outlines, violet actions, ice selection and hard offset depth; it is a visual alternative, not a rebrand or a simulated trading game.\n\nThe incumbent interface remains the default. Retro styling is scoped to the root marker set by the default-off build flag, and both interfaces use the same routes, persisted chats, model selections and draft stores. This source-backed contract documents implementation, not hosted deployment, installed-app typography acceptance or real agent/chain execution.",
+    "overview": "Matterhorn is a focused, desk-first workspace for doing useful work through chat. Preserve the real logo, protocol marks, readable incumbent type, theme preferences and explicit review boundaries. The opt-in retro workbench uses flat paper/charcoal planes, ink outlines, violet actions, ice selection and hard offset depth; it is a visual alternative, not a rebrand or a simulated trading game.\n\nThe pre-retro PR #1027 layout and theme styling are the approved default as of 12 October 2026. Both UI flags default off when absent or empty; only explicit `1` or `true` opts into a preview, and retro also enables the minimal layout. Existing deployments with old overrides must set both flags to `0` and rebuild to restore the default interface.\n\nRetro styling remains scoped to its opt-in root marker. Both interfaces use the same routes, persisted chats, model selections and draft stores; later runtime, security, consent and accounting behavior is preserved. Jev controls remain available so a remembered opt-in can still be inspected and removed. This source-backed contract documents implementation, not hosted deployment, installed-app typography acceptance or real agent/chain execution.",
     "keyCharacteristics": [
       "Familiar Matterhorn identity and compact operational typography.",
-      "Default-off retro geometry with separately preserved incumbent styling.",
+      "Pre-retro PR #1027 layout and styling by default, with minimal and retro previews explicitly opt-in.",
       "One focused conversation and contextual tools on demand.",
       "Explicit focus, selection, unavailable states and reviewed-action boundaries."
     ],
@@ -632,13 +632,13 @@
       },
       {
         "name": "The Structural Depth Rule",
-        "body": "Use hard offsets to identify actions and raised work surfaces; keep reading and conversation planes quiet.",
+        "body": "In retro mode, use hard offsets to identify actions and raised work surfaces; keep reading and conversation planes quiet.",
         "section": "elevation"
       }
     ],
     "dos": [
       "Do preserve the Matterhorn logo, protocol marks, existing type, user font preferences and both themes.",
-      "Do keep retro scoped to its default-off flag and distinguish minimal-only, retro and incumbent layouts.",
+      "Do keep retro and minimal scoped to their default-off build flags and preserve the PR #1027 layout when both are off.",
       "Do keep required consent, source/freshness, transaction terms, signer boundaries and unavailable states explicit.",
       "Do use server capability data rather than visual readiness assumptions.",
       "Do preserve keyboard focus, reduced-motion behavior, editable drafts and contextual tool navigation."

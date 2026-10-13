@@ -4,11 +4,12 @@ import { applyRetroUi, resolveRetroUi } from "../src/app/lib/retro-ui";
 import { resolveMinimalUi } from "../src/app/lib/minimal-ui";
 
 describe("retro visual rollout", () => {
-  test("defaults to retro with an explicit visual rollback", () => {
-    expect(resolveRetroUi(undefined)).toBe(true);
-    for (const value of ["0", "false", false, true, "yes"])
+  test("restores the PR 1027 appearance unless retro is explicitly enabled", () => {
+    expect(resolveRetroUi(undefined)).toBe(false);
+    expect(resolveRetroUi({})).toBe(false);
+    for (const value of [undefined, "", "0", "false", false, true, "yes"])
       expect(resolveRetroUi({ VITE_MATTERHORN_RETRO_UI: value })).toBe(false);
-    for (const value of [undefined, "", "1", "true"]) {
+    for (const value of ["1", "true"]) {
       const env = { VITE_MATTERHORN_RETRO_UI: value };
       expect(resolveRetroUi(env)).toBe(true);
       expect(resolveMinimalUi(env)).toBe(true);
@@ -19,7 +20,7 @@ describe("retro visual rollout", () => {
     const vite = readFileSync(new URL("../vite.config.ts", import.meta.url), "utf8");
     const docker = readFileSync(new URL("../../../packaging/docker/Dockerfile.public-beta-web", import.meta.url), "utf8");
     expect(vite).toContain("retroUiBuild = resolveRetroUi(config.env)");
-    expect(docker).toContain("ARG VITE_MATTERHORN_RETRO_UI=1");
+    expect(docker).toContain("ARG VITE_MATTERHORN_RETRO_UI=0");
     expect(docker).toContain("ENV VITE_MATTERHORN_RETRO_UI=${VITE_MATTERHORN_RETRO_UI}");
   });
 

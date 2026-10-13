@@ -79,7 +79,7 @@ test("isolated generation writes seven pages, existing shared styles and safe cr
   assert.equal(result.indexable, false);
   assert.equal((await readdir(join(outDir, "learn"))).filter((f) => f.endsWith(".html")).length, 7);
   assert.doesNotMatch(await readFile(join(outDir, "robots.txt"), "utf8"), /Sitemap:/);
-  assert.match(await readFile(join(outDir, "learn/index.html"), "utf8"), /data-matterhorn-ui="retro"/);
+  assert.doesNotMatch(await readFile(join(outDir, "learn/index.html"), "utf8"), /data-matterhorn-ui|href="\/learn\/retro.css"/);
   assert.equal(await readFile(join(outDir, "learn.html"), "utf8"), await readFile(join(outDir, "learn/index.html"), "utf8"));
   for (const guide of publicGuides.filter((item) => item.slug)) {
     assert.equal(await readFile(join(outDir, "learn", guide.slug, "index.html"), "utf8"), await readFile(join(outDir, "learn", `${guide.slug}.html`), "utf8"));
@@ -91,6 +91,10 @@ test("isolated generation writes seven pages, existing shared styles and safe cr
   assert.doesNotMatch(html, /data-matterhorn-ui|href="\/learn\/retro.css"/);
   assert.match(html, new RegExp(`name="matterhorn-build-commit" content="${sha}"`));
   assert.match(await readFile(join(outDir, "robots.txt"), "utf8"), /Sitemap: https:\/\/desks.matterhorn.so\/sitemap.xml/);
+  for (const value of ["1", "true"]) {
+    await buildPublicGuides({ outDir, env: { VITE_MATTERHORN_RETRO_UI: value } });
+    assert.match(await readFile(join(outDir, "learn/index.html"), "utf8"), /data-matterhorn-ui="retro"/);
+  }
 });
 
 test("both Vercel layouts route approved guides ahead of SPA fallback and noindex aliases", async () => {
