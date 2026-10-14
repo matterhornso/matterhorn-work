@@ -363,7 +363,7 @@ export function buildModelReadinessSummary(
       detail: selectedProviderPrivacy
         ? selectedProviderPrivacy.allowed
           ? selectedProviderPrivacy.description
-          : `${selectedProviderPrivacy.description} Sending is blocked in this deployment.`
+          : `${selectedProviderPrivacy.description} Saving a model does not send a prompt. Requests are checked before sending and may be blocked or require approval.`
         : "Matterhorn has not received a provider policy for the selected model yet.",
       tone: selectedProviderPrivacyTone,
       ...(selectedProviderPrivacy?.policyUrl

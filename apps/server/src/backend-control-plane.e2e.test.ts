@@ -51,6 +51,8 @@ const priorEnv = {
   stripePriceIdMax: process.env.MATTERHORN_STRIPE_PRICE_ID_MAX,
   stripeTestCustomerId: process.env.MATTERHORN_STRIPE_TEST_CUSTOMER_ID,
   bittensorSidecarUrl: process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL,
+  providerPrivacyMode: process.env.MATTERHORN_PROVIDER_PRIVACY_MODE,
+  cudosTrainingUse: process.env.MATTERHORN_CUDOS_TRAINING_USE,
 };
 const stops: Array<() => void | Promise<void>> = [];
 const dirs: string[] = [];
@@ -99,8 +101,12 @@ async function getFreePort(): Promise<number> {
   });
 }
 
-async function startProviderCatalogServer(payload: unknown): Promise<string> {
+async function startProviderCatalogServer(
+  payload: unknown,
+  requests: string[] = [],
+): Promise<string> {
   const server = createHttpServer((request, response) => {
+    requests.push(request.url ?? "/");
     if (request.url?.startsWith("/global/health")) {
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ healthy: true, version: "test" }));
@@ -353,6 +359,8 @@ afterEach(async () => {
   restoreEnv("stripePriceIdMax", "MATTERHORN_STRIPE_PRICE_ID_MAX");
   restoreEnv("stripeTestCustomerId", "MATTERHORN_STRIPE_TEST_CUSTOMER_ID");
   restoreEnv("bittensorSidecarUrl", "BITTENSOR_SUBTENSOR_SIDECAR_URL");
+  restoreEnv("providerPrivacyMode", "MATTERHORN_PROVIDER_PRIVACY_MODE");
+  restoreEnv("cudosTrainingUse", "MATTERHORN_CUDOS_TRAINING_USE");
 });
 
 describe("backend control plane routes", () => {
@@ -737,6 +745,59 @@ describe("backend control plane routes", () => {
     });
     expect(rejected.response.status).toBe(400);
     expect(rejected.payload.code).toBe("invalid_model_selection");
+  });
+
+  test("strict privacy mode saves an unverified CUDOS model preference without sending a prompt", async () => {
+    process.env.MATTERHORN_PROVIDER_PRIVACY_MODE = "verified-only";
+    process.env.MATTERHORN_CUDOS_TRAINING_USE = "unknown";
+    const providerRequests: string[] = [];
+    const opencodeBaseUrl = await startProviderCatalogServer({
+      all: [{
+        id: "cudos",
+        name: "ASI:Cloud",
+        source: "api",
+        models: {
+          "asi1-mini": { name: "ASI1 Mini" },
+        },
+      }],
+      default: { cudos: "asi1-mini" },
+      connected: ["cudos"],
+    }, providerRequests);
+    const { base } = await boot({ opencodeBaseUrl });
+
+    const saved = await jsonFetch(base, "/workspace/ws_backend/backend/model-selection", {
+      method: "PATCH",
+      body: JSON.stringify({ providerId: "cudos", modelId: "asi1-mini" }),
+    });
+    expect(saved.response.status).toBe(200);
+    expect(saved.payload.selection).toMatchObject({
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      source: "server_workspace_preference",
+    });
+    expect(saved.payload.privacy).toMatchObject({
+      enforcementMode: "verified_only",
+      providers: [expect.objectContaining({
+        providerId: "cudos",
+        status: "unverified",
+        allowed: false,
+      })],
+    });
+
+    const persisted = await jsonFetch(base, "/workspace/ws_backend/backend/model-selection");
+    expect(persisted.response.status).toBe(200);
+    expect(persisted.payload.selection).toMatchObject({
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      source: "server_workspace_preference",
+    });
+    const audit = await jsonFetch(base, "/workspace/ws_backend/audit?limit=10");
+    expect(audit.payload.items).toContainEqual(expect.objectContaining({
+      action: "workspace.model_selection.update",
+      target: "cudos/asi1-mini",
+    }));
+    expect(providerRequests.length).toBeGreaterThan(0);
+    expect(providerRequests.some((url) => url.includes("/session/"))).toBe(false);
   });
 
   test("workspace model selection persists, clears, audits, and enforces write guards", async () => {

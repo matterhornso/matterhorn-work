@@ -13732,7 +13732,6 @@ function createRoutes(
     }
     const currentModels = await buildWorkspaceBackendModels(config, workspace);
     assertModelSelectionInCatalog(currentModels.catalog, requestSelection);
-    assertPromptProviderPrivacy(requestSelection.providerId, requestSelection.modelId);
 
     let selection;
     try {
