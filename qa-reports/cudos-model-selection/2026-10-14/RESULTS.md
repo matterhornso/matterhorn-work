@@ -1,6 +1,6 @@
 # CUDOS model selection and local five-desk chat acceptance
 
-Date: 14 October 2026. Local only; no push, merge or deployment.
+Initial run: 14 October 2026. Follow-up: 15 October 2026 IST (14 October UTC). Local real-provider testing; no merge or deployment. PR publication was subsequently requested.
 
 ## Outcome
 
@@ -30,9 +30,36 @@ Existing disposable verified test account and Terms acceptance were preserved. N
 | Polymarket | `matterhorn-polymarket` | `ses_ec73236caffe5Kj3g9ePHdhXKy` | 3,849 |
 | Sui | `matterhorn-sui` | `ses_ec7316d2bffeRs0tRbFWKcC5ym` | 2,225 |
 
-Final account usage: **19,881 used/charged tokens, 0 reserved tokens, 0 pending requests**, exactly matching the five receipts. Hard 100,000-token local limits remain enabled. Provider monetary cost is not asserted from the usage store's zero cost field.
+Initial five-concept checkpoint: **19,881 used/charged tokens, 0 reserved tokens, 0 pending requests**, exactly matching the five receipts. Hard 100,000-token local limits remain enabled. Provider monetary cost is not asserted from the usage store's zero cost field.
 
-The initial Private AI request timed out awaiting manual host approval, showing **Write request denied** and retaining the input. Retrying after granting that specific request's normal host approval succeeded. Each later test received one scoped host approval through the supported operator endpoint. Manual mode was never disabled. **New user messages in this preview still require operator approval**; these results are not evidence of unattended chat readiness.
+The initial Private AI request timed out awaiting manual host approval, showing **Write request denied** and retaining the input. Retrying after granting that specific request's normal host approval succeeded. Each initial concept test received one scoped host approval through the supported operator endpoint. The user subsequently explicitly approved automatic host approval **only for this local preview**. That setting was applied while preserving the account, chats, strict provider checks, guarded gateway and hard limits. A Sui follow-up completed without an approval helper, bringing that checkpoint to 22,106 tokens and zero holds. Production approval settings were not changed.
+
+## Follow-up live read and recovery testing
+
+These requests were sent through the ordinary authenticated browser composer with CUDOS `asi1`, not seeded responses or direct-provider calls. All inputs were public synthetic QA requests; no private files/memories, wallet credentials, transaction preparation, watch creation, signing or submission were requested.
+
+| Desk | Actual tool and result | Request tokens |
+| --- | --- | ---: |
+| Sui | `matterhorn_sui_get_balance`, public address `0x5`, mainnet, `sui.grpc`, fetched `2026-10-14T20:11:44.690Z`; completed answer with limitations | 5,385 |
+| Hyperliquid | `matterhorn_hyperliquid_get_orderbook`, BTC, mainnet, `hyperliquid.info`, fetched `2026-10-14T20:13:23.478Z`; completed answer with bid/ask and source limitation | 8,224 |
+| Polymarket | `matterhorn_polymarket_search_markets`, active market `3229167`, public Gamma search, fetched `2026-10-14T20:14:19Z`; completed answer with snapshot limitations | 8,739 |
+| Bittensor | Initial model chose `readOperation: subnet` without required `netuid`, received generic tool failure; no data fabricated. Follow-up remediation and retest recorded below | 7,623 initially |
+
+The Bittensor Python SDK service independently returned live **testnet** data at block 8,221,939 with five subnets and no warnings. It runs only on loopback, with Python 3.11.15, `bittensor==10.5.0`, `async-substrate-interface==2.2.1`, `cyscale==0.5.0`, `READ_ONLY=1`, and submission disabled. Connecting it required an idle, graceful restart of this one preview; its persistent account/chats/default model survived. This temporary laptop service is not hosted acceptance or production packaging.
+
+Private AI follow-up completed in 5.4 seconds (7,299 tokens) before the first attempted Stop reached the UI. A second Stop during **Preparing** produced a partial response and eventually `UnknownError: Provider system context is not bound to this active Matterhorn run.` The recorded elapsed time was 947 seconds across a machine clock/suspension gap; it must not be described as successful cancellation. Its usage reservation eventually released, with no provider usage reported. A subsequent short recovery request completed in 4.9 seconds (7,935 tokens). Zero reported usage for the interrupted request is not proof that the provider incurred no cost.
+
+### Bittensor correction and remaining live acceptance
+
+Commit `8b7878d538ff5a584b2ab80a2c16ffa6cee195d7` clarifies the model-facing Bittensor contract: `discovery` lists/searches subnets; `subnet` and `validators` require an exact non-negative integer `netuid`; `wallet` requires a public address. Invalid singular selectors are rejected before a backend call with content-free allowlisted errors. The read-only backend, privacy, capability, network and wallet boundaries remain unchanged. No automatic conversion of an ambiguous operation was introduced.
+
+After restarting the same idle local backend on the fix, the existing conversation still selected `subnet` without an ID. The response now accurately exposed `bittensor_netuid_required` and proposed `discovery` (8,462 tokens). Explicit discovery reached the tool but timed out (8,895 tokens including the final failure explanation). It returned no live payload; **Bittensor app live-read acceptance remains incomplete**. The fixed schema and useful validation error are verified, not a guarantee of perfect model tool selection.
+
+The machine's power log confirms repeated **Dark Wake Thermal Emergency** sleeps of roughly 15–17 minutes during these later requests. The discovery receipt spans 1,102 seconds; the Stop receipt spans 947 seconds. Thermal protections were not changed. These interrupted runs are not valid latency or cancellation acceptance. Do not assume the model's speculative endpoint diagnosis establishes a network/service cause: the independently observed machine suspension is a material confounder. Repeat on an awake, stable machine before release; do not simply increase timeouts.
+
+Independent cancellation review found that the provider-message binding expires after 30 seconds; resume after the long sleep correctly fails closed. Ordinary aborts use `MessageAbortedError` and a cancelled receipt; unknown guard errors must not be relabelled as cancellation. A separate **potential early-Preparing abort/dispatch race** remains by code inspection: an abort arriving before `promptAsync` may precede the actual dispatch. Add a deterministic paused-dispatch regression before deciding a fix. This interrupted live sample neither proves nor clears that race. No speculative relaxation of binding/approval checks was made.
+
+Final normal-account readback at `2026-10-14T21:34:12.162Z`: **15 settled requests; 84,668 reported used/charged tokens; 0 reserved; 0 pending; 15,332 remaining** under the unchanged 100,000-token limits. Sum of reported assistant token totals equals 84,668. This includes the failed Bittensor attempts and recovered Private AI request. Interrupted provider usage may be unreported and requires separate provider billing reconciliation; no zero-cost claim is made.
 
 ## Automated checks
 
@@ -44,6 +71,20 @@ The initial Private AI request timed out awaiting manual host approval, showing 
 - Isolated production-format web build: passed. Existing bundle-size/circular-chunk warnings remain.
 - `git diff --check`: passed.
 - Independent source review: no actionable findings.
+
+Follow-up validation:
+
+- Desk tools, cancellation/error and pending-task regressions: 323 passed / 0 failed (2,414 assertions).
+- Crypto transports, circuit breakers, tenant scoping and guarded authorization: 70 passed / 0 failed (358 assertions).
+- Independent model-selection boundary review suites: 65 passed / 0 failed (720 assertions); five focused prompt-boundary checks passed.
+- Bittensor contract/managed MCP/read-only route regressions on the follow-up fix: 55 passed / 0 failed (596 assertions). Command: `bun --no-env-file test apps/server/src/managed-opencode-mcp.test.ts apps/server/src/bittensor-chat-routes.e2e.test.ts apps/server/src/crypto-action-registry.test.ts`.
+- Cancellation/error focused review: 42 tests passed with one loopback-bind environment failure; the exact cancellation-receipt regression separately passed. Not reported as a fully green combined suite.
+- Types package build and server typecheck passed after the follow-up fix. Release secret scan: 1,231 files, zero findings, zero oversized skips.
+- Safety-gate contract passed. **Full monolithic safety gate did not pass cleanly.** One run timed out in the memory-inbox test; the exact test passed in isolation. A fresh full run passed stages 1–3, then the aggregate desk runner failed a Polymarket child; a desk rerun failed a different SDK-normalizer child. Both exact children passed alone, and every stage had passed through stage-selective runs. This is not a one-shot green gate; require clean exact-head CI before merge.
+
+Durable local logs: `/private/tmp/matterhorn-full-gate-SpFGYh/{model-selection-review,prompt-boundary-review,platform-safety-full,platform-safety-desk-depth,polymarket-read-preview-isolated,market-sdk-normalize-isolated,memory-inbox-isolated}.log`. The full command was `TMPDIR=<isolated-directory> pnpm test:matterhorn-platform-safety`; stage reruns used `--only desk.depth`, `--only daemon.electron.perimeter,observability.error_boundaries,design.contract,browser.smoke.contracts`, and `--only product.readiness`.
+
+TypeSafe guidance was used to keep tool selectors and permission checks deterministic. The live docs index was reachable; targeted building/function-calling pages were inaccessible. No TypeSafe SDK or Jev runtime integration changed.
 
 ## Visual verification and skills
 
@@ -59,14 +100,16 @@ Local evidence (not committed, contains only disposable synthetic chat content; 
 - `/private/tmp/matterhorn-cudos-restored-4ZgYPr/sui-completed-mobile.jpg`
 - `/private/tmp/matterhorn-cudos-restored-4ZgYPr/frontend-tests-unrestricted.log`
 
+Review screenshots committed with this report: [saved workspace model](screenshots/model-saved.jpg), [completed Sui live-read receipt in the restored UI](screenshots/sui-live-completed.png).
+
 ## Remaining boundaries
 
 1. CUDOS API-specific training and prompt-retention terms are still unverified. Public research acceptance is not permission to send secrets or arbitrary private context. No verified-policy declaration or opt-in was added.
 2. This is **local real-provider conversation acceptance**, not hosted acceptance or all-model certification. ASI1 Mini and other models were not inference-tested in this pass.
-3. Bittensor's live-chain service is not configured in this isolated runtime. Concept responses do not prove live-chain tooling, venue availability, signing or execution. No transactions were performed.
+3. Bittensor's testnet sidecar is configured and independently live, but the app discovery request timed out across machine suspension. Repeat the app journey on a stable machine. Mainnet, certified-app execution, signing and submission were not accepted. No transactions were performed.
 4. Jev and STM remain off. Existing default-off/privacy/approval safeguards were retained.
-5. Manual host approvals remain required. Automatically approving future requests would be a separate local security-setting decision requiring the user's confirmation.
-6. Review/publish this branch only if requested. Production deployment remains for the user/tech team, after their release checks and hosted acceptance.
+5. Automatic host approval is user-approved for this isolated preview only. Production requires its own owner/security approval decision. Stop/cancellation needs a clean repeat after the interrupted test; successful recovery and released holds are not cancellation signoff.
+6. Publish as a draft PR with the remaining acceptance limits. No merge or deployment. See the [tech-team handoff](../../../docs/handoffs/cudos-model-selection-and-desk-reads-2026-10-15.md).
 
 ## Policy sources checked
 
