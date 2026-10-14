@@ -121,14 +121,18 @@ const MANAGED_MCP_TRANSPORTS: ManagedMcpTool[] = [
   {
     name: "matterhorn_bittensor_chat",
     title: "Bittensor desk read",
-    description: "Read public Bittensor data using readOperation and netuid/ss58Address. Never executes actions.",
+    description: "Read public Bittensor data. Use discovery to list or search subnets; subnet and validators require a netuid; wallet requires a public ss58Address. Never executes actions.",
     inputSchema: objectSchema({
-      message: { type: "string", description: "Discovery text." },
-      readOperation: { type: "string", enum: ["subnet", "wallet", "validators", "discovery"] },
-      ss58Address: { type: "string", description: "Optional public SS58 address." },
-      netuid: { type: "number" },
-      limit: { type: "number" },
-      strategy: { type: "string", enum: ["balanced", "yield", "safety"] },
+      message: { type: "string", description: "Public read query. Choose discovery when listing or searching subnets." },
+      readOperation: {
+        type: "string",
+        enum: ["discovery", "subnet", "validators", "wallet"],
+        description: "discovery lists or searches subnets; subnet reads one exact netuid; validators compares one exact netuid; wallet reads one public ss58Address.",
+      },
+      ss58Address: { type: "string", description: "Public SS58 address required only for wallet reads." },
+      netuid: { type: "number", minimum: 0, description: "Non-negative subnet id required for subnet and validators reads." },
+      limit: { type: "number", minimum: 1, maximum: 20, description: "Maximum results for discovery or validator comparison." },
+      strategy: { type: "string", enum: ["balanced", "yield", "safety"], description: "Validator comparison strategy." },
     }, ["message"]),
     request: (args) => ({ path: "/api/bittensor/chat/execute", method: "POST", body: { ...args, readOnly: true } }),
   },
@@ -465,6 +469,8 @@ const MODEL_SAFE_MCP_ERROR_CODES = new Set([
   "adapter_upstream_failed",
   "adapter_usage_reconciliation_failed",
   "certified_crypto_app_required",
+  "bittensor_netuid_required",
+  "bittensor_ss58_address_required",
   "coworker_certified_access_denied",
   "coworker_certified_arguments_invalid",
   "coworker_certified_gateway_unavailable",
@@ -926,6 +932,19 @@ function assertReadToolArguments(tool: ManagedMcpTool, args: JsonObject): void {
   }
 }
 
+function assertBittensorReadSelectors(tool: ManagedMcpTool, args: JsonObject): void {
+  if (tool.name !== "matterhorn_bittensor_chat") return;
+  const operation = args.readOperation;
+  if (operation === "subnet" || operation === "validators") {
+    if (typeof args.netuid !== "number" || !Number.isInteger(args.netuid) || args.netuid < 0) {
+      throw new Error("bittensor_netuid_required");
+    }
+  }
+  if (operation === "wallet" && (typeof args.ss58Address !== "string" || !args.ss58Address.trim())) {
+    throw new Error("bittensor_ss58_address_required");
+  }
+}
+
 function buildCryptoEvidenceEnvelope(input: {
   definition: NonNullable<ReturnType<typeof getMatterhornCryptoTool>>;
   status: "success" | "error";
@@ -1030,6 +1049,7 @@ async function callBackendTool(input: {
   let source: string | undefined;
   let freshness: string | undefined;
   try {
+    assertBittensorReadSelectors(input.tool, input.args);
     if (input.tool.name === "matterhorn_sui_get_balance"
       && input.args.network !== "mainnet" && input.args.network !== "testnet") {
       throw new Error("sui_network_required");

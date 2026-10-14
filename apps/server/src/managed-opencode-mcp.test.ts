@@ -62,9 +62,57 @@ describe("managed OpenCode Matterhorn MCP", () => {
         properties: expect.objectContaining({ marketId: expect.objectContaining({ type: "string" }) }),
       }) }),
       expect.objectContaining({ name: "matterhorn_bittensor_chat", inputSchema: expect.objectContaining({
-        properties: expect.objectContaining({ readOperation: { type: "string", enum: ["subnet", "wallet", "validators", "discovery"] } }),
+        properties: expect.objectContaining({ readOperation: expect.objectContaining({
+          type: "string", enum: ["discovery", "subnet", "validators", "wallet"],
+          description: expect.stringContaining("discovery lists or searches subnets"),
+        }) }),
       }) }),
     ]) } });
+  });
+
+  test("rejects incomplete singular Bittensor reads before contacting the backend", async () => {
+    const fixtures: Array<{ args: Record<string, unknown>; expectedCode: string }> = [
+      { args: { message: "List three subnets", readOperation: "subnet", limit: 3 }, expectedCode: "bittensor_netuid_required" },
+      { args: { message: "Compare validators", readOperation: "validators" }, expectedCode: "bittensor_netuid_required" },
+      { args: { message: "Show wallet balance", readOperation: "wallet" }, expectedCode: "bittensor_ss58_address_required" },
+    ];
+    for (const { args, expectedCode } of fixtures) {
+      let requests = 0;
+      const result = await handleManagedOpencodeMcp({
+        payload: { jsonrpc: "2.0", id: expectedCode, method: "tools/call", params: {
+          name: "matterhorn_bittensor_chat", arguments: args,
+        } },
+        serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+        fetchImpl: Object.assign(async () => {
+          requests += 1;
+          return Response.json({ success: true });
+        }, { preconnect() {} }),
+      });
+      expect(requests).toBe(0);
+      expect(JSON.stringify(result.body)).toContain(expectedCode);
+    }
+  });
+
+  test("routes explicit subnet discovery and exact netuid reads through the read-only backend", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const call = (arguments_: Record<string, unknown>) => handleManagedOpencodeMcp({
+      payload: { jsonrpc: "2.0", id: String(arguments_.readOperation), method: "tools/call", params: {
+        name: "matterhorn_bittensor_chat", arguments: arguments_,
+      } },
+      serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+      fetchImpl: Object.assign(async (_input: string | URL | Request, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        return Response.json({ success: true, execution: "answered", data: { discovery: { matches: [] } } });
+      }, { preconnect() {} }),
+    });
+
+    await call({ message: "List three live subnets", readOperation: "discovery", limit: 3 });
+    await call({ message: "Read subnet zero", readOperation: "subnet", netuid: 0 });
+
+    expect(bodies).toEqual([
+      { message: "List three live subnets", readOperation: "discovery", limit: 3, readOnly: true },
+      { message: "Read subnet zero", readOperation: "subnet", netuid: 0, readOnly: true },
+    ]);
   });
 
   test("looks up an exact Polymarket market ID without treating it as search text", async () => {
