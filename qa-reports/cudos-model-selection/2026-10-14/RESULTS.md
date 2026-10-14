@@ -10,6 +10,7 @@ Corrected two restored-UI notices that incorrectly described an unverified provi
 
 Branch: `codex/cudos-model-selection-2026-10-14`.
 Base: `4085d83cb23e9e2f4f4c639d3a990f9b93196771` (merged PR #1035).
+Published as [draft PR #1036](https://github.com/matterhornso/matterhorn-work/pull/1036). Required remaining acceptance is listed below; publication is not merge or deployment approval.
 
 ## Local browser acceptance
 

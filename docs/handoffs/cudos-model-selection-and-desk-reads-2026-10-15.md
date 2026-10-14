@@ -11,7 +11,8 @@ Prepared on 15 October 2026 for the team operating `https://desks.matterhorn.so`
 | Candidate branch | `codex/cudos-model-selection-2026-10-14` |
 | Model preference fix | `3c8eaf00df6efcd004214a16c71f9f74638a2317` |
 | Latest tested behavior commit | `8b7878d538ff5a584b2ab80a2c16ffa6cee195d7`, Bittensor guidance and missing-selector validation |
-| Candidate PR and final head | Draft publication pending; record the PR URL, full final head and exact-head CI before approval |
+| Candidate PR | [Draft PR #1036](https://github.com/matterhornso/matterhorn-work/pull/1036), targeting `dev` |
+| Final head and CI | Resolve with `gh pr view 1036 --repo matterhornso/matterhorn-work --json headRefOid,statusCheckRollup`; verify checks belong to that exact head, not an earlier revision |
 | Approved release SHA | Not yet merged or approved for deployment; record the actual immutable release revision after review |
 
 The model change removes the provider-privacy assertion from `PATCH /workspace/:id/backend/model-selection`. Saving a preference sends no inference prompt. The endpoint still validates the connected chat catalogue, collaborator permission, writable workspace, selection shape and variant; it persists the preference and records an audit event. Updated UI text distinguishes preference saving from request authorization. It does not claim the provider is privacy-verified.
