@@ -87,6 +87,17 @@ Durable local logs: `/private/tmp/matterhorn-full-gate-SpFGYh/{model-selection-r
 
 TypeSafe guidance was used to keep tool selectors and permission checks deterministic. The live docs index was reachable; targeted building/function-calling pages were inaccessible. No TypeSafe SDK or Jev runtime integration changed.
 
+### Fresh PR CI follow-up
+
+On head `ee26d8575524a77b0260498e7c5574994cc9d838`, Linux/macOS tests, customer crypto gates, container build, repository security gates, dependency review, i18n and CodeQL passed. Two jobs failed and were not suppressed:
+
+- [Platform safety](https://github.com/matterhornso/matterhorn-work/actions/runs/38643812439/job/116125623450): 1,856 server tests passed, one failed. Bittensor wording expanded the complete managed-tool catalogue to 11,516 characters against the unchanged 11,000 limit. Corrected in `a0de28b9d5dac18193ee782f1be85370f15b4c49` by removing duplication, preserving selector guidance, validation and authority boundaries. Catalogue now 10,972 characters. `agent-token-budget.test.ts` (3) plus managed MCP/registry tests (43): **46 passed, zero failed**.
+- [Rust dependency security](https://github.com/matterhornso/matterhorn-work/actions/runs/38643812397/job/116126061309): new RUSTSEC-2026-0346/-0347/-0348/-0349 advisories affect the existing `rustls 0.23.45` lock entry. Patched version is 0.23.46. These are actual findings, not an environmental flake.
+
+Commit `f2e4174ccba4a50a84f15364263a61f8ec139e06` updates that one lockfile package to `rustls 0.23.46`, without transitive churn or new suppressions. Upstream dependency requirements and the Rust 1.71 minimum remain compatible. `node --test scripts/rust-dependency-policy.test.mjs`: **7/7 pass**. `node scripts/rust-dependency-policy.mjs`: passes against the locked all-target graph; only rustls 0.23.46 resolves. Local compilation and a new local cargo audit were not run; CI must perform those checks. Official [release](https://github.com/rustls/rustls/releases/tag/v%2F0.23.46) and advisories [0346](https://rustsec.org/advisories/RUSTSEC-2026-0346.html), [0347](https://rustsec.org/advisories/RUSTSEC-2026-0347.html), [0348](https://rustsec.org/advisories/RUSTSEC-2026-0348.html), [0349](https://rustsec.org/advisories/RUSTSEC-2026-0349.html) were checked.
+
+Require fresh final-head checks after corrections. The final browser evidence predates the compact schema wording; no further live-provider pass is claimed.
+
 ## Visual verification and skills
 
 Impeccable clarify/polish and Uncodixfy were used for a narrow copy correction, with no layout, token or branding change. Completed chat checked at the actual Codex preview width, 1280×900 desktop and 390×844 mobile. At 390px, document width equals viewport width; no page horizontal overflow. Privacy text wraps and the model/composer controls remain visible. Temporary viewport override was reset.

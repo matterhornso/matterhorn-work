@@ -10,7 +10,9 @@ Prepared on 15 October 2026 for the team operating `https://desks.matterhorn.so`
 | Base | `4085d83cb23e9e2f4f4c639d3a990f9b93196771`, merged [PR #1035](https://github.com/matterhornso/matterhorn-work/pull/1035) |
 | Candidate branch | `codex/cudos-model-selection-2026-10-14` |
 | Model preference fix | `3c8eaf00df6efcd004214a16c71f9f74638a2317` |
-| Latest tested behavior commit | `8b7878d538ff5a584b2ab80a2c16ffa6cee195d7`, Bittensor guidance and missing-selector validation |
+| Bittensor selector validation | `8b7878d538ff5a584b2ab80a2c16ffa6cee195d7` |
+| Tool-description budget correction | `a0de28b9d5dac18193ee782f1be85370f15b4c49`; same selectors and validation, shorter wording |
+| Rust security correction | `f2e4174ccba4a50a84f15364263a61f8ec139e06`; only `rustls` upgraded in the example lockfile, with policy regressions |
 | Candidate PR | [Draft PR #1036](https://github.com/matterhornso/matterhorn-work/pull/1036), targeting `dev` |
 | Final head and CI | Resolve with `gh pr view 1036 --repo matterhornso/matterhorn-work --json headRefOid,statusCheckRollup`; verify checks belong to that exact head, not an earlier revision |
 | Approved release SHA | Not yet merged or approved for deployment; record the actual immutable release revision after review |
@@ -19,7 +21,7 @@ The model change removes the provider-privacy assertion from `PATCH /workspace/:
 
 The follow-up Bittensor change makes the model-facing contract explicit: `discovery` lists/searches subnets; `subnet` and `validators` require an exact non-negative integer `netuid`; `wallet` requires a public address. Invalid singular selectors fail before backend access with sanitized allowlisted errors. It does not silently convert ambiguous requests or change network, capability, privacy or wallet authority. Its regression coverage passes; full app live-read acceptance does not yet pass.
 
-Prompt privacy checks, request-bound consent, secret blocking, account isolation, guarded execution, usage accounting and wallet approvals are unchanged. No database migration, dependency update, model-provider replacement or sidecar packaging change is included. The restored UI remains permanent: do not reintroduce `VITE_MATTERHORN_RETRO_UI`, `VITE_MATTERHORN_MINIMAL_UI`, their styles, or an opt-in to the rejected layouts.
+Prompt privacy checks, request-bound consent, secret blocking, account isolation, guarded execution, usage accounting and wallet approvals are unchanged. No database migration, model-provider replacement or sidecar packaging change is included. The restored UI remains permanent: do not reintroduce `VITE_MATTERHORN_RETRO_UI`, `VITE_MATTERHORN_MINIMAL_UI`, their styles, or an opt-in to the rejected layouts.
 
 This candidate builds on #1035; it is not a repository reset to #1027 and does not require importing unrelated unmerged branches. The [restored-UI handoff](permanent-restored-ui-deployment-2026-10-13.md) remains the baseline for state preservation and dependency requirements; its pre-merge placeholders are historical, not the release identity for this candidate.
 
@@ -48,6 +50,17 @@ Local host approvals were initially manual. The user later authorized automatic 
 The implementation report records 41 backend control-plane tests, 31 provider/agent privacy tests, one authoritative-gateway E2E test, 1,322 frontend tests, app/server typechecks and an isolated production-format web build passing. The Bittensor follow-up adds **55 passing contract/managed-MCP/read-only-route tests**; types build and server typecheck passed afterward. Other focused regressions and their limits are in the QA report.
 
 **The full monolithic safety gate did not pass in one clean run.** One aggregate run timed out in memory-inbox; a later run failed a Polymarket child; another desk run failed a different SDK-normalizer child. Those exact children and stage-selective reruns passed independently, which is not a one-shot green gate. Keep the PR draft until clean exact-head CI and the remaining awake-machine acceptance pass. Safari, Firefox, light-theme and full accessibility coverage were not reverified in this bounded fix. Earlier #1035 evidence does not automatically certify this candidate's hosted behavior.
+
+### Fresh CI findings and correction
+
+The first complete PR CI on `ee26d8575524a77b0260498e7c5574994cc9d838` passed Linux/macOS tests, customer crypto gates, the container build, repository security gates, dependency review, i18n and CodeQL. It did **not** pass the full safety/security gates:
+
+- [Platform safety](https://github.com/matterhornso/matterhorn-work/actions/runs/38643812439/job/116125623450) reported 1,856 passing server tests and one failure: the new Bittensor descriptions increased the full managed-tool catalogue to 11,516 characters, above the existing 11,000 limit. Commit `a0de28b9d5dac18193ee782f1be85370f15b4c49` removes repeated wording while retaining discovery/exact-ID guidance and validation. The catalogue is now 10,972 characters; all 46 focused token-budget/MCP/registry tests pass. The limit was not raised.
+- [Rust dependency security](https://github.com/matterhornso/matterhorn-work/actions/runs/38643812397/job/116126061309) found four newly published advisories in the existing example lockfile's `rustls 0.23.45`: RUSTSEC-2026-0346, -0347, -0348 and -0349. These are genuine dependency findings, not an infrastructure timeout or permission to suppress the audit. The patched 0.23 release is 0.23.46.
+
+Commit `f2e4174ccba4a50a84f15364263a61f8ec139e06` updates only the `rustls` version/checksum in `examples/microsandbox-openwork-rust/Cargo.lock` to [0.23.46](https://github.com/rustls/rustls/releases/tag/v%2F0.23.46); there is no transitive dependency churn. The locked all-target graph passes the strengthened minimum-version policy, and all seven policy tests pass. No new advisory ignore was added. Local Rust compilation and a new local cargo audit were not run; require fresh CI audit/locked compilation. This does not imply the web/API image uses this Rust example dependency.
+
+After the corrective push, require the full checks on its new exact head. Earlier passing jobs are useful evidence but do not certify the final revision. The browser preview remains on the tested live-read behavior revision; the later compact wording and Rust dependency correction must not be described as having completed another live-provider pass.
 
 ## Privacy and approval decisions that remain with the operator
 
