@@ -64,7 +64,7 @@ describe("managed OpenCode Matterhorn MCP", () => {
       expect.objectContaining({ name: "matterhorn_bittensor_chat", inputSchema: expect.objectContaining({
         properties: expect.objectContaining({ readOperation: expect.objectContaining({
           type: "string", enum: ["discovery", "subnet", "validators", "wallet"],
-          description: expect.stringContaining("discovery lists or searches subnets"),
+          description: expect.stringContaining("discovery lists/searches"),
         }) }),
       }) }),
     ]) } });

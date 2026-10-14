@@ -40,18 +40,18 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
   {
     name: "matterhorn_bittensor_chat",
     title: "Bittensor desk read",
-    description: "Read public Bittensor data. Use discovery to list or search subnets; subnet and validators require a netuid; wallet requires a public ss58Address. Never executes actions.",
+    description: "Public Bittensor reads only; never acts.",
     inputSchema: objectSchema({
-      message: { type: "string", description: "Public read query. Choose discovery when listing or searching subnets." },
+      message: { type: "string" },
       readOperation: {
         type: "string",
         enum: ["discovery", "subnet", "validators", "wallet"],
-        description: "discovery lists or searches subnets; subnet reads one exact netuid; validators compares one exact netuid; wallet reads one public ss58Address.",
+        description: "discovery lists/searches; subnet|validators need netuid; wallet needs ss58Address.",
       },
-      ss58Address: { type: "string", description: "Public SS58 address required only for wallet reads." },
-      netuid: { type: "number", minimum: 0, description: "Non-negative subnet id required for subnet and validators reads." },
-      limit: { type: "number", minimum: 1, maximum: 20, description: "Maximum results for discovery or validator comparison." },
-      strategy: { type: "string", enum: ["balanced", "yield", "safety"], description: "Validator comparison strategy." },
+      ss58Address: { type: "string" },
+      netuid: { type: "number", minimum: 0 },
+      limit: { type: "number", minimum: 1, maximum: 20 },
+      strategy: { type: "string", enum: ["balanced", "yield", "safety"] },
     }, ["message"]),
     deskIds: ["bittensor"],
     actionIds: [
