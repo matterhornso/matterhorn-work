@@ -4,8 +4,8 @@ import { checkRustDependencyPolicy, validateRustDependencyGraph } from "./rust-d
 
 const root = "microsandbox-openwork-rust v0.1.0 (/fixture)\n";
 
-test("known patched and unaffected Rust graphs pass", () => {
-  for (const version of ["0.23.12", "0.23.45", "0.23.46"]) {
+test("patched Rust graphs pass", () => {
+  for (const version of ["0.23.46", "0.23.47"]) {
     assert.doesNotThrow(() => validateRustDependencyGraph(`${root}rustls v${version}\nlru v0.16.4\n`));
   }
 });
@@ -15,9 +15,9 @@ test("reachable RSA and vulnerable LRU cannot be exempted", () => {
   assert.throws(() => validateRustDependencyGraph(`${root}lru v0.16.3 (*)\n`), /RUSTSEC-2026-0253/);
 });
 
-test("both ends of the affected rustls range and duplicate graph entries fail", () => {
-  for (const version of ["0.23.13", "0.23.37", "0.23.44"]) {
-    assert.throws(() => validateRustDependencyGraph(`${root}rustls v0.23.45\nrustls v${version} (*)\n`), /RUSTSEC-2026-0285/);
+test("the newly affected rustls range and duplicate graph entries fail", () => {
+  for (const version of ["0.23.0", "0.23.12", "0.23.13", "0.23.44", "0.23.45"]) {
+    assert.throws(() => validateRustDependencyGraph(`${root}rustls v0.23.46\nrustls v${version} (*)\n`), /RUSTSEC-2026-0346/);
   }
 });
 
@@ -29,7 +29,7 @@ test("vulnerable quinn-proto versions cannot return to the resolved graph", () =
 });
 
 test("empty, non-text and incomplete output cannot count as clean", () => {
-  for (const output of [undefined, null, "", "warning: nothing to print", "rustls v0.23.45"]) {
+  for (const output of [undefined, null, "", "warning: nothing to print", "rustls v0.23.46"]) {
     assert.throws(() => validateRustDependencyGraph(output), /missing or incomplete/);
   }
 });
@@ -38,7 +38,7 @@ test("cargo errors, timeout and abnormal termination fail closed even with parti
   for (const result of [
     { status: 101 }, { status: null }, { status: 0, error: new Error("timeout") }, { status: 0, signal: "SIGTERM" },
   ]) {
-    assert.throws(() => checkRustDependencyPolicy(() => ({ stdout: `${root}rustls v0.23.45`, ...result })), /failed closed/);
+    assert.throws(() => checkRustDependencyPolicy(() => ({ stdout: `${root}rustls v0.23.46`, ...result })), /failed closed/);
   }
 });
 
@@ -47,6 +47,6 @@ test("graph resolution is locked and includes all target platforms", () => {
     assert.equal(command, "cargo");
     assert.deepEqual(args, ["tree", "--locked", "--target", "all", "--prefix", "none", "--manifest-path", "examples/microsandbox-openwork-rust/Cargo.toml"]);
     assert.ok(options.timeout > 0);
-    return { status: 0, stdout: `${root}rustls v0.23.45\n` };
+    return { status: 0, stdout: `${root}rustls v0.23.46\n` };
   });
 });

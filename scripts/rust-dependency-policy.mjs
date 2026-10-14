@@ -13,8 +13,10 @@ export function validateRustDependencyGraph(output) {
   }
   for (const match of output.matchAll(/^rustls v0\.23\.(\d+)(?:\s|$)/gm)) {
     const patch = Number(match[1]);
-    if (patch >= 13 && patch < 45) {
-      throw new Error("RUSTSEC-2026-0285 requires rustls 0.23.45 or later in the 0.23 line.");
+    if (patch < 46) {
+      throw new Error(
+        "RUSTSEC-2026-0346, RUSTSEC-2026-0347, RUSTSEC-2026-0348, and RUSTSEC-2026-0349 require rustls 0.23.46 or later in the 0.23 line.",
+      );
     }
   }
   for (const match of output.matchAll(/^quinn-proto v0\.11\.(\d+)(?:\s|$)/gm)) {
