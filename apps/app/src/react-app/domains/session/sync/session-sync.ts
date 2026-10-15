@@ -52,6 +52,11 @@ type SyncEntry = {
 const idleStatus: SessionStatus = { type: "idle" };
 const syncs = new Map<string, SyncEntry>();
 const suppressedTranscriptMessageIds = new Map<string, Set<string>>();
+const pendingTranscriptReplacements = new Map<string, {
+  boundary: SessionTranscriptSnapshotBoundary;
+  knownMessageIds: ReadonlySet<string>;
+  latestCreated: number;
+}>();
 
 function transcriptSessionKey(workspaceId: string, sessionId: string) {
   return JSON.stringify([workspaceId, sessionId]);
@@ -84,6 +89,7 @@ accountClientState.register("session-streams", () => {
     disposeWorkspaceSync(key, entry);
   }
   suppressedTranscriptMessageIds.clear();
+  pendingTranscriptReplacements.clear();
 }, "stop");
 const todoSnapshotFirstSeen = new WeakMap<MatterhornSessionSnapshot, number>();
 const retainedSessionTtlMs = 10 * 60_000;
@@ -114,6 +120,46 @@ export function captureSessionTranscriptSnapshotBoundary(
     sessionId,
     replacedMessageIds: new Set(replacedMessageIds),
   };
+}
+
+export function retainPendingTranscriptReplacement(
+  boundary: SessionTranscriptSnapshotBoundary,
+  messages: readonly UIMessage[],
+) {
+  const createdTimes = new Map<string, number>();
+  for (const message of messages) {
+    const metadata = message.metadata;
+    if (!metadata || typeof metadata !== "object" || !("opencode" in metadata)) continue;
+    const opencode = metadata.opencode;
+    if (!opencode || typeof opencode !== "object" || !("created" in opencode)) continue;
+    if (typeof opencode.created === "number" && Number.isFinite(opencode.created)) {
+      createdTimes.set(message.id, opencode.created);
+    }
+  }
+  const hasReplacedTimestamps = [...boundary.replacedMessageIds].every((id) => createdTimes.has(id));
+  pendingTranscriptReplacements.set(transcriptSessionKey(boundary.workspaceId, boundary.sessionId), {
+    boundary,
+    knownMessageIds: new Set(messages.map((message) => message.id)),
+    // A missing original-turn timestamp makes bounded/backfilled history
+    // ambiguous. Never infer replacement from absence alone.
+    latestCreated: hasReplacedTimestamps && createdTimes.size ? Math.max(...createdTimes.values()) : Infinity,
+  });
+}
+
+export function getPendingTranscriptReplacement(workspaceId: string, sessionId: string) {
+  return pendingTranscriptReplacements.get(transcriptSessionKey(workspaceId, sessionId))?.boundary ?? null;
+}
+
+function confirmedPendingTranscriptReplacement(workspaceId: string, snapshot: MatterhornSessionSnapshot) {
+  const pending = pendingTranscriptReplacements.get(transcriptSessionKey(workspaceId, snapshot.session.id));
+  if (!pending || snapshot.session.revert) return undefined;
+  if (snapshot.messages.some((message) => pending.boundary.replacedMessageIds.has(message.info.id))) return undefined;
+  // Empty/reverted or stale bounded history is not evidence of acceptance. Wait
+  // for a genuinely newer user turn, using timestamps from the same server.
+  return snapshot.messages.some(({ info }) => info.role === "user"
+    && !pending.knownMessageIds.has(info.id)
+    && Number.isFinite(info.time.created)
+    && info.time.created > pending.latestCreated) ? pending.boundary : undefined;
 }
 export const permissionKey = (workspaceId: string, sessionId: string) =>
   ["react-session-permissions", workspaceId, sessionId] as const;
@@ -634,6 +680,7 @@ function applyEvent(entry: SyncEntry, workspaceId: string, event: OpencodeEvent)
     if (sessionId) {
       useSessionActivityStore.getState().removeSession(workspaceId, sessionId);
       suppressedTranscriptMessageIds.delete(transcriptSessionKey(workspaceId, sessionId));
+      pendingTranscriptReplacements.delete(transcriptSessionKey(workspaceId, sessionId));
     }
     return;
   }
@@ -1082,7 +1129,7 @@ export function seedSessionState(
 ) {
   const queryClient = getReactQueryClient();
   const key = transcriptKey(workspaceId, snapshot.session.id);
-  const replacementBoundary = options.replacementBoundary;
+  const replacementBoundary = options.replacementBoundary ?? confirmedPendingTranscriptReplacement(workspaceId, snapshot);
   const authoritativeBoundary = replacementBoundary?.workspaceId === workspaceId
     && replacementBoundary.sessionId === snapshot.session.id
     ? replacementBoundary
@@ -1092,6 +1139,9 @@ export function seedSessionState(
   const suppressionKey = transcriptSessionKey(workspaceId, snapshot.session.id);
   const suppressed = new Set(suppressedTranscriptMessageIds.get(suppressionKey) ?? []);
   if (authoritativeBoundary) {
+    if (pendingTranscriptReplacements.get(suppressionKey)?.boundary === authoritativeBoundary) {
+      pendingTranscriptReplacements.delete(suppressionKey);
+    }
     for (const messageId of authoritativeBoundary.replacedMessageIds) {
       if (incomingIds.has(messageId)) suppressed.delete(messageId);
       else suppressed.add(messageId);

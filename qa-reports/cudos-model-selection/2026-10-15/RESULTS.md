@@ -2,18 +2,39 @@
 
 ## Disposition and identity
 
-**Local acceptance checkpoint; draft PR, no merge or deployment approval.** Exact-subnet/completed-Retry and corrected Retry/Stop pass at the recorded runtime revisions. The owner has now approved retaining unknown-usage reservations; `a220c1424560ae5c978dde05d3a3ba5802bf2371` and `12ec0a35e29ef1de539a3ce3b12b9eecabde5941` implement that policy with isolated regression evidence below. This supersedes the earlier pending-policy blocker, not the historical observations or outstanding hosted/operator gates. No hosted-ready or complete-provider-billing claim is made.
+**Merge authorized after the final review fix and passing CI on the exact final head; no deployment authorized or performed.** Exact-subnet/completed-Retry and corrected Retry/Stop remain historical passes at the recorded runtime revisions. The owner-approved unknown-usage retention policy is implemented by `a220c1424560ae5c978dde05d3a3ba5802bf2371` and `12ec0a35e29ef1de539a3ce3b12b9eecabde5941`; the final frontend Retry correction below does not change that policy. Merge authorization supersedes the earlier no-merge disposition, not the historical observations or separate hosted/deployment gates. No hosted-ready or complete-provider-billing claim is made.
 
 - Repository/branch: `matterhornso/matterhorn-work`, `codex/cudos-model-selection-2026-10-14`.
-- Candidate: [draft PR #1036](https://github.com/matterhornso/matterhorn-work/pull/1036), targeting `dev`, based on merged #1035 (`4085d83cb23e9e2f4f4c639d3a990f9b93196771`).
-- Previous remote checkpoint: `6c751936f33824917319a0c2daa6dc420f9f3443`; all 11 checks passed. It does not include the latest unknown-usage correction; query the actual PR head and its checks before review.
-- Current rebuilt local runtime/source: `59c6dac3ac1f5c289509639206ff2eca6d21b601`, with existing data, configuration, accounting and caps preserved. Final exact-read/completed-Retry replay passed; the earlier output-limit failure on `2b242d66` is superseded, not deleted.
+- Candidate: [PR #1036](https://github.com/matterhornso/matterhorn-work/pull/1036), targeting `dev`, based on merged #1035 (`4085d83cb23e9e2f4f4c639d3a990f9b93196771`).
+- Previous remote checkpoint: `41e6829d64be5af832f94728ded983bd98d370fa`; all 11 checks passed before the final lost-acknowledgement Retry correction. Query the exact new PR head and its checks before merge.
+- Current local preview: `41e6829d64be5af832f94728ded983bd98d370fa`, updated in the preceding turn with data preserved and untouched during the final-review fix. Historical exact-read/completed-Retry runtime: `59c6dac3ac1f5c289509639206ff2eca6d21b601`; its successful live replay supersedes the earlier output-limit failure on `2b242d66`, not the evidence dates or revision identities.
 - Corrected Retry/Stop evidence checkpoint: `2b242d66f0cfddf062eb66db348250a396e3f367`; normal login/draft persisted through that restart.
 - Earlier live Stop evidence checkpoint: `eba600e8205da06b5999e21e36cdd03de2e73c91`; do not relabel it as a repeat on the later runtime.
-- Accounting implementation checkpoint: `12ec0a35e29ef1de539a3ce3b12b9eecabde5941`, following `a220c142`; running provider preview remains unchanged at `59c6dac3`. Latest published head/CI is recorded on PR #1036 after the final evidence commit. Approved release/merge SHA and hosted artifact IDs: **not approved; pending operator review**.
+- Accounting implementation checkpoint: `12ec0a35e29ef1de539a3ce3b12b9eecabde5941`, following `a220c142`; that accounting-only pass left the then-running `59c6dac3` preview unchanged. Final reviewed head and merge SHAs will be recorded in the immutable final handoff after exact-head CI. Hosted artifact IDs and deployment approval remain outstanding; merge authorization does not authorize deployment.
 - Operator instructions and preserved gates: [deployment handoff](../../../docs/handoffs/cudos-model-selection-and-desk-reads-2026-10-15.md).
 
 This report supersedes the current-status conclusions of the [14 October report and earlier follow-up](../2026-10-14/RESULTS.md), not its historical observations. Earlier failures remain recorded below. It is not a new visual redesign, whole-repository rollback or production configuration change.
+
+## Final review supplement
+
+The final P2 finding was a lost-acknowledgement Retry race: after `message_outcome_unknown`, an accepted replacement could later appear in an ordinary snapshot while the obsolete turn remained cached because its replacement boundary had been discarded. The correction retains that boundary with all pre-retry known message IDs and the maximum captured server timestamp. Polling confirms replacement only when no revert cursor or replaced IDs remain and a previously unknown user message has a finite timestamp strictly newer than that maximum. Stale old, empty, reverted, earlier-history and assistant-only snapshots leave the boundary pending. Confirmed reconciliation removes obsolete IDs, preserves unrelated/current stream output and suppresses later stale snapshots and deltas.
+
+An unresolved-history guard prevents another destructive Retry during recovery. Polling does not resend or restore an accepted request. Pending state is scoped to its workspace/session and cleared by explicit restoration, session deletion and account reset. Identity, consent, dispatch idempotency and the approved indefinite usage-reservation policy are unchanged.
+
+| Final-review verification | Result |
+| --- | --- |
+| Five added session-sync regressions | 24 passed, zero failed, 69 assertions in the complete session-sync test file; includes missing original-turn timestamps |
+| Independent focused verification | 56 passed, 161 assertions |
+| Full frontend, including the additional typed-error regression | 1,346 passed, zero failed, 8,219 assertions, 191 files, 9.51 seconds; six new tests total |
+| App typecheck | Passed under Node 24 and Corepack pnpm 10.27.0 |
+| Complete local platform safety | All 11 stages passed, exit 0; run used shell Node 26.7/pnpm 9.15.9, not the CI toolchain |
+| Strict secret scan | 1,235 files, zero findings, zero skips |
+| Isolated browser verification | Full Chromium: 7 passed / 943 assertions; WebKit lost-ACK regression: 2 passed / 40 assertions. Final stricter timestamp-guard Chromium confirmation: 2 passed / 40 assertions. Both Retry controls issue only status reads; delayed ordinary polling removes old output/banner without reload and preserves the draft at 390/1280px. Synthetic data only, not new live-provider acceptance |
+| Exact new-head CI and merge identity | Pending; record the full tested head and actual merge SHA in the immutable final handoff |
+
+Final-review logs are under `/private/tmp/matterhorn-pr1036-final.4mKKHt/`, including `platform-safety.log`. They are local diagnostics, not portable release artifacts. The previous all-green `41e6829d` CI does not certify the next head; exact-head CI is the definitive CI-toolchain gate.
+
+The preceding update of the preview to `41e6829d64be5af832f94728ded983bd98d370fa` preserved **1 account, 2 auth sessions, 8 chats, 51 messages, 143 parts and 24 usage operations**. This final-review turn did not operate or restart it. The real-provider journeys below remain historical at their recorded revisions, principally `59c6dac3`; there was no new live five-desk replay or deployment.
 
 ## Corrections and source review
 
@@ -30,9 +51,9 @@ Known-unsent cancellation releases the usage hold. An accepted `202` stopped rec
 
 The earlier model-preference and Bittensor selector fixes remain: saving a default sends no inference prompt and does not certify provider privacy; `discovery` lists/searches, while singular subnet/validator reads require exact `netuid`. No wallet authority, submission capability, provider replacement, data reset or migration is added.
 
-## Verification checkpoint
+## Historical verification checkpoint
 
-Results below are the implementation runner's recorded results; the documentation pass independently checked commit identities and the final safety-log marker. They do not certify a later untested revision or hosted environment.
+Results below preserve the implementation runner's earlier checkpoint, including its recorded commit identities and safety-log marker. Later final-review verification is listed in the supplement above. These historical results do not certify a later untested revision or hosted environment.
 
 | Verification | Result |
 | --- | --- |
@@ -46,11 +67,11 @@ Results below are the implementation runner's recorded results; the documentatio
 | Strict secret scan | Final scan: 1,232 files, zero findings, zero skips |
 | Isolated production-format web build | Newest source `59c6dac3` passed in 6.87 seconds; rebuilt runtime restarted with existing data preserved |
 | Complete `pnpm test:matterhorn-platform-safety` | Newest-source full run for `59c6dac3` exited 0 with `Matterhorn platform safety gate passed` |
-| Final published-head CI, including Rust audit/locked compilation | **Pending**; earlier-head jobs do not satisfy this gate |
+| Published-head CI at this historical checkpoint, including Rust audit/locked compilation | Was pending; the later `41e6829d` checkpoint passed all 11 checks, and the new final-review head still requires its own CI |
 
 Newest-source passing safety log: `/private/tmp/matterhorn-cudos-restored-4ZgYPr/safety-gate-release-final.log`. Earlier complete passes remain at `/private/tmp/matterhorn-cudos-restored-4ZgYPr/safety-gate-final-retry.log` and `/private/tmp/matterhorn-cudos-restored-4ZgYPr/safety-gate-final.log`. These are local diagnostic evidence, not portable release artifacts. Exact reproduction/build commands and toolchain requirements remain in the handoff. Use disposable test storage, not production databases.
 
-## Current live acceptance and usage
+## Historical live acceptance and usage
 
 | Journey | Evidence/status |
 | --- | --- |
@@ -107,7 +128,7 @@ Local automatic host approval was separately user-authorized for the isolated ru
 
 ## Remaining release gates and limits
 
-The unknown stopped-usage policy is now approved and implemented. Keep the PR draft pending final-head checks/review and the hosted/operator gates. Exact-subnet/completed-Retry, genuine streaming Stop and corrected Retry/Stop pass locally at their recorded revisions; the later accounting correction has its own deterministic evidence above. No deployment, merge or production changes were performed. Historical zero settlements and provider receipt availability remain operator reconciliation concerns. Do not equate local browser/engine evidence with hosted acceptance or provider-billing certification.
+The unknown stopped-usage policy is approved, implemented and unchanged by the final frontend fix. The user authorized merge once that fix and the required exact-head checks pass; see the final-review supplement for completed verification and pending browser/CI results. The actual final head and merge identity belong in the immutable final handoff, not an inferred SHA here. Deployment is neither authorized nor performed in this turn. Exact-subnet/completed-Retry, genuine streaming Stop and corrected Retry/Stop remain local historical passes at their recorded revisions; accounting has separate deterministic evidence. Historical zero settlements and provider receipt availability remain operator reconciliation concerns. Do not equate local browser/engine evidence with hosted acceptance or provider-billing certification.
 
 The operator must independently verify the actual domain/branch/service binding, rebuild from the approved full release SHA, retain databases/volumes/auth/chats/keys/accounting, drain runs and reconcile holds, and prove encrypted backup plus isolated restore. No migrations or resets are required. Verify matching web/API/runtime artifact identities after deployment and replay all five real desk responses through ordinary authenticated accounts with model/agent/network/source/time receipts.
 

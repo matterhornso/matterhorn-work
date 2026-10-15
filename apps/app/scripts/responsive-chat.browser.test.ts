@@ -21,9 +21,9 @@ async function fitsHorizontally(locator: Locator, width: number) {
   expect(box.x + box.width).toBeLessThanOrEqual(width + 1);
 }
 
-async function openFixture(page: Page, theme: string) {
+async function openFixture(page: Page, theme: string, mode = "") {
   await page.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
-  await page.goto(`${server.url}?theme=${theme}`);
+  await page.goto(`${server.url}?theme=${theme}${mode}`);
   await page.getByText("Response details", { exact: true }).waitFor();
   await page.getByText("Jev needs operator setup. Regular chat still works.", { exact: true }).waitFor();
 }
@@ -211,3 +211,61 @@ test("empty placeholder and long draft fit narrow columns at enlarged root text 
     expect(await page.getByRole("button", { name: "Chat options", exact: true }).isVisible()).toBe(true);
   } finally { await page.close(); }
 }, 20_000);
+
+for (const width of [390, 1280]) {
+test(`lost Retry acknowledgment at ${width}px checks status without resending and recovers the replacement without reload`, async () => {
+  const page = await browser.newPage({ viewport: { width, height: width === 390 ? 844 : 900 }, reducedMotion: "reduce" });
+  page.setDefaultTimeout(5000);
+  try {
+    await openFixture(page, "dark", "&retry=outcome-unknown");
+    const editor = page.getByRole("textbox");
+    const draft = "Keep this unrelated composer draft while the retry outcome is checked.";
+    const obsoleteAnswer = page.getByText("Synthetic Bittensor response — no live-chain request was made.", { exact: true });
+    const unknownBanner = page.getByText("Checking whether your message was received.", { exact: true });
+    await editor.fill(draft);
+    const documentBeforeRetry = await page.evaluate(() => performance.timeOrigin);
+    await page.getByRole("button", { name: "Retry response", exact: true }).click();
+    await unknownBanner.waitFor();
+    expect(await obsoleteAnswer.isVisible()).toBe(true);
+    expect(await editor.innerText()).toBe(draft);
+    const evidence = () => page.request.get(`${server.url}__qa/evidence`).then(response => response.json());
+    const firstAttempt = await evidence();
+    expect(firstAttempt).toMatchObject({ dispatched: 1, aborted: 1, reverted: 1, unreverted: 0, events: ["abort", "revert", "dispatch"] });
+    expect(JSON.stringify(firstAttempt.draft)).toContain("Explain public Bittensor subnet data.");
+    expect(JSON.stringify(firstAttempt.draft)).not.toContain(draft);
+
+    // Both visible Retry controls are status checks while acceptance is unknown.
+    const retryButtons = page.getByRole("button", { name: "Retry response", exact: true });
+    expect(await retryButtons.count()).toBe(2);
+    for (const retry of await retryButtons.all()) {
+      const beforeCheck = await evidence();
+      await Promise.all([
+        page.waitForResponse(response => response.url().includes("/snapshot") && response.ok()),
+        retry.click(),
+      ]);
+      const afterCheck = await evidence();
+      expect(afterCheck.snapshots).toBeGreaterThan(beforeCheck.snapshots);
+      expect(afterCheck).toMatchObject({ dispatched: 1, aborted: 1, reverted: 1, unreverted: 0, events: ["abort", "revert", "dispatch"] });
+      expect(await unknownBanner.isVisible()).toBe(true);
+      expect(await obsoleteAnswer.isVisible()).toBe(true);
+      expect(await editor.innerText()).toBe(draft);
+    }
+
+    const advanced = await (await page.request.post(`${server.url}__qa/advance-retry`)).json();
+    expect(advanced).toEqual({ advanced: true, updated: 2000, messageCount: 2 });
+    // Ordinary idle polling receives new server IDs/times with unchanged
+    // session.updated and message count; it must still reseed the transcript.
+    await page.getByText("Recovered synthetic retry response. The replacement was accepted despite its lost acknowledgment. No live request was made.", { exact: true }).waitFor();
+    await obsoleteAnswer.waitFor({ state: "hidden" });
+    await unknownBanner.waitFor({ state: "hidden" });
+    expect(await editor.innerText()).toBe(draft);
+    expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentBeforeRetry);
+    expect(await evidence()).toMatchObject({ dispatched: 1, aborted: 1, reverted: 1, unreverted: 0, events: ["abort", "revert", "dispatch"] });
+    const captureRoot = process.env.UI_QA_RETRY_CAPTURE_DIR;
+    if (captureRoot) {
+      await mkdir(captureRoot, { recursive: true });
+      await page.screenshot({ path: `${captureRoot}/retry-recovered-${process.env.UI_QA_BROWSER ?? "chromium"}-${width}.png`, fullPage: true });
+    }
+  } finally { await page.close(); }
+}, 30_000);
+}

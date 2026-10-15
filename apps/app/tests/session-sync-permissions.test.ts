@@ -7,6 +7,7 @@ import type { PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2/cli
 import type { OpenworkSessionSnapshot } from "../src/app/lib/openwork-server";
 import { getReactQueryClient } from "../src/react-app/infra/query-client";
 import { deriveRenderedSessionMessages } from "../src/react-app/domains/session/surface/session-render-state";
+import { runAssistantResponseRetry } from "../src/react-app/domains/session/surface/response-actions";
 import {
   __applySessionSyncEventForTest,
   __createWorkspaceSessionSyncForTest,
@@ -15,8 +16,10 @@ import {
   captureSessionTranscriptSnapshotBoundary,
   coalescePendingDeltas,
   ensureWorkspaceSessionSync,
+  getPendingTranscriptReplacement,
   permissionKey,
   questionKey,
+  retainPendingTranscriptReplacement,
   seedPermissionState,
   seedQuestionState,
   seedReplacementSessionState,
@@ -54,16 +57,17 @@ function question(id: string, sessionID: string): QuestionRequest {
   };
 }
 
-function uiMessage(id: string, role: "user" | "assistant", text: string): UIMessage {
+function uiMessage(id: string, role: "user" | "assistant", text: string, created?: number): UIMessage {
   return {
     id,
     role,
     parts: [{ type: "text", text, state: "done" }],
+    ...(created === undefined ? {} : { metadata: { opencode: { created } } }),
   };
 }
 
 function snapshotWithMessages(
-  messages: Array<{ id: string; role: "user" | "assistant"; text: string }>,
+  messages: Array<{ id: string; role: "user" | "assistant"; text: string; created?: number }>,
   sessionId = "session-a",
 ): OpenworkSessionSnapshot {
   return {
@@ -80,7 +84,7 @@ function snapshotWithMessages(
         id: message.id,
         role: message.role,
         sessionID: sessionId,
-        time: { created: index + 1 },
+        time: { created: message.created ?? index + 1 },
       },
       parts: [
         {
@@ -404,6 +408,201 @@ describe("session transcript sync", () => {
       "msg-retry-user",
       "msg-retry-assistant",
     ]);
+  });
+
+  test("reconciles a lost-ACK retry from an ordinary snapshot without redispatching or restoring", async () => {
+    const workspaceId = "workspace-retry-lost-ack";
+    const sessionId = "session-retry-lost-ack";
+    const syncInput = { workspaceId, baseUrl: "http://127.0.0.1:1234", matterhornToken: "fixture" };
+    const cleanup = __createWorkspaceSessionSyncForTest(syncInput);
+    const releaseSession = trackWorkspaceSessionSync(syncInput, sessionId);
+    const key = transcriptKey(workspaceId, sessionId);
+    const beforeRetry = [
+      uiMessage("msg-earlier-user", "user", "earlier question", 100),
+      uiMessage("msg-earlier-assistant", "assistant", "earlier answer", 200),
+      uiMessage("msg-old-user", "user", "retry this", 300),
+      uiMessage("msg-old-assistant", "assistant", "obsolete answer", 400),
+    ];
+    const boundary = captureSessionTranscriptSnapshotBoundary(workspaceId, sessionId, ["msg-old-user", "msg-old-assistant"]);
+    const original = snapshotWithMessages([
+      { id: "msg-old-user", role: "user", text: "retry this", created: 300 },
+      { id: "msg-old-assistant", role: "assistant", text: "obsolete answer", created: 400 },
+    ], sessionId);
+    const replacement = snapshotWithMessages([
+      { id: "msg-retry-user", role: "user", text: "retry this", created: 500 },
+      { id: "msg-retry-assistant", role: "assistant", text: "replacement answer", created: 600 },
+    ], sessionId);
+    const calls: string[] = [];
+    const lostAck = Object.assign(new Error("Send outcome is unknown"), { code: "message_outcome_unknown" });
+    getReactQueryClient().setQueryData(key, beforeRetry);
+    try {
+      await expect(runAssistantResponseRetry({
+        prepare: async () => { calls.push("prepare"); },
+        abort: async () => { calls.push("abort"); },
+        revert: async () => { calls.push("revert"); },
+        dispatch: async () => { calls.push("dispatch"); throw lostAck; },
+        restore: async () => { calls.push("restore"); },
+      }).catch((error: unknown) => {
+        // Mirror the response action: retain its original boundary on unknown
+        // acceptance and let later ordinary polling establish replacement.
+        retainPendingTranscriptReplacement(boundary, beforeRetry);
+        throw error;
+      })).rejects.toBe(lostAck);
+      expect(calls).toEqual(["prepare", "abort", "revert", "dispatch"]);
+
+      const reverted = {
+        ...replacement,
+        session: { ...replacement.session, revert: { messageID: "msg-old-user" } },
+      };
+      for (const stale of [original, snapshotWithMessages([], sessionId), reverted, snapshotWithMessages([
+        { id: "msg-earlier-user", role: "user", text: "earlier question", created: 100 },
+        { id: "msg-earlier-assistant", role: "assistant", text: "earlier answer", created: 200 },
+      ], sessionId)]) {
+        seedSessionState(workspaceId, stale);
+        expect(getPendingTranscriptReplacement(workspaceId, sessionId)).toEqual(boundary);
+        expect(getReactQueryClient().getQueryData<UIMessage[]>(key)?.map((message) => message.id))
+          .toEqual(expect.arrayContaining(["msg-old-user", "msg-old-assistant"]));
+      }
+
+      __applySessionSyncEventForTest(syncInput, { type: "message.part.updated", properties: { part: {
+        id: "part-current-live", type: "text", text: "current live output", sessionID: sessionId, messageID: "msg-current-live",
+      } } });
+      __applySessionSyncEventForTest(syncInput, { type: "message.part.delta", properties: {
+        sessionID: sessionId, messageID: "msg-old-assistant", partID: "part-old-late", delta: "queued obsolete output",
+      } });
+      seedSessionState(workspaceId, replacement);
+      expect(getPendingTranscriptReplacement(workspaceId, sessionId)).toBeNull();
+      const expectedIds = ["msg-earlier-user", "msg-earlier-assistant", "msg-retry-user", "msg-retry-assistant", "msg-current-live"];
+      expect(getReactQueryClient().getQueryData<UIMessage[]>(key)?.map((message) => message.id)).toEqual(expectedIds);
+
+      seedSessionState(workspaceId, original);
+      __applySessionSyncEventForTest(syncInput, { type: "message.part.updated", properties: { part: {
+        id: "part-old-late", type: "text", text: "late obsolete answer", sessionID: sessionId, messageID: "msg-old-assistant",
+      } } });
+      __applySessionSyncEventForTest(syncInput, { type: "message.part.delta", properties: {
+        sessionID: sessionId, messageID: "msg-old-assistant", partID: "part-old-late", delta: "late obsolete delta",
+      } });
+      await Promise.resolve();
+      expect(getReactQueryClient().getQueryData<UIMessage[]>(key)?.map((message) => message.id)).toEqual(expectedIds);
+      expect(calls).toEqual(["prepare", "abort", "revert", "dispatch"]);
+    } finally {
+      releaseSession();
+      cleanup();
+      accountClientState.clear();
+    }
+  });
+
+  test("pending replacement requires a new user ID strictly newer than every captured server timestamp", () => {
+    const workspaceId = "workspace-retry-proof";
+    const sessionId = "session-retry-proof";
+    const beforeRetry = [
+      uiMessage("msg-known-user", "user", "known earlier turn", 100),
+      uiMessage("msg-old-user", "user", "retry this", 300),
+      uiMessage("msg-old-assistant", "assistant", "obsolete answer", 400),
+      uiMessage("msg-unrelated-known", "assistant", "known timestamp outside the replaced turn", 450),
+    ];
+    const boundary = captureSessionTranscriptSnapshotBoundary(workspaceId, sessionId, ["msg-old-user", "msg-old-assistant"]);
+    retainPendingTranscriptReplacement(boundary, beforeRetry);
+    try {
+      for (const message of [
+        { id: "msg-older-unseen-user", role: "user", text: "older paged history", created: 250 },
+        { id: "msg-between-time-user", role: "user", text: "newer than only the replaced turn", created: 425 },
+        { id: "msg-equal-time-user", role: "user", text: "not proven newer", created: 450 },
+        { id: "msg-known-user", role: "user", text: "known ID with newer metadata", created: 500 },
+        { id: "msg-new-assistant", role: "assistant", text: "assistant alone is not acceptance", created: 500 },
+        { id: "msg-nan-time-user", role: "user", text: "invalid timestamp", created: Number.NaN },
+        { id: "msg-infinite-time-user", role: "user", text: "invalid timestamp", created: Infinity },
+      ] satisfies Array<{ id: string; role: "user" | "assistant"; text: string; created: number }>) {
+        seedSessionState(workspaceId, snapshotWithMessages([message], sessionId));
+        expect(getPendingTranscriptReplacement(workspaceId, sessionId)).toEqual(boundary);
+      }
+      seedSessionState(workspaceId, snapshotWithMessages([
+        { id: "msg-old-assistant", role: "assistant", text: "old turn still present", created: 400 },
+        { id: "msg-new-user", role: "user", text: "new turn", created: 500 },
+      ], sessionId));
+      expect(getPendingTranscriptReplacement(workspaceId, sessionId)).toEqual(boundary);
+      seedSessionState(workspaceId, snapshotWithMessages([
+        { id: "msg-new-user", role: "user", text: "new turn", created: 500 },
+      ], sessionId));
+      expect(getPendingTranscriptReplacement(workspaceId, sessionId)).toBeNull();
+    } finally { accountClientState.clear(); }
+  });
+
+  test("missing original-turn timestamps cannot mistake backfilled history for the replacement", () => {
+    const workspaceId = "workspace-pending-missing-time";
+    const sessionId = "session-pending-missing-time";
+    const boundary = captureSessionTranscriptSnapshotBoundary(workspaceId, sessionId, ["msg-old-user", "msg-old-assistant"]);
+    const messages = [
+      uiMessage("msg-old-user", "user", "retry this", 100),
+      uiMessage("msg-old-assistant", "assistant", "original timestamp unknown"),
+    ];
+    const key = transcriptKey(workspaceId, sessionId);
+    getReactQueryClient().setQueryData(key, messages);
+    retainPendingTranscriptReplacement(boundary, messages);
+    try {
+      seedSessionState(workspaceId, snapshotWithMessages([
+        { id: "msg-paged-user", role: "user", text: "not proven newer than original answer", created: 200 },
+      ], sessionId));
+      expect(getPendingTranscriptReplacement(workspaceId, sessionId)).toEqual(boundary);
+      expect(getReactQueryClient().getQueryData<UIMessage[]>(key)?.map((message) => message.id)).toContain("msg-old-assistant");
+    } finally { accountClientState.clear(); }
+  });
+
+  test("keeps pending retry boundaries isolated by workspace, session, deletion, and account", () => {
+    const workspaceId = "workspace-pending-isolation";
+    const otherWorkspaceId = "workspace-pending-other";
+    const sessionId = "session-pending-isolation";
+    const otherSessionId = "session-pending-other";
+    const syncInput = { workspaceId, baseUrl: "http://127.0.0.1:1234", matterhornToken: "fixture" };
+    const cleanup = __createWorkspaceSessionSyncForTest(syncInput);
+    const messages = [uiMessage("msg-old-user", "user", "retry this", 100)];
+    const scopes = [
+      { workspaceId, sessionId },
+      { workspaceId, sessionId: otherSessionId },
+      { workspaceId: otherWorkspaceId, sessionId },
+    ];
+    const boundaries = scopes.map((scope) => captureSessionTranscriptSnapshotBoundary(scope.workspaceId, scope.sessionId, ["msg-old-user"]));
+    for (const boundary of boundaries) retainPendingTranscriptReplacement(boundary, messages);
+    try {
+      seedSessionState(otherWorkspaceId, snapshotWithMessages([
+        { id: "msg-new-user", role: "user", text: "new turn elsewhere", created: 200 },
+      ], sessionId));
+      expect(getPendingTranscriptReplacement(otherWorkspaceId, sessionId)).toBeNull();
+      expect(getPendingTranscriptReplacement(workspaceId, sessionId)).toEqual(boundaries[0]);
+      expect(getPendingTranscriptReplacement(workspaceId, otherSessionId)).toEqual(boundaries[1]);
+      __applySessionSyncEventForTest(syncInput, { type: "session.deleted", properties: { sessionID: sessionId } });
+      expect(getPendingTranscriptReplacement(workspaceId, sessionId)).toBeNull();
+      expect(getPendingTranscriptReplacement(workspaceId, otherSessionId)).toEqual(boundaries[1]);
+
+      accountClientState.clear();
+      for (const scope of scopes) expect(getPendingTranscriptReplacement(scope.workspaceId, scope.sessionId)).toBeNull();
+      const key = transcriptKey(workspaceId, otherSessionId);
+      getReactQueryClient().setQueryData(key, messages);
+      seedSessionState(workspaceId, snapshotWithMessages([
+        { id: "msg-new-account-user", role: "user", text: "new account turn", created: 200 },
+      ], otherSessionId));
+      expect(getReactQueryClient().getQueryData<UIMessage[]>(key)?.map((message) => message.id)).toContain("msg-old-user");
+    } finally { cleanup(); accountClientState.clear(); }
+  });
+
+  test("explicit retry restoration clears a retained boundary before ordinary polling resumes", () => {
+    const workspaceId = "workspace-pending-restore";
+    const sessionId = "session-pending-restore";
+    const original = [uiMessage("msg-old-user", "user", "original turn", 100)];
+    const boundary = captureSessionTranscriptSnapshotBoundary(workspaceId, sessionId, ["msg-old-user"]);
+    const key = transcriptKey(workspaceId, sessionId);
+    getReactQueryClient().setQueryData(key, original);
+    retainPendingTranscriptReplacement(boundary, original);
+    try {
+      seedReplacementSessionState(workspaceId, snapshotWithMessages([
+        { id: "msg-old-user", role: "user", text: "restored original turn", created: 100 },
+      ], sessionId), boundary);
+      expect(getPendingTranscriptReplacement(workspaceId, sessionId)).toBeNull();
+      seedSessionState(workspaceId, snapshotWithMessages([
+        { id: "msg-later-user", role: "user", text: "ordinary later turn", created: 200 },
+      ], sessionId));
+      expect(getReactQueryClient().getQueryData<UIMessage[]>(key)?.map((message) => message.id)).toContain("msg-old-user");
+    } finally { accountClientState.clear(); }
   });
 
   test("does not resurrect replaced IDs from late stream events or stale snapshots", async () => {

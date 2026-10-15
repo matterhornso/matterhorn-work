@@ -96,11 +96,13 @@ import { deriveRenderedSessionMessages, resolveRenderedSessionSnapshot } from ".
 import { useLocal } from "../../../kernel/local-provider";
 import { deriveSessionRenderModel } from "../sync/transition-controller";
 import { useSessionScrollController } from "./scroll-controller";
-import { failedContinuationResponseId, resolveAssistantResponseRetryTurn, responseOutputTitle, runAssistantResponseRetry } from "./response-actions";
+import { failedContinuationResponseId, isUnknownMessageOutcome, resolveAssistantResponseRetryTurn, responseOutputTitle, runAssistantResponseRetry } from "./response-actions";
 import { getSessionActivityStatusLabel, useSessionActivityStore, type SessionActivityStatus } from "../status/session-activity-store";
 import { deriveOpenTargets, selectAutoOpenTarget, type OpenTarget } from "../artifacts/open-target";
 import {
   captureSessionTranscriptSnapshotBoundary,
+  getPendingTranscriptReplacement,
+  retainPendingTranscriptReplacement,
   seedReplacementSessionState,
   seedSessionState,
   snapshotKey as reactSnapshotKey,
@@ -655,7 +657,7 @@ function starterWorkflowCapabilityItems(item: CustomerWorkflowStarterCard): stri
 type SessionError = {
   message: string;
   detail?: string;
-  kind?: "model-not-found" | "provider-unavailable" | "rate-limited" | "privacy-blocked" | "privacy-consent" | "cancelled" | "generic";
+  kind?: "model-not-found" | "provider-unavailable" | "rate-limited" | "privacy-blocked" | "privacy-consent" | "cancelled" | "outcome-unknown" | "generic";
   retryable?: boolean;
   /** For model-not-found: the model that failed. */
   failedModel?: { providerID: string; modelID: string };
@@ -1113,11 +1115,11 @@ export function parseSessionError(thrown: unknown): SessionError {
       retryable: false,
     };
   }
-  if (/message_outcome_unknown/i.test(diagnostic)) {
+  if (isUnknownMessageOutcome(thrown)) {
     return {
       message: "Checking whether your message was received.",
       detail: "The run may still be active. Check chat history, or retry to check its status without starting another run.",
-      kind: "generic",
+      kind: "outcome-unknown",
       retryable: true,
     };
   }
@@ -1782,15 +1784,21 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
   useEffect(() => {
     if (!currentSnapshot) return;
-    const key = `${props.sessionId}:${currentSnapshot.session.time?.updated ?? currentSnapshot.session.time?.created ?? 0}:${currentSnapshot.messages.length}`;
+    const key = `${props.sessionId}:${snapshotQuery.dataUpdatedAt}`;
     if (hydratedKeyRef.current === key) return;
     hydratedKeyRef.current = key;
     const id = window.setTimeout(() => {
       if (!isCurrentAccount()) return;
+      const pending = getPendingTranscriptReplacement(props.workspaceId, props.sessionId);
       seedSessionState(props.workspaceId, currentSnapshot);
+      if (pending && !getPendingTranscriptReplacement(props.workspaceId, props.sessionId)) {
+        pendingRetryRef.current = null;
+        if (retryTranscriptBoundaryRef.current === pending) retryTranscriptBoundaryRef.current = null;
+        setError((current) => current?.kind === "outcome-unknown" ? null : current);
+      }
     }, 0);
     return () => window.clearTimeout(id);
-  }, [props.sessionId, currentSnapshot, props.workspaceId, isCurrentAccount]);
+  }, [props.sessionId, currentSnapshot, snapshotQuery.dataUpdatedAt, props.workspaceId, isCurrentAccount]);
 
   useEffect(() => {
     if (!currentSnapshot) return;
@@ -1831,13 +1839,14 @@ export function SessionSurface(props: SessionSurfaceProps) {
     sessionActivityStatus === "responding"
   );
 
+  const pendingTranscriptReplacement = getPendingTranscriptReplacement(props.workspaceId, props.sessionId);
   useEffect(() => {
-    if (!chatStreaming) return;
+    if (!chatStreaming && !pendingTranscriptReplacement) return;
     const id = window.setInterval(() => {
       void snapshotQuery.refetch();
     }, 2_000);
     return () => window.clearInterval(id);
-  }, [chatStreaming, snapshotQuery.refetch]);
+  }, [chatStreaming, pendingTranscriptReplacement, snapshotQuery.refetch]);
   const renderedMessages = useMemo(
     () => [
       ...deriveRenderedSessionMessages({
@@ -1865,12 +1874,24 @@ export function SessionSurface(props: SessionSurfaceProps) {
     }
     if (!isCurrentAccount()) return false;
     if (refreshed.session.id !== boundary.sessionId) return false;
-    seedReplacementSessionState(boundary.workspaceId, refreshed, boundary);
+    if (getPendingTranscriptReplacement(boundary.workspaceId, boundary.sessionId)) {
+      // Stop/status checks must not treat a stale or empty snapshot as proof
+      // that an unacknowledged replacement was accepted.
+      seedSessionState(boundary.workspaceId, refreshed);
+      if (getPendingTranscriptReplacement(boundary.workspaceId, boundary.sessionId)) return false;
+      if (isCurrentSession()) {
+        pendingRetryRef.current = null;
+        setError((current) => current?.kind === "outcome-unknown" ? null : current);
+      }
+      void snapshotQuery.refetch();
+    } else {
+      seedReplacementSessionState(boundary.workspaceId, refreshed, boundary);
+    }
     if (isCurrentSession() && retryTranscriptBoundaryRef.current === boundary) {
       retryTranscriptBoundaryRef.current = null;
     }
     return true;
-  }, [isCurrentAccount, isCurrentSession, props.client]);
+  }, [isCurrentAccount, isCurrentSession, props.client, snapshotQuery.refetch]);
   useEffect(() => {
     if (renderedMessages.length === 0) return;
     void runReceiptsQuery.refetch();
@@ -2502,6 +2523,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
   const handleRetryAssistantResponse = useCallback(async (messageId: string, privacyConsentToken?: string) => {
     if (!isCurrentSession()) return;
+    if (getPendingTranscriptReplacement(props.workspaceId, props.sessionId)) {
+      await snapshotQuery.refetch();
+      return;
+    }
     if (sending || chatStreaming || retrySendingRef.current) {
       throw new Error("Wait for the active response to finish before retrying another response.");
     }
@@ -2577,6 +2602,12 @@ export function SessionSurface(props: SessionSurfaceProps) {
         tone: "info",
       });
     } catch (nextError) {
+      // A route change must not discard reconciliation for the original chat.
+      // Account changes still discard all old-identity work.
+      if (!isCurrentAccount()) return;
+      if (isUnknownMessageOutcome(nextError)) {
+        retainPendingTranscriptReplacement(replacementBoundary, renderedMessages);
+      }
       if (!isCurrentSession()) return;
       const parsed = recordSessionSubmissionFailure(operation, nextError);
       setError(parsed);
@@ -2584,7 +2615,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
       setNoVisibleAssistantOutputBaseline(null);
       setSending(false);
       useSessionActivityStore.getState().setRunStatus(props.workspaceId, props.sessionId, { type: "idle" });
-      if (!cancellation.signal.aborted) {
+      if (isUnknownMessageOutcome(nextError)) {
+        void snapshotQuery.refetch();
+      } else if (!cancellation.signal.aborted) {
         if (retryTranscriptBoundaryRef.current === replacementBoundary) retryTranscriptBoundaryRef.current = null;
         void snapshotQuery.refetch();
       }
@@ -2592,7 +2625,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     } finally {
       retrySendingRef.current = false;
     }
-  }, [bittensorContext, buildDraft, chatStreaming, isCurrentSession, jevChat.prepare, opencodeClient, props.modelVariant, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, refetchReplacementSnapshot, renderedMessages, sending, snapshotQuery]);
+  }, [bittensorContext, buildDraft, chatStreaming, isCurrentAccount, isCurrentSession, jevChat.prepare, opencodeClient, props.modelVariant, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, refetchReplacementSnapshot, renderedMessages, sending, snapshotQuery]);
 
   const handleConfirmPrivacy = useCallback(async () => {
     const preflight = error?.privacyPreflight;
@@ -2622,6 +2655,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
   }, [confirmingPrivacy, error?.privacyPreflight, sendWithConsent, continueAssistantResponse, handleRetryAssistantResponse, props.client, props.sessionId, props.workspaceId, sending]);
 
   const handleRetryResponse = useCallback(async () => {
+    if (getPendingTranscriptReplacement(props.workspaceId, props.sessionId)) {
+      await snapshotQuery.refetch();
+      return;
+    }
     const continuation = pendingContinuationRef.current;
     if (continuation?.sessionId === props.sessionId) {
       try { await continueAssistantResponse(continuation.messageId); } catch { /* The continuation error is already visible. */ }
@@ -2641,7 +2678,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     }
     if (sending || !draft.trim()) return;
     await handleSend();
-  }, [continueAssistantResponse, currentSnapshot, draft, handleRetryAssistantResponse, handleSend, props.sessionId, renderedMessages, sending]);
+  }, [continueAssistantResponse, currentSnapshot, draft, handleRetryAssistantResponse, handleSend, props.sessionId, props.workspaceId, renderedMessages, sending, snapshotQuery.refetch]);
 
   const handleSaveAssistantResponse = useCallback(async (messageId: string, content: string): Promise<OpenTarget> => {
     if (!content.trim()) throw new Error("This response has no content to save.");

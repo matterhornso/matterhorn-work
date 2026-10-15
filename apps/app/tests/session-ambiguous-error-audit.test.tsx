@@ -2,6 +2,7 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SessionErrorCard, parseSessionError } from "../src/react-app/domains/session/surface/session-surface";
+import { MatterhornServerError } from "../src/app/lib/matterhorn-server";
 
 describe("ambiguous dispatch error recovery", () => {
   test("announces cancelled approval as a stopped status without an automatic retry action", () => {
@@ -21,6 +22,13 @@ describe("ambiguous dispatch error recovery", () => {
     code: "message_outcome_unknown",
     message: "The request may still be running",
   })));
+
+  test("typed lost-ack errors retain a distinct recovery state without relying on diagnostic text", () => {
+    const error = parseSessionError(new MatterhornServerError(409, "message_outcome_unknown", "Check chat history."));
+    expect(error.kind).toBe("outcome-unknown");
+    expect(error.retryable).toBe(true);
+    expect(error.message).toBe("Checking whether your message was received.");
+  });
 
   test("does not declare failure or cancellation and explains idempotent status recovery", () => {
     const error = transportError();

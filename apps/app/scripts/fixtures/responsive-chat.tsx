@@ -49,7 +49,7 @@ function ResponsiveChatFixture() {
     onPrivateModeChange: () => setDialog("Private model setup"), onOpenAiProviders: () => setDialog("Private model setup"),
     onSendDraft: async (draft, signal) => {
       const result = await fetch("/__qa/dispatch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft), signal });
-      if (!result.ok) throw new Error("Synthetic request failed.");
+      if (!result.ok) throw new Error(search.get("retry") === "outcome-unknown" ? await result.text() : "Synthetic request failed.");
       await query.invalidateQueries();
     }, onDraftChange: noop, attachmentsEnabled: true, attachmentsDisabledReason: null,
     modelBehaviorTitle: "Default", modelVariantLabel: "Default", modelVariant: null, modelBehaviorIsProviderDefault: true,
