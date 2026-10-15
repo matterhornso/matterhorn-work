@@ -585,19 +585,84 @@ function canonicalBittensorReadNetwork(value: unknown): "mainnet" | "testnet" | 
   return value === "mainnet" || value === "testnet" || value === "local" ? value : "unknown";
 }
 
-function projectBittensorDiscovery(result: JsonObject): JsonObject {
+function pickDefinedFields(value: unknown, keys: readonly string[]): JsonObject {
+  if (!isJsonObject(value)) return {};
+  return Object.fromEntries(keys
+    .filter((key) => value[key] !== undefined)
+    .map((key) => [key, value[key]]));
+}
+
+function boundedModelString(value: unknown, maxChars: number): string | undefined {
+  if (typeof value !== "string" || value.trim().length === 0) return undefined;
+  return value.trim().slice(0, maxChars);
+}
+
+function boundedModelStrings(value: unknown, maxItems: number, maxChars: number): {
+  values: string[];
+  omittedCount: number;
+  truncated: boolean;
+} {
+  if (!Array.isArray(value)) return { values: [], omittedCount: 0, truncated: false };
+  const source = value
+    .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    .map((item) => item.trim());
+  const selected = source.slice(0, maxItems);
+  return {
+    values: selected.map((item) => item.slice(0, maxChars)),
+    omittedCount: Math.max(0, source.length - selected.length),
+    truncated: source.length > selected.length || selected.some((item) => item.length > maxChars),
+  };
+}
+
+function projectBittensorRead(result: JsonObject): JsonObject {
   const data = result.data;
   if (!isJsonObject(data)) return result;
   if (!isJsonObject(data.discovery)) {
     const intelligence = data.intelligence;
-    if (!isJsonObject(intelligence) || !isJsonObject(intelligence.market)) return result;
+    if (!isJsonObject(intelligence) || intelligence.kind !== "subnet" || !isJsonObject(intelligence.market)) return result;
+    const responseText = boundedModelString(result.responseText, 500);
+    const clarificationQuestion = boundedModelString(result.clarificationQuestion, 300);
+    const intelligenceWarningProjection = boundedModelStrings(intelligence.warnings, 3, 220);
+    const topWarningProjection = boundedModelStrings(result.warnings, 3, 220);
+    const distinctTopWarnings = topWarningProjection.values
+      .filter((warning) => !intelligenceWarningProjection.values.includes(warning));
+    const warnings = distinctTopWarnings.slice(0, 2);
+    const topWarningsTruncated = topWarningProjection.truncated || distinctTopWarnings.length > warnings.length;
+    const topOmittedWarningCount = topWarningProjection.omittedCount
+      + Math.max(0, distinctTopWarnings.length - warnings.length);
+    const mechanismNote = isJsonObject(intelligence.mechanismSummary)
+      ? boundedModelString(intelligence.mechanismSummary.note, 240)
+      : undefined;
     return {
-      ...result,
+      ...(typeof result.success === "boolean" ? { success: result.success } : {}),
+      ...(typeof result.execution === "string" ? { execution: result.execution.slice(0, 80) } : {}),
+      ...(typeof result.requiresClarification === "boolean" ? { requiresClarification: result.requiresClarification } : {}),
+      ...(responseText === undefined ? {} : { responseText }),
+      ...(clarificationQuestion === undefined ? {} : { clarificationQuestion }),
+      ...(warnings.length ? { warnings } : {}),
+      ...(topWarningsTruncated ? {
+        warningsTruncated: true,
+        omittedWarningCount: topOmittedWarningCount,
+      } : {}),
       data: {
-        ...data,
         intelligence: {
-          ...intelligence,
-          market: { ...intelligence.market, network: canonicalBittensorReadNetwork(intelligence.market.network) },
+          ...pickDefinedFields(intelligence, ["kind", "netuid", "name", "category", "score", "rating", "updatedAt"]),
+          mechanismSummary: {
+            ...pickDefinedFields(intelligence.mechanismSummary, ["available", "count"]),
+            ...(mechanismNote === undefined ? {} : { note: mechanismNote }),
+          },
+          market: {
+            ...pickDefinedFields(intelligence.market, ["priceTao", "emission", "tempo", "source", "block", "freshness"]),
+            network: canonicalBittensorReadNetwork(intelligence.market.network),
+          },
+          metagraph: pickDefinedFields(intelligence.metagraph, [
+            "neurons", "totalStake", "validatorsSampled", "topValidatorStakeShare", "concentrationRisk", "dataQuality",
+          ]),
+          ...(intelligenceWarningProjection.values.length ? { warnings: intelligenceWarningProjection.values } : {}),
+          ...(intelligenceWarningProjection.truncated ? {
+            warningsTruncated: true,
+            omittedWarningCount: intelligenceWarningProjection.omittedCount,
+          } : {}),
         },
       },
     };
@@ -734,7 +799,7 @@ function projectManagedMcpResult(input: {
     closed = Object.fromEntries(keys
       .filter((key) => rawResult[key] !== undefined)
       .map((key) => [key, rawResult[key]]));
-    if (input.tool.name === "matterhorn_bittensor_chat") closed = projectBittensorDiscovery(closed);
+    if (input.tool.name === "matterhorn_bittensor_chat") closed = projectBittensorRead(closed);
   }
   if (Object.keys(closed).length === 0) {
     throw new Error("matterhorn_tool_result_rejected");

@@ -9,6 +9,7 @@ import {
   managedMcpLegacyResultProjectionToolNames,
   managedOpencodeMcpToolNames,
   MANAGED_MCP_MODEL_CONTENT_MAX_CHARS,
+  MANAGED_MCP_MODEL_READ_CONTENT_MAX_CHARS,
 } from "./managed-opencode-mcp.js";
 import type { ManagedMcpToolCallMetric } from "./managed-opencode-mcp.js";
 import {
@@ -115,25 +116,103 @@ describe("managed OpenCode Matterhorn MCP", () => {
     ]);
   });
 
-  test("preserves authoritative network provenance on exact Bittensor subnet reads", async () => {
+  test("preserves bounded, useful provenance on oversized exact Bittensor subnet reads", async () => {
+    const repeatedDetail = "Public metagraph evidence with enough repeated detail to exceed the generic context projection. ".repeat(16);
     const result = await handleManagedOpencodeMcp({
       payload: { jsonrpc: "2.0", id: "exact-subnet-network", method: "tools/call", params: {
-        name: "matterhorn_bittensor_chat", arguments: { message: "Read subnet zero", readOperation: "subnet", netuid: 0 },
+        name: "matterhorn_bittensor_chat", arguments: { message: "Read subnet 27", readOperation: "subnet", netuid: 27 },
       } },
       serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
       fetchImpl: Object.assign(async () => Response.json({
         success: true,
         execution: "answered",
+        responseText: "Analyzed subnet 27 from public Bittensor data.",
+        plan: { responseCards: Array.from({ length: 20 }, () => "intelligence_report") },
         data: { intelligence: {
           kind: "subnet",
-          netuid: 0,
-          market: { network: "testnet", source: "bittensor-python-sdk", block: 8224237, freshness: "live" },
-        } },
+          netuid: 27,
+          name: "NI Compute",
+          category: "compute",
+          score: 82,
+          rating: "strong_public_context",
+          mechanismSummary: {
+            available: false,
+            count: null,
+            note: "Mechanism-specific metagraph fields are not exposed by the current provider contract.",
+          },
+          market: {
+            network: "testnet",
+            source: "bittensor-python-sdk",
+            block: 8_224_335,
+            freshness: "live",
+            priceTao: 1.23,
+            emission: 0.04,
+            tempo: 360,
+          },
+          metagraph: {
+            neurons: 256,
+            totalStake: 12_345,
+            validatorsSampled: 64,
+            topValidatorStakeShare: 0.16,
+            concentrationRisk: "low",
+            dataQuality: "low",
+          },
+          capability: {
+            capabilityLevel: "adapter_ready",
+            serviceAdapter: "public-read",
+            adapterStatus: { status: "ready", message: repeatedDetail },
+            userBenefits: Array.from({ length: 20 }, (_, index) => `Benefit ${index}: ${repeatedDetail}`),
+          },
+          signals: Array.from({ length: 20 }, (_, index) => ({
+            label: `Signal ${index}`,
+            value: "live",
+            tone: "good",
+            explanation: repeatedDetail,
+          })),
+          warnings: [
+            `No validator sample was available for this subnet. ${"Additional public-data limitation. ".repeat(12)}`,
+            "Dynamic TAO price was unavailable from the current provider.",
+            "This is public-data intelligence, not financial advice.",
+            "The visible validator sample may not represent the complete metagraph.",
+            "Verify the latest block before relying on these metrics.",
+          ],
+          nextQuestions: Array.from({ length: 20 }, (_, index) => `Question ${index}: ${repeatedDetail}`),
+          copilotActions: Array.from({ length: 20 }, (_, index) => ({ label: `Action ${index}`, prompt: repeatedDetail })),
+          watchSuggestions: Array.from({ length: 20 }, (_, index) => ({ label: `Watch ${index}`, reason: repeatedDetail })),
+          updatedAt: "2026-10-15T03:17:52.330Z",
+        }, customerGuidance: { followUpPrompt: repeatedDetail } },
+        warnings: [
+          "No validator sample was available for this subnet.",
+          "Educational guidance only; verify live data before connected-wallet approval.",
+        ],
       }), { preconnect() {} }),
     });
-    const serialized = JSON.stringify(result.body);
-    expect(serialized).toContain('"network":"testnet"');
-    expect(serialized).toContain("8224237");
+    const body = result.body as {
+      result: { content: Array<{ text: string }>; structuredContent: { result: unknown } };
+    };
+    const modelText = body.result.content[0]!.text;
+    const structured = JSON.stringify(body.result.structuredContent.result);
+    for (const serialized of [modelText, structured]) {
+      expect(serialized).not.toContain("Result exceeded the model-context limit");
+      expect(serialized).toContain('"netuid":27');
+      expect(serialized).toContain('"network":"testnet"');
+      expect(serialized).toContain('"source":"bittensor-python-sdk"');
+      expect(serialized).toContain('"block":8224335');
+      expect(serialized).toContain('"freshness":"live"');
+      expect(serialized).toContain("2026-10-15T03:17:52.330Z");
+      expect(serialized).toContain("No validator sample was available for this subnet.");
+      expect(serialized).toContain("Dynamic TAO price was unavailable from the current provider.");
+      expect(serialized).toContain("not financial advice");
+      expect(serialized).toContain("Mechanism-specific metagraph fields are not exposed");
+      expect(serialized).toContain("Educational guidance only");
+      expect(serialized).toContain('"warningsTruncated":true');
+      expect(serialized).toContain('"omittedWarningCount":2');
+      expect(serialized).not.toContain("customerGuidance");
+      expect(serialized).not.toContain("copilotActions");
+      expect(serialized).not.toContain("watchSuggestions");
+      expect(serialized).not.toContain("userBenefits");
+      expect(serialized.length).toBeLessThanOrEqual(MANAGED_MCP_MODEL_READ_CONTENT_MAX_CHARS);
+    }
   });
 
   test("looks up an exact Polymarket market ID without treating it as search text", async () => {
