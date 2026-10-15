@@ -321,8 +321,8 @@ function MatterhornDeskSessionStrip({ mode }: { mode: MatterhornDeskMode }) {
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[iconHint];
   const agent = getMatterhornDeskAgent(mode);
   return (
-    <div style={deskToneStyle(iconHint)} className="mb-1 rounded-lg bg-[rgb(var(--matterhorn-desk-rgb)/0.05)] px-3 py-2.5">
-      <div className="flex items-start gap-3">
+    <div style={deskToneStyle(iconHint)} className="matterhorn-composer-desk-strip mb-1 rounded-lg bg-[rgb(var(--matterhorn-desk-rgb)/0.05)] px-3 py-2.5">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2">
         <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-[rgb(var(--matterhorn-desk-rgb)/0.12)] text-[var(--matterhorn-desk-color)]">
           {copy.id === "bittensor" || copy.id === "hyperliquid" || copy.id === "polymarket" ? (
             <ProtocolLogo iconHint={copy.id} size={22} />
@@ -334,10 +334,10 @@ function MatterhornDeskSessionStrip({ mode }: { mode: MatterhornDeskMode }) {
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-[12px] font-semibold text-dls-text">{copy.sessionTitle}</span>
             <span className="text-[10px] font-semibold text-[var(--matterhorn-desk-color)]">{agent?.displayName ?? copy.agentName}</span>
-            <DeskSafetyInfoButton label={`${copy.displayName} desk safety info`} detail={copy.sessionBoundary} />
           </div>
           <p className="mt-1 text-[11px] leading-5 text-dls-secondary">{copy.shortDescription}</p>
         </div>
+        <DeskSafetyInfoButton label={`${copy.displayName} desk safety info`} detail={copy.sessionBoundary} />
       </div>
     </div>
   );
@@ -925,19 +925,6 @@ function AssistantNoVisibleOutputCard(props: { text: string }) {
       <div className="max-w-[720px]">
         {props.text || t("session.assistant_empty_response")}
       </div>
-    </div>
-  );
-}
-
-function AssistantStatusSpacer() {
-  return (
-    <div className="invisible" aria-hidden="true">
-      <AssistantWaitingCard
-        label={t("session.assistant_responding")}
-        activity="composing"
-        collapseLayout
-        trackElapsed={false}
-      />
     </div>
   );
 }
@@ -2054,7 +2041,6 @@ export function SessionSurface(props: SessionSurfaceProps) {
         ? "synthesizing"
         : null;
   const showNoVisibleAssistantOutput = noVisibleAssistantOutputBaseline !== null && !assistantOutputAfterNoVisibleFallback;
-  const reserveAssistantStatusSpace = effectiveActivityStatus === "idle" && awaitingAssistantBaseline !== null && assistantOutputAfterAwaitStart && !chatStreaming;
   const assistantStatusFooter = assistantOrbActivity ? (
     <AssistantWaitingCard
       label={assistantActivityLabel}
@@ -2064,8 +2050,6 @@ export function SessionSurface(props: SessionSurfaceProps) {
     />
   ) : showNoVisibleAssistantOutput ? (
     <AssistantNoVisibleOutputCard text={noVisibleAssistantOutputText} />
-  ) : reserveAssistantStatusSpace ? (
-    <AssistantStatusSpacer />
   ) : null;
   useReactRenderWatchdog("SessionSurface", {
     sessionId: props.sessionId,
@@ -3475,7 +3459,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
   return (
     <DevProfiler id="SessionSurface">
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="matterhorn-chat-surface flex h-full min-h-0 min-w-0 flex-col">
       {model.transitionState === "switching" && showDelayedLoading ? (
         <div className="flex justify-center px-6 pt-4">
           <div className="rounded-full border border-dls-border bg-dls-hover/80 px-3 py-1 text-xs text-dls-secondary">
@@ -3484,7 +3468,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
         </div>
       ) : null}
 
-      <div className="relative min-h-0 flex-1">
+      <div className="matterhorn-chat-transcript relative min-h-0 min-w-0 flex-1">
         <div
           ref={scrollRef}
           onWheel={(event) => {
@@ -3686,9 +3670,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
             )}
           </div>
         </div>
-        {renderedMessages.length > 0 && hasTranscriptJumpTarget && (!sessionScroll.isAtBottom || (!chatStreaming && sessionScroll.topClippedMessageId)) ? (
-          <div className="pointer-events-none absolute bottom-4 left-1/2 z-40 flex -translate-x-1/2 justify-center sm:bottom-5">
-            <div className="pointer-events-auto flex items-center gap-0.5 rounded-md bg-dls-surface-muted/70 p-0.5 shadow-[0_1px_4px_rgba(0,0,0,0.2)]">
+      </div>
+        {/* Reserve a separate row: navigation must never cover a response or its receipt. */}
+        {renderedMessages.length > 0 && hasTranscriptJumpTarget ? (
+          <nav aria-label="Conversation navigation" className="matterhorn-chat-jumps flex min-h-10 shrink-0 justify-end px-3 py-1 sm:px-5">
+            <div className="flex items-center gap-1">
               {!chatStreaming && sessionScroll.topClippedMessageId ? (
                 <button
                   type="button"
@@ -3708,6 +3694,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   type="button"
                   className="inline-flex h-7 items-center gap-1 rounded bg-dls-hover/65 px-2 text-[11px] font-medium text-dls-text transition-colors hover:bg-dls-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.32)]"
                   onClick={() => {
+                    // The whole surface can scroll at keyboard/zoom heights.
+                    // Reveal the transcript as well as scrolling its contents.
+                    scrollRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
                     sessionScroll.jumpToLatest("smooth");
                   }}
                   title="Jump to the latest message"
@@ -3718,14 +3707,15 @@ export function SessionSurface(props: SessionSurfaceProps) {
                 </button>
               ) : null}
             </div>
-          </div>
+          </nav>
         ) : null}
-      </div>
 
-      <div ref={composerShellRef} className="shrink-0 bg-dls-surface px-0 pb-3 pt-3">
+      <div ref={composerShellRef} className="matterhorn-chat-composer shrink-0 bg-dls-surface px-0 pb-3 pt-3">
+        <div className="mx-auto max-w-[984px] px-4 md:px-8">
         <JevChatControl enabled={jevChat.enabled} available={Boolean(jevChat.availability?.available)}
           loading={!jevChat.availability && !jevChat.notice} privateMode={Boolean(props.privateModeEnabled)}
           notice={jevChat.notice} onChange={jevChat.change} />
+        </div>
         <PrivateModePrivacyNotice
           modelUnavailable={props.modelUnavailable}
           providerPrivacyPolicy={props.providerPrivacyPolicy}

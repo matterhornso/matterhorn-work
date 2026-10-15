@@ -29,6 +29,7 @@ import {
   type ComposerExtensionReadiness,
 } from "./extension-readiness";
 import { ChatOptionsControl } from "./chat-options-control";
+import { ResponsiveComposerMenu } from "./responsive-composer-menu";
 
 type MentionItem = {
   id: string;
@@ -468,6 +469,11 @@ export function ReactSessionComposer(props: ComposerProps) {
   const toolMenuRef = useRef<HTMLDivElement | null>(null);
   const agentMenuRef = useRef<HTMLDivElement | null>(null);
   const modeMenuRef = useRef<HTMLDivElement | null>(null);
+  const toolMenuPanelRef = useRef<HTMLDivElement | null>(null);
+  const agentMenuPanelRef = useRef<HTMLDivElement | null>(null);
+  const modeMenuPanelRef = useRef<HTMLDivElement | null>(null);
+  const toolMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const agentMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
   // IME composition guard: while an IME composition is active, we must not
   // treat Enter as a submit. Three signals keep this reliable across WebKit,
   // Chrome, and Safari: event.isComposing, event.keyCode === 229, and the
@@ -541,7 +547,7 @@ export function ReactSessionComposer(props: ComposerProps) {
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      if (modeMenuRef.current?.contains(target)) return;
+      if (modeMenuRef.current?.contains(target) || modeMenuPanelRef.current?.contains(target)) return;
       setModeMenuOpen(false);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -677,7 +683,7 @@ export function ReactSessionComposer(props: ComposerProps) {
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      if (toolMenuRef.current?.contains(target)) return;
+      if (toolMenuRef.current?.contains(target) || toolMenuPanelRef.current?.contains(target)) return;
       setToolMenuOpen(false);
     };
     window.addEventListener("mousedown", handlePointerDown);
@@ -691,7 +697,7 @@ export function ReactSessionComposer(props: ComposerProps) {
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      if (agentMenuRef.current?.contains(target)) return;
+      if (agentMenuRef.current?.contains(target) || agentMenuPanelRef.current?.contains(target)) return;
       setAgentMenuOpen(false);
     };
     window.addEventListener("mousedown", handlePointerDown);
@@ -958,6 +964,9 @@ export function ReactSessionComposer(props: ComposerProps) {
       return;
     }
     if (agentMenuOpen) {
+      // The compact dialog owns focus traversal; its option buttons use native
+      // Enter/Space activation rather than the anchored picker's index shortcuts.
+      if (event.target instanceof Element && event.target.closest("[data-composer-menu-body], [data-composer-menu-close]")) return;
       const total = agents.length + 1;
       if (event.key === "ArrowDown") {
         event.preventDefault();
@@ -1180,7 +1189,7 @@ export function ReactSessionComposer(props: ComposerProps) {
   return (
     <div
       ref={rootRef}
-      className={`sticky bottom-0 ${toolMenuOpen ? "z-50" : "z-20"} bg-dls-surface/96 px-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] md:px-8 ${props.compactTopSpacing ? "pt-0" : "pt-4"}`}
+      className={`matterhorn-prompt-composer sticky bottom-0 ${toolMenuOpen ? "z-50" : "z-20"} bg-dls-surface/96 px-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] md:px-8 ${props.compactTopSpacing ? "pt-0" : "pt-4"}`}
       style={{ contain: "layout style" }}
       onKeyDownCapture={handleKeyDownCapture}
       onCompositionStart={() => {
@@ -1379,6 +1388,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                 </button>
                 <div ref={toolMenuRef} className="relative">
                   <button
+                    ref={toolMenuTriggerRef}
                     type="button"
                     className={`inline-flex h-9 max-h-9 w-9 items-center justify-center rounded-lg transition-colors ${toolMenuOpen ? "bg-dls-hover/55 text-dls-text" : "bg-transparent text-dls-secondary hover:bg-dls-hover/45 hover:text-dls-text"}`}
                     onClick={() => {
@@ -1395,9 +1405,11 @@ export function ReactSessionComposer(props: ComposerProps) {
                     <Plug size={16} />
                   </button>
                   {toolMenuOpen ? (
-                    <div
-                      role="dialog"
-                      aria-label={t("composer.tools_label")}
+                    <ResponsiveComposerMenu
+                      label={t("composer.tools_label")}
+                      menuRef={toolMenuPanelRef}
+                      triggerRef={toolMenuTriggerRef}
+                      onClose={() => setToolMenuOpen(false)}
                       className="matterhorn-tool-menu absolute bottom-full left-0 z-40 mb-3 w-[min(calc(100vw-2.5rem),30rem)] overflow-hidden rounded-lg bg-dls-surface shadow-[var(--dls-overlay-shadow)] ring-1 ring-dls-border/30"
                     >
                       <div className="matterhorn-tool-menu-frame flex flex-col">
@@ -1633,7 +1645,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                           ) : null}
                         </div>
                       </div>
-                    </div>
+                    </ResponsiveComposerMenu>
                   ) : null}
                 </div>
               </div>
@@ -1678,7 +1690,7 @@ export function ReactSessionComposer(props: ComposerProps) {
         {/* Keep the primary chat path quiet; secondary behavior choices live in Chat options. */}
         <div className="mt-1.5 flex items-center justify-between px-1">
           <div
-            className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-gray-10 sm:gap-2.5 [@media(max-height:640px)]:flex-nowrap [@media(max-height:640px)]:overflow-x-auto [@media(max-height:640px)]:overscroll-x-contain [@media(max-height:640px)]:pb-1 [@media(max-height:640px)]:[&>*]:shrink-0"
+            className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-gray-10 sm:gap-2.5 [&>*]:max-w-full"
             aria-label="Composer controls"
           >
             <div ref={modeMenuRef}>
@@ -1691,6 +1703,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                 onResponsePerspectiveChange={props.onResponsePerspectiveChange}
                 open={modeMenuOpen}
                 onOpenChange={setModeMenuOpen}
+                menuRef={modeMenuPanelRef}
               />
             </div>
             {props.executionModesEnabled && props.executionMode === "plan" && !props.busy ? (
@@ -1718,6 +1731,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                 )
               ) : (
                 <button
+                  ref={agentMenuTriggerRef}
                   type="button"
                   className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] font-medium text-gray-11 transition-colors hover:bg-gray-3 hover:text-gray-12"
                   onClick={() => setAgentMenuOpen((value) => !value)}
@@ -1730,7 +1744,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                 </button>
               )}
               {!props.agentSelectionLocked && agentMenuOpen ? (
-                <div className="absolute bottom-full left-0 z-40 mb-2 w-64 overflow-hidden rounded-lg border border-dls-border bg-dls-surface shadow-[var(--dls-shell-shadow)]">
+                <ResponsiveComposerMenu label={t("composer.agent_label")} menuRef={agentMenuPanelRef} triggerRef={agentMenuTriggerRef} onClose={() => setAgentMenuOpen(false)} className="absolute bottom-full left-0 z-40 mb-2 w-64 overflow-hidden rounded-lg border border-dls-border bg-dls-surface shadow-[var(--dls-shell-shadow)]">
                   <div className="border-b border-dls-border px-3 py-2 text-[12px] font-semibold text-gray-11">
                     {t("composer.agent_label")}
                   </div>
@@ -1747,7 +1761,9 @@ export function ReactSessionComposer(props: ComposerProps) {
                       className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors ${!props.selectedAgent ? "bg-gray-2 text-gray-12" : "text-gray-11 hover:bg-gray-2/70"}`}
                       onMouseEnter={() => setAgentMenuIndex(0)}
                       onMouseDown={(event) => {
-                        event.preventDefault();
+                        if (!event.currentTarget.closest("[data-composer-menu-body]")) event.preventDefault();
+                      }}
+                      onClick={() => {
                         props.onSelectAgent(null);
                         setAgentMenuOpen(false);
                       }}
@@ -1768,7 +1784,9 @@ export function ReactSessionComposer(props: ComposerProps) {
                           className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors ${active ? "bg-gray-2 text-gray-12" : "text-gray-11 hover:bg-gray-2/70"}`}
                           onMouseEnter={() => setAgentMenuIndex(index + 1)}
                           onMouseDown={(event) => {
-                            event.preventDefault();
+                            if (!event.currentTarget.closest("[data-composer-menu-body]")) event.preventDefault();
+                          }}
+                          onClick={() => {
                             props.onSelectAgent(agent.name);
                             setAgentMenuOpen(false);
                           }}
@@ -1779,7 +1797,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                       );
                     })}
                   </div>
-                </div>
+                </ResponsiveComposerMenu>
               ) : null}
             </div>
 

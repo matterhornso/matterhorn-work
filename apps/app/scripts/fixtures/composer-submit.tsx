@@ -138,15 +138,20 @@ function Fixture() {
       modelBehaviorDefaultLabel="Default"
       onModelVariantChange={noop}
       responsePerspective="balanced"
-      onResponsePerspectiveChange={noop}
-      executionMode="discuss"
+      onResponsePerspectiveChange={value => { if (params.has("compactMenus")) setResult(`perspective:${value}`); }}
+      executionMode={params.has("compactMenus") ? "work" : "discuss"}
       executionModesEnabled={false}
       onExecutionModeChange={noop}
       agentLabel="Private AI"
       selectedAgent={null}
-      listAgents={async () => []}
-      onSelectAgent={noop}
+      listAgents={async () => params.has("compactMenus") ? Array.from({ length: 12 }, (_, index) => ({
+        name: `fixture-agent-${index + 1}`, mode: "primary", permission: [], options: {},
+      })) : []}
+      onSelectAgent={value => { if (params.has("compactMenus")) setResult(`agent:${value ?? "default"}`); }}
       listCommands={async () => []}
+      listSkills={async () => params.has("compactMenus") ? Array.from({ length: 12 }, (_, index) => ({
+        name: `fixture-skill-${index + 1}`, description: "Synthetic customer skill for bounded menu testing", path: `/fixture/skills/fixture-skill-${index + 1}/SKILL.md`,
+      })) : []}
       recentFiles={[]}
       searchFiles={async () => []}
       onInsertMention={noop}

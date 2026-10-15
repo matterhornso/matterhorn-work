@@ -1,4 +1,5 @@
 /** @jsxImportSource react */
+import { useRef, type RefObject } from "react";
 import {
   Check,
   ChevronDown,
@@ -9,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { ResponsiveComposerMenu } from "./responsive-composer-menu";
 import {
   MATTERHORN_EXECUTION_MODE_OPTIONS,
   type MatterhornExecutionMode,
@@ -27,6 +29,7 @@ export type ChatOptionsControlProps = {
   onResponsePerspectiveChange: (perspective: ResponsePerspective) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  menuRef?: RefObject<HTMLDivElement | null>;
 };
 
 function ExecutionModeIcon({ mode, size = 13 }: { mode: MatterhornExecutionMode; size?: number }) {
@@ -36,6 +39,8 @@ function ExecutionModeIcon({ mode, size = 13 }: { mode: MatterhornExecutionMode;
 }
 
 export function ChatOptionsControl(props: ChatOptionsControlProps) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const localMenuRef = useRef<HTMLDivElement>(null);
   const executionMode = MATTERHORN_EXECUTION_MODE_OPTIONS.find(
     (option) => option.value === props.executionMode,
   );
@@ -46,6 +51,7 @@ export function ChatOptionsControl(props: ChatOptionsControlProps) {
   return (
     <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-dls-secondary transition-colors duration-150 hover:bg-dls-surface-muted/[0.2] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.3)] disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none"
         onClick={() => props.onOpenChange(!props.open)}
@@ -60,9 +66,11 @@ export function ChatOptionsControl(props: ChatOptionsControlProps) {
       </button>
 
       {props.open ? (
-        <div
-          role="dialog"
-          aria-label="Chat options"
+        <ResponsiveComposerMenu
+          label="Chat options"
+          menuRef={props.menuRef ?? localMenuRef}
+          triggerRef={triggerRef}
+          onClose={() => props.onOpenChange(false)}
           className="absolute bottom-full left-0 z-40 mb-2 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-dls-border bg-dls-surface p-2 shadow-[var(--dls-shell-shadow)]"
         >
           {props.executionModesEnabled ? (
@@ -133,7 +141,7 @@ export function ChatOptionsControl(props: ChatOptionsControlProps) {
               })}
             </div>
           </div>
-        </div>
+        </ResponsiveComposerMenu>
       ) : null}
     </div>
   );

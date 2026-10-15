@@ -2859,10 +2859,10 @@ export function SessionPage(props: SessionPageProps) {
             onLayoutChanged={dockedSidePanelOpen ? commitBrowserPanelWidth : undefined}
             className="min-h-0 flex-1"
           >
-            <ResizablePanel minSize="360px" className="min-w-0">
-              <div className="flex h-full min-w-0 flex-col overflow-hidden bg-dls-surface">
+            <ResizablePanel minSize={dockedSidePanelOpen ? "360px" : 0} className="min-w-0">
+              <div className="matterhorn-chat-column flex h-full min-w-0 flex-col overflow-hidden bg-dls-surface">
           <header className="matterhorn-workspace-header z-10 flex h-[calc(2.75rem+env(safe-area-inset-top))] shrink-0 items-center justify-between bg-dls-surface/95 px-4 pt-[env(safe-area-inset-top)] shadow-[0_1px_0_rgb(var(--matterhorn-blue-rgb)/0.08)] md:h-10 md:px-6 md:pt-0 mac:titlebar-drag @container/titlebar">
-            <div className="flex min-w-0 items-center gap-3">
+            <div className="matterhorn-chat-heading flex min-w-0 flex-1 items-center gap-3">
               {shellConfig.sidebar ? <SidebarTrigger className="size-11 md:size-8 mac:hidden" /> : null}
               {!showWorkspaceSetupEmptyState ? (
                 <Button
@@ -2882,7 +2882,7 @@ export function SessionPage(props: SessionPageProps) {
                 </h1>
               ) : (
                 <div
-                  className="flex min-w-0 items-center gap-1.5"
+                  className="matterhorn-chat-location flex min-w-0 items-center gap-1.5"
                   aria-label="Current location"
                 >
                   <span
@@ -2892,7 +2892,7 @@ export function SessionPage(props: SessionPageProps) {
                     {homeProjectName}
                   </span>
                   <ChevronRight className="size-3 shrink-0 text-dls-secondary/60" aria-hidden="true" />
-                  <h1 className="min-w-0 truncate text-[15px] font-semibold text-dls-text">
+                  <h1 title={!props.selectedSessionId ? homeSurfaceTitle : selectedSessionTitle || t("session.default_title")} className="min-w-0 truncate text-[15px] font-semibold text-dls-text">
                     {!props.selectedSessionId
                       ? homeSurfaceTitle
                       : selectedSessionTitle || t("session.default_title")}
@@ -2923,7 +2923,7 @@ export function SessionPage(props: SessionPageProps) {
               ) : null}
             </div>
 
-            <div className="flex items-center gap-1.5 text-gray-10 mac:titlebar-no-drag">
+            <div className="flex shrink-0 items-center gap-1.5 text-gray-10 mac:titlebar-no-drag">
               {workspaceNotesAvailable ? (
                 <Button
                   variant="ghost"

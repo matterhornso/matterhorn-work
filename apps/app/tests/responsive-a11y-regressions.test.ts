@@ -98,6 +98,7 @@ describe("responsive accessibility regressions", () => {
 
   test("mobile shells resize for virtual keyboards and preserve device safe areas", () => {
     const index = readAppFile("index.html");
+    const styles = readAppFile("src/app/index.css");
     const sidebar = readAppFile("src/components/ui/sidebar.tsx");
     const sessionPage = readAppSource("domains/session/chat/session-page.tsx");
     const composer = readAppSource("domains/session/surface/composer/composer.tsx");
@@ -109,9 +110,12 @@ describe("responsive accessibility regressions", () => {
     expect(sidebar).not.toContain("min-h-svh");
     expect(sessionPage).toContain("env(safe-area-inset-top)");
     expect(composer).toContain("env(safe-area-inset-bottom)");
-    expect(composer).toContain("[@media(max-height:640px)]:flex-nowrap");
-    expect(composer).toContain("[@media(max-height:640px)]:overflow-x-auto");
-    expect(composer).toContain("[@media(max-height:640px)]:[&>*]:shrink-0");
+    expect(composer).not.toContain("[@media(max-height:640px)]:flex-nowrap");
+    expect(composer).not.toContain("[@media(max-height:640px)]:overflow-x-auto");
+    expect(styles).toContain("@container chat (max-width: 40rem)");
+    expect(styles).toContain("@media (max-height: 540px)");
+    expect(styles).toMatch(/\.matterhorn-chat-surface\s*\{\s*overflow-y: auto/);
+    expect(styles).toMatch(/\.matterhorn-chat-transcript\s*\{\s*min-height: 12rem/);
     expect(composer).toContain('aria-label="Composer controls"');
     expect(settingsShell).toContain("h-dvh min-h-dvh");
     expect(settingsShell).toContain("env(safe-area-inset-top)");

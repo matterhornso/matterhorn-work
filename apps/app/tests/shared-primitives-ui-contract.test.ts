@@ -241,9 +241,11 @@ describe("Shared primitives UI contract", () => {
     const source = readAppSource(
       "domains/session/surface/composer/composer.tsx",
     );
-    const appStyles = readAppPackageSource("app/index.css");
+    const menu = readAppSource("domains/session/surface/composer/responsive-composer-menu.tsx");
 
-    expect(source).toContain('role="dialog"');
+    expect(source).toContain("<ResponsiveComposerMenu");
+    expect(menu).toContain('role="dialog"');
+    expect(menu).toContain("<DialogContent");
     expect(source).toContain('role="tablist" aria-label="Tool categories"');
     expect(source).toContain("function ToolMenuLoading");
     expect(source).toContain("max-h-[min(16rem,calc(100vh-13rem))]");
@@ -254,8 +256,9 @@ describe("Shared primitives UI contract", () => {
     expect(source).not.toContain(
       '<div className="truncate text-xs text-gray-10">{entry.description}</div>',
     );
-    expect(appStyles).toContain("@media (max-height: 420px)");
-    expect(appStyles).toContain("inset: 3rem 0.75rem 0.75rem !important");
+    expect(menu).toContain("(max-height: 540px)");
+    expect(menu).toContain("max-h-[calc(100dvh-1rem)]");
+    expect(menu).toContain("finalFocus={props.triggerRef}");
     expect(source).toContain('aria-label={t("composer.configure")}');
     expect(source).not.toContain("grid-cols-[152px_minmax(0,1fr)]");
     expect(source).not.toContain("border-r border-dls-border bg-gray-2/30");
@@ -1214,10 +1217,10 @@ describe("Shared primitives UI contract", () => {
     const source = readAppSource("domains/session/chat/session-page.tsx");
 
     expect(source).not.toContain(
-      '<main className="flex h-full min-w-0 flex-col overflow-hidden bg-dls-surface">',
+      '<main className="matterhorn-chat-column flex h-full min-w-0 flex-col overflow-hidden bg-dls-surface">',
     );
     expect(source).toContain(
-      '<div className="flex h-full min-w-0 flex-col overflow-hidden bg-dls-surface">',
+      '<div className="matterhorn-chat-column flex h-full min-w-0 flex-col overflow-hidden bg-dls-surface">',
     );
   });
 

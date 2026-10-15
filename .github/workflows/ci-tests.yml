@@ -258,6 +258,9 @@ jobs:
       - name: Test real composer interactions
         run: pnpm --filter @matterhorn-work/app test:composer-browser
 
+      - name: Test responsive chat and compact-height menus
+        run: bun test apps/app/scripts/responsive-chat.browser.test.ts
+
       - name: Test optional Jev consent and chat fallback
         run: bun test apps/app/scripts/jev-chat.browser.test.ts
 
