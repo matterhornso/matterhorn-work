@@ -2,6 +2,7 @@ import type { UIMessage } from "ai";
 
 import type { MatterhornSessionSnapshot } from "../../../../app/lib/matterhorn-server";
 import { mergeSnapshotAndLiveMessages } from "../sync/message-merge";
+import { filterSuppressedTranscriptMessages } from "../sync/session-sync";
 import { applyRevertCursor } from "../sync/transcript-reconcile";
 import { snapshotToUIMessages } from "../sync/usechat-adapter";
 
@@ -23,6 +24,8 @@ export function resolveRenderedSessionSnapshot(input: {
 }
 
 export function deriveRenderedSessionMessages(input: {
+  workspaceId: string;
+  sessionId: string;
   transcriptState: UIMessage[] | null | undefined;
   snapshot: MatterhornSessionSnapshot | null | undefined;
 }) {
@@ -30,7 +33,11 @@ export function deriveRenderedSessionMessages(input: {
   const liveMessages = input.transcriptState ?? [];
 
   const snapshotMessages = input.snapshot && input.snapshot.messages.length > 0
-    ? snapshotToUIMessages(input.snapshot)
+    ? filterSuppressedTranscriptMessages(
+      input.workspaceId,
+      input.sessionId,
+      snapshotToUIMessages(input.snapshot),
+    )
     : [];
 
   // Render the server snapshot as the history floor and layer live stream
