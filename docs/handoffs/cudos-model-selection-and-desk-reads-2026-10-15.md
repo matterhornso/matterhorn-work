@@ -1,6 +1,6 @@
 # CUDOS model selection and desk read deployment handoff
 
-Prepared on 15 October 2026 for the team operating `https://desks.matterhorn.so`. This candidate fixes workspace model preference saving, Bittensor read selectors/latency/provenance and request cancellation while preserving the permanently restored UI and request-level safeguards. **Draft PR only: do not merge or deploy.** Local exact-subnet/completed-Retry acceptance, corrected Retry/Stop, full safety, frontend tests and build now pass. A confirmed pre-existing unreported-usage accounting gap still blocks release; final-head CI and hosted operator acceptance remain outstanding. No production deployment or configuration change has been made or authorized by this handoff.
+Prepared on 15 October 2026 for the team operating `https://desks.matterhorn.so`. This candidate fixes workspace model preference saving, Bittensor read selectors/latency/provenance and request cancellation while preserving the permanently restored UI and request-level safeguards. **Draft PR only: do not merge or deploy.** The owner-approved correction now retains reservations for unknown stopped-request usage. Local exact-subnet/completed-Retry and corrected Retry/Stop evidence remains valid at its recorded revision; the accounting follow-up has separate deterministic verification below. Final-head CI and hosted operator acceptance are separate release gates. No production deployment or configuration change has been made or authorized by this handoff.
 
 ## Release identity and change scope
 
@@ -21,7 +21,9 @@ Prepared on 15 October 2026 for the team operating `https://desks.matterhorn.so`
 | Typed read-only Bittensor projection | `59c6dac3ac1f5c289509639206ff2eca6d21b601`; handles live `data.subnet`; global 2,000-character ceiling unchanged; exact-read/completed-Retry replay passed |
 | Current local runtime | `59c6dac3ac1f5c289509639206ff2eca6d21b601`; rebuilt web, preserved data/caps; final live acceptance checkpoint |
 | Candidate PR | [Draft PR #1036](https://github.com/matterhornso/matterhorn-work/pull/1036), targeting `dev` |
-| Last recorded remote head | `88980f866595aa015ceb6671e1737766f921b913`; does not include the later local corrections above |
+| Unknown stopped-usage correction | `a220c1424560ae5c978dde05d3a3ba5802bf2371`; keeps the full reservation pending until every step has reported usage; no estimated charge or timeout release |
+| Incomplete token breakdown guard | `12ec0a35e29ef1de539a3ce3b12b9eecabde5941`; positive total or complete valid input/output breakdown required; input-only/output-only/invalid breakdowns keep the hold |
+| Previous remote checkpoint | `6c751936f33824917319a0c2daa6dc420f9f3443`; all 11 checks passed at that head, before the unknown-usage correction |
 | Final head and CI | Resolve with `gh pr view 1036 --repo matterhornso/matterhorn-work --json headRefOid,statusCheckRollup`; verify checks belong to that exact head, not an earlier revision |
 | Approved release SHA | Not yet merged or approved for deployment; record the actual immutable release revision after review |
 
@@ -31,22 +33,25 @@ The follow-up Bittensor change makes the model-facing contract explicit: `discov
 
 Cancellation now covers frontend preparation and identity-scoped backend requests. A known-unsent request releases its hold. An accepted `202` stopped receipt preserves usage and idempotency. An unknown `409` outcome preserves the hold/history pending reconciliation; it must not be treated as unsent or blindly retried. Deterministic cancellation/safe-retry coverage passes; live acceptance is tracked separately below.
 
-Prompt privacy checks, request-bound consent, secret blocking, account isolation, guarded execution, usage accounting and wallet approvals are unchanged. No database migration, model-provider replacement or sidecar packaging change is included. The restored UI remains permanent: do not reintroduce `VITE_MATTERHORN_RETRO_UI`, `VITE_MATTERHORN_MINIMAL_UI`, their styles, or an opt-in to the rejected layouts.
+Prompt privacy checks, request-bound consent, secret blocking, account isolation, guarded execution and wallet approvals are unchanged. Hard usage enforcement stays enabled; the approved unknown-usage policy below changes when a reservation may settle. No database migration, model-provider replacement or sidecar packaging change is included. The restored UI remains permanent: do not reintroduce `VITE_MATTERHORN_RETRO_UI`, `VITE_MATTERHORN_MINIMAL_UI`, their styles, or an opt-in to the rejected layouts.
 
 This candidate builds on #1035; it is not a repository reset to #1027 and does not require importing unrelated unmerged branches. The [restored-UI handoff](permanent-restored-ui-deployment-2026-10-13.md) remains the baseline for state preservation and dependency requirements; its pre-merge placeholders are historical, not the release identity for this candidate.
 
 ## Current local checkpoint
 
-The [15 October QA report](../../qa-reports/cudos-model-selection/2026-10-15/RESULTS.md) is authoritative for the current local checkpoint. Independent source review cleared the bounded implementation corrections, including `59c6dac3`; the separately confirmed pre-existing accounting blocker is recorded below. The newest-source full platform safety run exited 0 with `Matterhorn platform safety gate passed` in `/private/tmp/matterhorn-cudos-restored-4ZgYPr/safety-gate-release-final.log`. Final frontend tests, corrected Retry/Stop and exact-read/completed-Retry replay also pass. These results do not certify complete accounting, long-running runtime stability, hosted behavior or final-head remote CI.
+The [15 October QA report](../../qa-reports/cudos-model-selection/2026-10-15/RESULTS.md) is authoritative for the local checkpoints. Independent source review cleared the bounded implementation corrections, including the unknown-usage policy. Earlier real-provider replay remains on `59c6dac3`; the accounting follow-up uses isolated fixtures and does not modify the running preview, its chats or account balances. Do not relabel historical zero-hold observations as acceptance of the new hold policy. These results do not certify provider billing, long-running runtime stability or hosted behavior.
 
 | Check | Current evidence |
 | --- | --- |
 | Focused cancellation | 40 tests / 136 assertions passed |
-| Complete account gateway | 100 tests / 871 assertions passed |
+| Unknown-usage store | 45 tests / 295 assertions passed; includes late settlement, incomplete positive breakdowns and multi-step receipts, restart and month rollover |
+| Complete account gateway | 102 tests / 909 assertions passed; includes stopped missing/all-zero usage holds, quota blocking and idempotent late settlement |
 | Bittensor, managed MCP, routes, registry and token budget | Final typed projection checkpoint: 212 tests / 1,791 assertions passed in 15.56 seconds; server typecheck passed |
-| Frontend | Final Retry commit: 1,337 tests / 8,163 assertions passed across 191 files in 9.12 seconds; includes actual `MatterhornServerError` coverage |
+| Frontend | Accounting-copy follow-up: 1,340 tests / 8,174 assertions passed across 191 files; loopback permission is required by HTTP fixtures |
+| Allowance browser copy | Isolated Chromium fixture: 20 assertions across Light/Dark × 390/1280px; no overflow; pending requests are not labelled active; not live account evidence |
 | Focused Retry/frontend regressions | Final checkpoint: 59 tests / 169 assertions passed |
-| App/server typechecks; isolated web build | Passed; newest-source web build passed in 6.87 seconds |
+| App/server typechecks; isolated web build | Passed; allowance-copy web build on `a220c142` passed in 8.41 seconds in a new output directory, without replacing the existing preview |
+| Full platform safety | Passed on `a220c142`; later backend-only `12ec0a35` has focused store/gateway/typecheck evidence and must also pass final-head remote safety CI |
 | Strict secret scan | Final scan: 1,232 files, zero findings, zero skips |
 | Early accepted-run Stop before visible output | Cancelled in 4.6 seconds with `MessageAbortedError`; no pending requests or reserved tokens and no reported tokens at readback. API records show the request was already accepted; this is not live pre-dispatch coverage or proof of zero provider billing |
 | Bittensor discovery | Completed in 23 seconds, 9,428 total-turn tokens; testnet block 8,224,335 observed at `2026-10-15T03:17:52.33Z` |
@@ -59,9 +64,11 @@ The [15 October QA report](../../qa-reports/cudos-model-selection/2026-10-15/RES
 
 The current local runtime is `59c6dac3ac1f5c289509639206ff2eca6d21b601`, with existing accounts/chats/data and caps retained through restart. The user explicitly approved a **local monthly QA cap of 150,000 tokens**; the daily cap remains 100,000. Hard usage enforcement, verified-only privacy and the authoritative account gateway remain enabled. This is not a production allowance or permission to reset accounting.
 
-**Confirmed pre-existing accounting release blocker:** the provider reported zero tokens after visible partial output on the stopped run. Review of [model-usage-store.ts](../../apps/server/src/model-usage-store.ts) found that missing/all-zero usage becomes zero (lines 219–267); terminal aborted runs are completed at zero and their hold is released (lines 550–580). Only pending claims reconcile, so there is no automatic late correction for that settled run. Reported quota consumption can understate actual provider usage; zero holds and a settled receipt are not complete accounting certification or proof of zero cost.
+**Approved unknown-usage policy, implemented in `a220c142` and tightened in `12ec0a35`:** a stopped request with omitted/all-zero usage retains its original allowance reservation. A positive authoritative total or a complete valid input/output breakdown is required; an incomplete positive breakdown is not a complete receipt. Missing-token steps remain in the request group rather than disappearing; any unknown step prevents incomplete settlement. Positive usage from an earlier tool step cannot stand in for an unknown final step. Once authoritative runtime history reports usage for every step under the exact request parent, reconciliation settles once and releases the reservation. Known-unsent rejection still releases its reservation. No counters, caps, timeouts, consent checks or enforcement mode were weakened.
 
-The owner has been asked to choose between retaining the reservation until reconciliation and deducting a reserved estimated allowance. **Neither policy has been implemented or approved in this checkpoint.** Preserve receipts and require operator/provider reconciliation; keep release blocked until an authorized policy and tested implementation resolve the gap. The deterministic 123-token partial-usage fixture and unknown-transport hold retention cover different cases and do not resolve unreported terminal usage.
+The pending hold survives restart and day/month rollover. It reduces available allowance but is **not an estimated monetary charge**. The UI says “used or reserved” and explains that a stopped request may still await usage totals. Completion, zero-filled counters or a visible answer is not proof of zero provider cost.
+
+**Operator limits:** if the provider never supplies totals, or Retry/deletion removes the needed transcript, a hold can remain indefinitely. Preserve the ledger and receipts, obtain authoritative per-request evidence, and reconcile through the existing trusted runtime-history flow. There is no new manual adjustment endpoint, automatic timeout release or license to edit SQLite/reset balances. Historical requests already settled at zero are not automatically reopened or backfilled: audit those separately against provider records before claiming complete accounting. This bounded fix covers the normal account gateway, not certification of every trusted operator/raw-proxy inference path. Hosted unknown-usage/late-receipt acceptance and the approved deployment remain outstanding.
 
 ## Earlier evidence and superseded checkpoints
 
@@ -139,12 +146,15 @@ pnpm --filter @matterhorn-work/memory-vault build
 pnpm --filter @matterhorn-work/crypto-app-sdk build
 bun --no-env-file test apps/server/src/backend-control-plane.e2e.test.ts
 bun --no-env-file test apps/server/src/provider-privacy.test.ts apps/server/src/agent-privacy.test.ts
+bun --no-env-file test apps/server/src/model-usage-store.test.ts
+bun --no-env-file test apps/server/src/session-read-model.e2e.test.ts --timeout 15000
 bun --no-env-file test apps/server/src/session-read-model.e2e.test.ts --test-name-pattern 'allows disclosed public research only through the authoritative gateway'
 bun --no-env-file test apps/server/src/managed-opencode-mcp.test.ts apps/server/src/bittensor-chat-routes.e2e.test.ts apps/server/src/crypto-action-registry.test.ts
 bun --no-env-file test apps/app/tests
 pnpm --filter @matterhorn-work/app typecheck
 pnpm --filter matterhorn-work-server typecheck
 pnpm --filter @matterhorn-work/app test:composer-browser
+bun --no-env-file test apps/app/scripts/platform-controls.browser.test.ts --test-name-pattern 'unknown usage allowance'
 pnpm audit:dependencies
 pnpm test:security-workflow-contract
 pnpm test:matterhorn-platform-safety
