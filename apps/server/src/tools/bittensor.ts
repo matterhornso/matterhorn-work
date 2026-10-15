@@ -2158,11 +2158,18 @@ function sidecarBaseUrl(): string {
   return readEnv("BITTENSOR_SUBTENSOR_SIDECAR_URL").replace(/\/$/, "");
 }
 
-function sidecarRequestTimeoutMs(path: string): number {
-  const parsed = Number(readEnv("BITTENSOR_SUBTENSOR_SIDECAR_TIMEOUT_MS"));
-  // Discovery waits up to eight seconds for a cold SDK refresh. Health and
-  // other reads keep their existing short deadline; explicit limits still win.
-  return Number.isFinite(parsed) && parsed > 0 ? Math.min(15_000, Math.max(1_000, parsed)) : path === "/subnets" ? 10_000 : 2_000;
+export function resolveSubtensorSidecarRequestTimeoutMs(
+  path: string,
+  method = "GET",
+  configuredValue = readEnv("BITTENSOR_SUBTENSOR_SIDECAR_TIMEOUT_MS"),
+): number {
+  const parsed = Number(configuredValue);
+  // SDK-backed chain reads can legitimately take several seconds, especially
+  // on a cold cache. Keep their deadline below the 20s Python bridge and the
+  // 25s managed read budget. Transaction preparation retains its shorter
+  // deadline, and the independent health probe remains 3s.
+  if (Number.isFinite(parsed) && parsed > 0) return Math.min(15_000, Math.max(1_000, parsed));
+  return method.toUpperCase() === "GET" && path.startsWith("/") ? 10_000 : 2_000;
 }
 
 function bittensorNetwork(): BittensorSignerStatus["network"] {
@@ -2249,7 +2256,7 @@ class SubtensorSidecarClient {
       const res = await fetch(`${this.baseUrl}${path}`, {
         ...rest,
         headers: { "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(sidecarRequestTimeoutMs(path)),
+        signal: AbortSignal.timeout(resolveSubtensorSidecarRequestTimeoutMs(path, rest.method)),
       });
       if (!res.ok) return null;
       return asRecord(await res.json());
