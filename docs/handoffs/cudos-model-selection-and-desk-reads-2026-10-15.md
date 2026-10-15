@@ -1,6 +1,6 @@
 # CUDOS model selection and desk read deployment handoff
 
-Prepared on 15 October 2026 for the team operating `https://desks.matterhorn.so`. This candidate fixes saving a workspace model preference and clarifies Bittensor read selectors while preserving the permanently restored UI and existing request-level safeguards. **Draft PR only: do not merge or deploy.** Bittensor's complete app live-read flow, clean Stop/cancellation acceptance and a clean exact-head safety gate remain outstanding. No production deployment or configuration change has been made or authorized by this handoff.
+Prepared on 15 October 2026 for the team operating `https://desks.matterhorn.so`. This candidate fixes workspace model preference saving, Bittensor read selectors/latency/provenance and request cancellation while preserving the permanently restored UI and request-level safeguards. **Draft PR only: do not merge or deploy.** Local exact-subnet/completed-Retry acceptance, corrected Retry/Stop, full safety, frontend tests and build now pass. A confirmed pre-existing unreported-usage accounting gap still blocks release; final-head CI and hosted operator acceptance remain outstanding. No production deployment or configuration change has been made or authorized by this handoff.
 
 ## Release identity and change scope
 
@@ -13,21 +13,59 @@ Prepared on 15 October 2026 for the team operating `https://desks.matterhorn.so`
 | Bittensor selector validation | `8b7878d538ff5a584b2ab80a2c16ffa6cee195d7` |
 | Tool-description budget correction | `a0de28b9d5dac18193ee782f1be85370f15b4c49`; same selectors and validation, shorter wording |
 | Rust security correction | `f2e4174ccba4a50a84f15364263a61f8ec139e06`; only `rustls` upgraded in the example lockfile, with policy regressions |
+| Bounded Bittensor read latency | `f1f9454e6fcc936d04797cbf4fb8f5c8f617ac80`; GET allowance 10 seconds, POST 2 seconds and health 3 seconds unchanged |
+| Honest Bittensor network provenance | `985d0f73647d485564c1dcfab373987fbde5dfe7`; payload and configured network must agree, otherwise network is unknown |
+| Preparation and backend cancellation | `eba600e8205da06b5999e21e36cdd03de2e73c91`; live Stop evidence checkpoint |
+| Initial bounded Bittensor projection | `f3e970a5dca82597479c1826e1a9d94c0aecbc6f`; warning-truncation metadata retained; its incomplete read-only-shape coverage is superseded by `59c6dac3` |
+| Retry snapshot/cache correction | `2b242d66f0cfddf062eb66db348250a396e3f367`; independently reviewed; corrected Retry/Stop passes without reload |
+| Typed read-only Bittensor projection | `59c6dac3ac1f5c289509639206ff2eca6d21b601`; handles live `data.subnet`; global 2,000-character ceiling unchanged; exact-read/completed-Retry replay passed |
+| Current local runtime | `59c6dac3ac1f5c289509639206ff2eca6d21b601`; rebuilt web, preserved data/caps; final live acceptance checkpoint |
 | Candidate PR | [Draft PR #1036](https://github.com/matterhornso/matterhorn-work/pull/1036), targeting `dev` |
+| Last recorded remote head | `88980f866595aa015ceb6671e1737766f921b913`; does not include the later local corrections above |
 | Final head and CI | Resolve with `gh pr view 1036 --repo matterhornso/matterhorn-work --json headRefOid,statusCheckRollup`; verify checks belong to that exact head, not an earlier revision |
 | Approved release SHA | Not yet merged or approved for deployment; record the actual immutable release revision after review |
 
 The model change removes the provider-privacy assertion from `PATCH /workspace/:id/backend/model-selection`. Saving a preference sends no inference prompt. The endpoint still validates the connected chat catalogue, collaborator permission, writable workspace, selection shape and variant; it persists the preference and records an audit event. Updated UI text distinguishes preference saving from request authorization. It does not claim the provider is privacy-verified.
 
-The follow-up Bittensor change makes the model-facing contract explicit: `discovery` lists/searches subnets; `subnet` and `validators` require an exact non-negative integer `netuid`; `wallet` requires a public address. Invalid singular selectors fail before backend access with sanitized allowlisted errors. It does not silently convert ambiguous requests or change network, capability, privacy or wallet authority. Its regression coverage passes; full app live-read acceptance does not yet pass.
+The follow-up Bittensor change makes the model-facing contract explicit: `discovery` lists/searches subnets; `subnet` and `validators` require an exact non-negative integer `netuid`; `wallet` requires a public address. Invalid singular selectors fail before backend access with sanitized allowlisted errors. The bounded GET allowance is now 10 seconds; POST remains 2 seconds and health remains 3 seconds. Network provenance is emitted only when payload and configuration agree; missing or conflicting provenance is unknown, not an inferred mainnet/testnet claim. These changes do not silently convert ambiguous requests or change network, capability, privacy or wallet authority.
+
+Cancellation now covers frontend preparation and identity-scoped backend requests. A known-unsent request releases its hold. An accepted `202` stopped receipt preserves usage and idempotency. An unknown `409` outcome preserves the hold/history pending reconciliation; it must not be treated as unsent or blindly retried. Deterministic cancellation/safe-retry coverage passes; live acceptance is tracked separately below.
 
 Prompt privacy checks, request-bound consent, secret blocking, account isolation, guarded execution, usage accounting and wallet approvals are unchanged. No database migration, model-provider replacement or sidecar packaging change is included. The restored UI remains permanent: do not reintroduce `VITE_MATTERHORN_RETRO_UI`, `VITE_MATTERHORN_MINIMAL_UI`, their styles, or an opt-in to the rejected layouts.
 
 This candidate builds on #1035; it is not a repository reset to #1027 and does not require importing unrelated unmerged branches. The [restored-UI handoff](permanent-restored-ui-deployment-2026-10-13.md) remains the baseline for state preservation and dependency requirements; its pre-merge placeholders are historical, not the release identity for this candidate.
 
-## What has been demonstrated
+## Current local checkpoint
 
-The [QA report and 15 October follow-up](../../qa-reports/cudos-model-selection/2026-10-14/RESULTS.md) record local normal-auth selection, **Use for new chats**, reload persistence and real CUDOS `asi1` concept responses from all five expected agents. The initial five receipts total 19,881 charged tokens, zero reserved tokens and zero pending requests at that checkpoint. These were synthetic public concept prompts, not live-chain acceptance, all-model certification or evidence of monetary cost.
+The [15 October QA report](../../qa-reports/cudos-model-selection/2026-10-15/RESULTS.md) is authoritative for the current local checkpoint. Independent source review cleared the bounded implementation corrections, including `59c6dac3`; the separately confirmed pre-existing accounting blocker is recorded below. The newest-source full platform safety run exited 0 with `Matterhorn platform safety gate passed` in `/private/tmp/matterhorn-cudos-restored-4ZgYPr/safety-gate-release-final.log`. Final frontend tests, corrected Retry/Stop and exact-read/completed-Retry replay also pass. These results do not certify complete accounting, long-running runtime stability, hosted behavior or final-head remote CI.
+
+| Check | Current evidence |
+| --- | --- |
+| Focused cancellation | 40 tests / 136 assertions passed |
+| Complete account gateway | 100 tests / 871 assertions passed |
+| Bittensor, managed MCP, routes, registry and token budget | Final typed projection checkpoint: 212 tests / 1,791 assertions passed in 15.56 seconds; server typecheck passed |
+| Frontend | Final Retry commit: 1,337 tests / 8,163 assertions passed across 191 files in 9.12 seconds; includes actual `MatterhornServerError` coverage |
+| Focused Retry/frontend regressions | Final checkpoint: 59 tests / 169 assertions passed |
+| App/server typechecks; isolated web build | Passed; newest-source web build passed in 6.87 seconds |
+| Strict secret scan | Final scan: 1,232 files, zero findings, zero skips |
+| Early accepted-run Stop before visible output | Cancelled in 4.6 seconds with `MessageAbortedError`; no pending requests or reserved tokens and no reported tokens at readback. API records show the request was already accepted; this is not live pre-dispatch coverage or proof of zero provider billing |
+| Bittensor discovery | Completed in 23 seconds, 9,428 total-turn tokens; testnet block 8,224,335 observed at `2026-10-15T03:17:52.33Z` |
+| Bittensor exact `netuid 27` | **Passed on `59c6dac3`:** real CUDOS app response, testnet/SDK block 8,224,521, metagraph block 8,224,522, timestamp `2026-10-15T03:55:11.629490Z`; normal API tool result `success: true`, 1,372 characters, no limit marker |
+| Corrected Retry/Stop | **Passed on `2b242d66` without reload:** old answer removed immediately; keyboard Enter/Stop yielded Stopped in 4.2 seconds, `MessageAbortedError` and aborted tool; normal API showed only replacement prompt/aborted assistant and zero holds/pending |
+| Successful retry completion | **Passed on `59c6dac3`:** Retry in the same stopped session completed in 20 seconds, 7,098 tokens (3,220 tool step + 3,878 final); normal history contains one replacement prompt, tool step and final assistant, with no stale answers |
+| Responsive Retry/Stop flow | Bounded visual check passed at 1280×900 and 390×844; controls were not clipped. This is not full accessibility/theme/browser certification |
+| Stop during visible streaming | **Passed locally:** clicked Stop while a partial glossary was visible and Responding/Stop remained active; final partial answer retained, Stopped/Cancelled in 23 seconds, persisted `MessageAbortedError` |
+| Final authenticated usage readback | At `2026-10-15T03:55:53.814Z`: 24 requests; 126,670 monthly reported used tokens of 150,000; 42,002 daily of 100,000; zero reserved/pending. Unreported-usage limitation below still applies |
+
+The current local runtime is `59c6dac3ac1f5c289509639206ff2eca6d21b601`, with existing accounts/chats/data and caps retained through restart. The user explicitly approved a **local monthly QA cap of 150,000 tokens**; the daily cap remains 100,000. Hard usage enforcement, verified-only privacy and the authoritative account gateway remain enabled. This is not a production allowance or permission to reset accounting.
+
+**Confirmed pre-existing accounting release blocker:** the provider reported zero tokens after visible partial output on the stopped run. Review of [model-usage-store.ts](../../apps/server/src/model-usage-store.ts) found that missing/all-zero usage becomes zero (lines 219–267); terminal aborted runs are completed at zero and their hold is released (lines 550–580). Only pending claims reconcile, so there is no automatic late correction for that settled run. Reported quota consumption can understate actual provider usage; zero holds and a settled receipt are not complete accounting certification or proof of zero cost.
+
+The owner has been asked to choose between retaining the reservation until reconciliation and deducting a reserved estimated allowance. **Neither policy has been implemented or approved in this checkpoint.** Preserve receipts and require operator/provider reconciliation; keep release blocked until an authorized policy and tested implementation resolve the gap. The deterministic 123-token partial-usage fixture and unknown-transport hold retention cover different cases and do not resolve unreported terminal usage.
+
+## Earlier evidence and superseded checkpoints
+
+The [14 October QA report and earlier follow-up](../../qa-reports/cudos-model-selection/2026-10-14/RESULTS.md) are historical evidence: local normal-auth selection, **Use for new chats**, reload persistence and real CUDOS `asi1` concept responses from all five expected agents. The initial five receipts total 19,881 charged tokens, zero reserved tokens and zero pending requests at that checkpoint. These were synthetic public concept prompts, not live-chain acceptance, all-model certification or evidence of monetary cost.
 
 The subsequent local public-read pass is separate:
 
@@ -37,21 +75,21 @@ The subsequent local public-read pass is separate:
 | Sui | Public `0x5` balance, mainnet, `sui.grpc`, fetched `2026-10-14T20:11:44.690Z`; completed answer; 5,385 tokens | Hosted replay |
 | Hyperliquid | BTC orderbook, mainnet, `hyperliquid.info`, fetched `2026-10-14T20:13:23.478Z`; completed answer; 8,224 tokens | Hosted replay |
 | Polymarket | Active market `3229167`, public Gamma search, fetched `2026-10-14T20:14:19Z`; completed answer; 8,739 tokens | Hosted read-only replay; trade preparation remains separately blocked |
-| Bittensor | SDK independently returned live testnet block 8,221,939 and five subnets; app flow did not complete a live read | Repeat the complete app journey on an awake, stable machine |
+| Bittensor | SDK independently returned live testnet block 8,221,939 and five subnets; later pre-provenance-fix app discovery completed with 7,255 reported tokens but omitted network | Discovery and exact-subnet/completed-Retry now pass at the newer checkpoints above; hosted replay remains required |
 
 The Bittensor model initially selected `subnet` without `netuid`. After the correction, that invalid call produced the actionable `bittensor_netuid_required` error; the explicit `discovery` follow-up reached the tool but timed out across a roughly 18-minute machine suspension. Power logs confirmed repeated **Dark Wake Thermal Emergency** sleeps. These runs do not establish a provider/sidecar fault or valid latency acceptance. A live read outside the app is not proof of the complete app journey.
 
-Stop during **Preparing** produced a partial answer and an active-run provider-context binding error across a 947-second suspension gap. Its hold released, and a short recovery request completed (7,935 tokens), but **cancellation is not signed off**. A potential early-Preparing abort/dispatch race also remains by code inspection; add a deterministic paused-dispatch regression before deciding whether a fix is needed. Do not relabel the guard error as a successful cancellation or relax binding expiry to make the test pass. Repeat both Bittensor and Stop on an awake, thermally stable machine without disabling thermal protections or merely increasing timeouts.
+An earlier Stop during **Preparing** produced a partial answer and an active-run provider-context binding error across a 947-second suspension gap. Its hold released, and a short recovery request completed (7,935 tokens); that was not successful cancellation. The inspected preparation/dispatch race is now fixed with deterministic regressions in `eba600e8205da06b5999e21e36cdd03de2e73c91`. Early and genuine mid-text Stop now pass locally; corrected Retry/Stop also passes on `2b242d66`. The old guard error remains a failed historical attempt, not a pass; binding expiry and thermal protections were not relaxed to obtain acceptance. A whole-response glossary attempt did not expose a streaming window; a fresh UI observation captured the successful mid-text Stop, so no provider-buffering defect is inferred.
 
-Final authenticated account readback at `2026-10-14T21:34:12.162Z`: **15 settled requests; 84,668 reported used/charged tokens; 0 reserved; 0 pending; 15,332 remaining** under the unchanged 100,000-token limits. Reported assistant token totals reconcile to 84,668. Failed/retried requests are included. Interrupted usage may be unreported; reconcile provider billing separately and make no zero-cost claim. Do not raise limits simply to finish acceptance.
+Historical authenticated account readback at `2026-10-14T21:34:12.162Z`: **15 settled requests; 84,668 reported used/charged tokens; 0 reserved; 0 pending; 15,332 remaining** under the then-current 100,000-token limits. Reported assistant token totals reconciled to 84,668. Failed/retried requests are included. This is not the final 15 October balance. Interrupted usage may be unreported; reconcile provider billing separately and make no zero-cost claim. The subsequent local monthly-cap change was explicitly authorized as recorded above; no further cap increase is implied.
 
 Local host approvals were initially manual. The user later authorized automatic **host** approval only for this isolated local test runtime. That does not authorize transaction signing, private-data consent, integration access or production auto-approval. The local service, test accounts, temporary sidecar, screenshots and scratch launcher are not deployment artifacts and must not be copied into production.
 
 The implementation report records 41 backend control-plane tests, 31 provider/agent privacy tests, one authoritative-gateway E2E test, 1,322 frontend tests, app/server typechecks and an isolated production-format web build passing. The Bittensor follow-up adds **55 passing contract/managed-MCP/read-only-route tests**; types build and server typecheck passed afterward. Other focused regressions and their limits are in the QA report.
 
-**The full monolithic safety gate did not pass in one clean run.** One aggregate run timed out in memory-inbox; a later run failed a Polymarket child; another desk run failed a different SDK-normalizer child. Those exact children and stage-selective reruns passed independently, which is not a one-shot green gate. Keep the PR draft until clean exact-head CI and the remaining awake-machine acceptance pass. Safari, Firefox, light-theme and full accessibility coverage were not reverified in this bounded fix. Earlier #1035 evidence does not automatically certify this candidate's hosted behavior.
+**Superseded aggregate failures:** one run timed out in memory-inbox; a later run failed a Polymarket child; another desk run failed a different SDK-normalizer child. Exact-child/stage reruns initially passed without proving a complete run. The current complete platform gate now passes as recorded above. Final-head CI and hosted live acceptance remain separate requirements. Safari, Firefox, light-theme and full accessibility coverage were not reverified in this bounded fix. Earlier #1035 evidence does not automatically certify this candidate's hosted behavior.
 
-### Fresh CI findings and correction
+### Earlier CI findings and corrections
 
 The first complete PR CI on `ee26d8575524a77b0260498e7c5574994cc9d838` passed Linux/macOS tests, customer crypto gates, the container build, repository security gates, dependency review, i18n and CodeQL. It did **not** pass the full safety/security gates:
 
@@ -60,7 +98,7 @@ The first complete PR CI on `ee26d8575524a77b0260498e7c5574994cc9d838` passed Li
 
 Commit `f2e4174ccba4a50a84f15364263a61f8ec139e06` updates only the `rustls` version/checksum in `examples/microsandbox-openwork-rust/Cargo.lock` to [0.23.46](https://github.com/rustls/rustls/releases/tag/v%2F0.23.46); there is no transitive dependency churn. The locked all-target graph passes the strengthened minimum-version policy, and all seven policy tests pass. No new advisory ignore was added. Local Rust compilation and a new local cargo audit were not run; require fresh CI audit/locked compilation. This does not imply the web/API image uses this Rust example dependency.
 
-After the corrective push, require the full checks on its new exact head. Earlier passing jobs are useful evidence but do not certify the final revision. The browser preview remains on the tested live-read behavior revision; the later compact wording and Rust dependency correction must not be described as having completed another live-provider pass.
+After the corrective push, require full checks on the new exact head, including the later local corrections recorded above. Earlier passing jobs do not certify the final revision. The recorded live Stop checkpoint is local runtime `eba600e8205da06b5999e21e36cdd03de2e73c91`; local results do not substitute for final remote security audit/build checks or hosted acceptance.
 
 ## Privacy and approval decisions that remain with the operator
 
@@ -72,7 +110,7 @@ Before offering private-context use, the owner must decide the supported policy 
 
 The production API Dockerfile defaults `MATTERHORN_WORK_APPROVAL_MODE=manual`. Retain the approved production setting. If manual approval remains, prove that legitimate ordinary-user requests receive timely approval through a staffed/operator-supported workflow; a request that times out waiting for the host is not working chat. Any change to production approval mode requires a separate explicit owner/security decision. **Do not copy local `approvalMode: auto` as the production fix.**
 
-Keep hard usage enforcement and explicit per-account/workspace/global budgets. The local pass used 100,000-token daily/monthly limits and 10,000-token reservations; these are bounded QA settings, not approved commercial production allowances. Keep Jev and STM disabled for this release scope. Neither passing concept chats nor a model preference enables them.
+Keep hard usage enforcement and explicit per-account/workspace/global budgets. Earlier QA used 100,000-token daily/monthly limits and 10,000-token reservations. The user subsequently approved only the local monthly cap of 150,000; daily remains 100,000. These are bounded QA settings, not approved commercial production allowances. Keep Jev and STM disabled for this release scope. Neither passing concept chats nor a model preference enables them.
 
 ## Bittensor service requirements
 
@@ -150,7 +188,7 @@ Polymarket read-only research is distinct from trade preparation. The existing j
 
 ## Hold and rollback criteria
 
-The current disposition is **hold: draft PR, no merge, no deployment**. Clear the clean exact-head CI/safety gate, awake-machine Bittensor app read, and Stop/cancellation regression/acceptance first. Do not sign off if final-head/merge CI is missing or failing; any required read lacks a real completed answer; model save/readback fails; accounts mix; privacy/approval boundaries fail; completed runs leave unexplained holds; production identity is unclear; or required email/recovery/restore evidence is absent. Assign each failure an owner and remedy. A public-research-only release must state that scope explicitly; it is not unrestricted private-context or transaction readiness.
+The current disposition is **hold: draft PR, no merge, no deployment**. Local safety/tests/build, exact-subnet/completed-Retry, mid-text Stop and corrected Retry/Stop pass at their recorded checkpoints. The confirmed unreported-usage gap still needs an owner-approved policy and tested implementation; final-head/merge CI and hosted operator acceptance are also required. Do not sign off if required CI is missing or failing; any hosted read lacks a completed answer with honest provenance; model save/readback fails; accounts mix; privacy/approval boundaries fail; completed runs leave unexplained holds; production identity is unclear; or required email/recovery/restore evidence is absent. Assign each failure an owner and remedy. A public-research-only release must state that scope explicitly; it is not unrestricted private-context or transaction readiness.
 
 If a serious regression appears, stop cutover, drain requests and preserve durable state. Roll back application artifacts only to a recorded compatible, security-reviewed **restored-UI** set. An approved artifact built from #1035 may be a candidate, but rolling back this fix restores its model-save privacy blocker; assess and disclose that impact. Do not restore the rejected retro UI, reintroduce flags, reset to #1027, force-push, overwrite databases, delete volumes or disable safeguards. Database recovery is a separate operation, not an automatic application rollback.
 
