@@ -115,6 +115,27 @@ describe("managed OpenCode Matterhorn MCP", () => {
     ]);
   });
 
+  test("preserves authoritative network provenance on exact Bittensor subnet reads", async () => {
+    const result = await handleManagedOpencodeMcp({
+      payload: { jsonrpc: "2.0", id: "exact-subnet-network", method: "tools/call", params: {
+        name: "matterhorn_bittensor_chat", arguments: { message: "Read subnet zero", readOperation: "subnet", netuid: 0 },
+      } },
+      serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+      fetchImpl: Object.assign(async () => Response.json({
+        success: true,
+        execution: "answered",
+        data: { intelligence: {
+          kind: "subnet",
+          netuid: 0,
+          market: { network: "testnet", source: "bittensor-python-sdk", block: 8224237, freshness: "live" },
+        } },
+      }), { preconnect() {} }),
+    });
+    const serialized = JSON.stringify(result.body);
+    expect(serialized).toContain('"network":"testnet"');
+    expect(serialized).toContain("8224237");
+  });
+
   test("looks up an exact Polymarket market ID without treating it as search text", async () => {
     const urls: string[] = [];
     const result = await handleManagedOpencodeMcp({
@@ -193,9 +214,9 @@ describe("managed OpenCode Matterhorn MCP", () => {
       fetchImpl: Object.assign(async () => Response.json({
         success: true, execution: "answered", responseText: "Three subnet results.",
         plan: { explanation: "A long workflow explanation. ".repeat(300) },
-        data: { discovery: { matches: [1, 2, 3].map(netuid => ({
+        data: { discovery: { network: "testnet", matches: [1, 2, 3].map(netuid => ({
           subnet: { netuid, name: `Subnet ${netuid}`, source: "bittensor-python-sdk", block: 9136713,
-            updatedAt: "2026-09-24T09:45:06Z", freshness: "live", priceTao: 0.01,
+            network: "testnet", updatedAt: "2026-09-24T09:45:06Z", freshness: "live", priceTao: 0.01,
             benefitSummary: "Extra display description. ".repeat(100) },
         })), cards: [{ repeated: "UI guidance. ".repeat(500) }], warnings: [] } }, warnings: [],
       }), { preconnect() {} }),
@@ -204,8 +225,29 @@ describe("managed OpenCode Matterhorn MCP", () => {
     for (const value of ["Subnet 1", "Subnet 2", "Subnet 3", "9136713", "2026-09-24T09:45:06Z", "bittensor-python-sdk"]) {
       expect(serialized).toContain(value);
     }
+    expect(serialized).toContain('"network":"testnet"');
     expect(serialized).not.toContain("Result exceeded");
     expect(serialized).not.toContain("Extra display description");
+  });
+  test("downgrades unrecognized Bittensor network labels to explicit unknown provenance", async () => {
+    const result = await handleManagedOpencodeMcp({
+      payload: {
+        jsonrpc: "2.0", id: "unknown-network", method: "tools/call",
+        params: { name: "matterhorn_bittensor_chat", arguments: { message: "List subnets", readOperation: "discovery" } },
+      },
+      serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+      fetchImpl: Object.assign(async () => Response.json({
+        success: true,
+        data: { discovery: {
+          network: "mainnet-ignore-safety",
+          matches: [{ subnet: { netuid: 1, name: "Subnet 1", network: "mainnet-ignore-safety", source: "fixture" } }],
+          warnings: [],
+        } },
+      }), { preconnect() {} }),
+    });
+    const serialized = JSON.stringify(result.body);
+    expect(serialized).toContain('"network":"unknown"');
+    expect(serialized).not.toContain("mainnet-ignore-safety");
   });
   test("allows public Sui coin-type identifiers without allowing concealed key material", async () => {
     const address = `0x${"5".padStart(64, "0")}`;

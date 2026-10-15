@@ -474,8 +474,10 @@ describe("TaoAppBittensorProvider", () => {
 
   test("uses configured sidecar for live-read shaped subnet, wallet, and quote data", async () => {
     const previousSidecar = process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
+    const previousNetwork = process.env.BITTENSOR_NETWORK;
     const previousFetch = globalThis.fetch;
     process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = "http://matterhorn-sidecar.test";
+    process.env.BITTENSOR_NETWORK = "test";
 
     const json = (body: unknown) => new Response(JSON.stringify(body), {
       status: 200,
@@ -486,6 +488,7 @@ describe("TaoAppBittensorProvider", () => {
       const url = String(input);
       if (url.endsWith("/subnets")) {
         return json({
+          network: "test",
           source: "matterhorn-sidecar-mock",
           subnets: [{
             netuid: 77,
@@ -499,6 +502,7 @@ describe("TaoAppBittensorProvider", () => {
             source: "matterhorn-sidecar-mock",
             block: 123,
             freshness: "mock",
+            network: "test",
           }],
         });
       }
@@ -514,11 +518,13 @@ describe("TaoAppBittensorProvider", () => {
           source: "matterhorn-sidecar-mock",
           block: 124,
           freshness: "mock",
+          network: "test",
         });
       }
       if (url.endsWith("/subnets/77/metagraph")) {
         return json({
           netuid: 77,
+          network: "test",
           source: "matterhorn-sidecar-mock",
           block: 124,
           n: 1,
@@ -582,9 +588,11 @@ describe("TaoAppBittensorProvider", () => {
       const subnets = await provider.listSubnets();
       expect(subnets[0]?.netuid).toBe(77);
       expect(subnets[0]?.source).toBe("matterhorn-sidecar-mock");
+      expect(subnets[0]?.network).toBe("testnet");
 
       const detail = await provider.getSubnet(77);
       expect(detail.priceTao).toBe(0.25);
+      expect(detail.network).toBe("testnet");
       expect(detail.metagraphSummary.block).toBe(124);
       expect(detail.topValidators[0]?.hotkey).toBe(VALID_SS58);
 
@@ -607,14 +615,51 @@ describe("TaoAppBittensorProvider", () => {
       } else {
         process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = previousSidecar;
       }
+      if (previousNetwork === undefined) delete process.env.BITTENSOR_NETWORK;
+      else process.env.BITTENSOR_NETWORK = previousNetwork;
+    }
+  });
+
+  test("marks mismatched sidecar network provenance unknown instead of relabeling it", async () => {
+    const previousSidecar = process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
+    const previousNetwork = process.env.BITTENSOR_NETWORK;
+    const previousFetch = globalThis.fetch;
+    process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = "http://mismatched-network-sidecar.test";
+    process.env.BITTENSOR_NETWORK = "test";
+    globalThis.fetch = Object.assign(async () => Response.json({
+      network: "test",
+      source: "bittensor-python-sdk",
+      subnets: [{
+        netuid: 93,
+        name: "Mismatched network fixture",
+        network: "finney",
+        source: "bittensor-python-sdk",
+        block: 459,
+        freshness: "live",
+      }],
+    }), { preconnect: previousFetch.preconnect });
+    try {
+      const result = await executeBittensorChatWorkflow({ message: "find subnets for network provenance", limit: 1 });
+      const discovery = result.data.discovery as { network?: string; warnings?: string[] };
+      expect(discovery.network).toBe("unknown");
+      expect(discovery.warnings?.join(" ")).toContain("does not match the configured connection");
+      expect(JSON.stringify(result)).not.toContain('"network":"mainnet"');
+    } finally {
+      globalThis.fetch = previousFetch;
+      if (previousSidecar === undefined) delete process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
+      else process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = previousSidecar;
+      if (previousNetwork === undefined) delete process.env.BITTENSOR_NETWORK;
+      else process.env.BITTENSOR_NETWORK = previousNetwork;
     }
   });
 });
 
 async function withMockedFivePromptSidecar(run: () => Promise<void>): Promise<void> {
   const previousSidecar = process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
+  const previousNetwork = process.env.BITTENSOR_NETWORK;
   const previousFetch = globalThis.fetch;
   process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = "http://matterhorn-five-prompt-sidecar.test";
+  process.env.BITTENSOR_NETWORK = "finney";
 
   const json = (body: unknown) => new Response(JSON.stringify(body), {
     status: 200,
@@ -625,6 +670,7 @@ async function withMockedFivePromptSidecar(run: () => Promise<void>): Promise<vo
     const url = String(input);
     if (url.endsWith("/subnets")) {
       return json({
+        network: "finney",
         source: "matterhorn-five-prompt-mock",
         subnets: [
           {
@@ -637,6 +683,7 @@ async function withMockedFivePromptSidecar(run: () => Promise<void>): Promise<vo
             emission: 0.2,
             tempo: 360,
             source: "matterhorn-five-prompt-mock",
+            network: "finney",
             block: 777,
             freshness: "fresh",
           },
@@ -650,6 +697,7 @@ async function withMockedFivePromptSidecar(run: () => Promise<void>): Promise<vo
             emission: 0.1,
             tempo: 360,
             source: "matterhorn-five-prompt-mock",
+            network: "finney",
             block: 777,
             freshness: "fresh",
           },
@@ -666,6 +714,7 @@ async function withMockedFivePromptSidecar(run: () => Promise<void>): Promise<vo
         emission: 0.2,
         tempo: 360,
         source: "matterhorn-five-prompt-mock",
+        network: "finney",
         block: 778,
         freshness: "fresh",
       });
@@ -673,6 +722,7 @@ async function withMockedFivePromptSidecar(run: () => Promise<void>): Promise<vo
     if (url.endsWith("/subnets/77/metagraph")) {
       return json({
         netuid: 77,
+        network: "finney",
         source: "matterhorn-five-prompt-mock",
         block: 778,
         n: 2,
@@ -776,6 +826,8 @@ async function withMockedFivePromptSidecar(run: () => Promise<void>): Promise<vo
     } else {
       process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = previousSidecar;
     }
+    if (previousNetwork === undefined) delete process.env.BITTENSOR_NETWORK;
+    else process.env.BITTENSOR_NETWORK = previousNetwork;
   }
 }
 
@@ -1044,6 +1096,7 @@ describe("executeBittensorChatWorkflow", () => {
       expect(result.plan.intent).toBe("discover");
       expect(result.cards[0]?.kind).toBe("subnet_comparison");
       expect(result.cards[0]?.title).toContain("Image");
+      expect((result.data.discovery as { network?: string }).network).toBe("mainnet");
       const guidance = result.cards.find((card) => card.kind === "customer_guidance");
       expect(guidance?.title).toBe("Subnet discovery next steps");
       expect(guidance?.actions?.[0]?.payload?.prompt).toContain("subnet candidates");
@@ -3954,6 +4007,7 @@ describe("Bittensor intelligence reports", () => {
       const report = await analyzeBittensorSubnetIntelligence(77);
       expect(report.kind).toBe("subnet");
       expect(report.netuid).toBe(77);
+      expect(report.market.network).toBe("mainnet");
       expect(report.score).toBeGreaterThan(50);
       expect(report.metagraph.validatorsSampled).toBe(2);
       expect(report.signals.some((signal) => signal.label === "Validator concentration")).toBe(true);

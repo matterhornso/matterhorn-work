@@ -23,6 +23,7 @@ const FORBIDDEN_CHAT_CREDENTIAL_COMMAND_RE =
   /\b(?:use|sign with|submit with|authenticate with|broadcast with)\b.{0,80}\b(seed phrase|mnemonic|private key|api key|api secret|access token|bearer token|raw signature|signed payload|wallet export)\b/i;
 
 export type BittensorProviderStatus = "ok" | "provider_unavailable";
+export type BittensorReadNetwork = "mainnet" | "testnet" | "local" | "unknown";
 
 export interface BittensorSubnetSummary {
   netuid: number;
@@ -37,6 +38,7 @@ export interface BittensorSubnetSummary {
   tempo: number | null;
   updatedAt: string;
   source: string;
+  network?: BittensorReadNetwork;
   block?: number | null;
   freshness?: string | null;
 }
@@ -849,6 +851,7 @@ export interface BittensorSubnetIntelligenceReport {
     note: string;
   };
   market: {
+    network: BittensorReadNetwork;
     priceTao: number | null;
     emission: number | null;
     tempo: number | null;
@@ -1791,6 +1794,7 @@ export interface BittensorSubnetDiscoveryResult {
   goal: string;
   matches: BittensorSubnetDiscoveryMatch[];
   cards: BittensorChatCard[];
+  network: BittensorReadNetwork;
   source: string;
   warnings: string[];
 }
@@ -2175,6 +2179,17 @@ export function resolveSubtensorSidecarRequestTimeoutMs(
 function bittensorNetwork(): BittensorSignerStatus["network"] {
   const configured = readEnv("BITTENSOR_NETWORK");
   return configured === "test" || configured === "local" ? configured : "finney";
+}
+
+function configuredBittensorReadNetwork(): BittensorReadNetwork {
+  const network = bittensorNetwork();
+  return network === "finney" ? "mainnet" : network === "test" ? "testnet" : "local";
+}
+
+function verifiedSidecarReadNetwork(value: unknown): BittensorReadNetwork {
+  const reported = firstString(asRecord(value), ["network"]);
+  const observed = reported === "finney" ? "mainnet" : reported === "test" ? "testnet" : reported === "local" ? "local" : "unknown";
+  return observed === configuredBittensorReadNetwork() ? observed : "unknown";
 }
 
 export function getSubtensorSidecarStatus(): BittensorSubtensorSidecarStatus {
@@ -5727,7 +5742,11 @@ function benefitFor(category: string, description: string): string {
   return benefits[category] ?? "A Bittensor subnet. Verify live metadata before relying on its current utility.";
 }
 
-function normalizeSubnet(value: unknown, sourceOverride?: string): BittensorSubnetSummary | null {
+function normalizeSubnet(
+  value: unknown,
+  sourceOverride?: string,
+  networkOverride: BittensorReadNetwork = "unknown",
+): BittensorSubnetSummary | null {
   const record = asRecord(value);
   const netuid = firstNumber(record, ["netuid", "net_uid", "uid", "subnet_id", "id"]);
   if (netuid === null) return null;
@@ -5759,6 +5778,7 @@ function normalizeSubnet(value: unknown, sourceOverride?: string): BittensorSubn
     tempo: firstNumber(record, ["tempo"]),
     updatedAt,
     source,
+    network: networkOverride,
     block: firstNumber(record, ["block", "blockNumber", "block_number"]),
     freshness: firstString(record, ["freshness", "dataFreshness", "data_freshness"]),
   };
@@ -8013,10 +8033,15 @@ export async function findBittensorSubnetsForGoal(input: { goal: string; limit?:
   });
   const sources = [...new Set(matches.map((match) => match.subnet.source))];
   const source = sources.length === 1 ? sources[0] ?? "unknown" : sources.length > 1 ? "mixed" : "unknown";
+  const networks = [...new Set(matches.map((match) => match.subnet.network ?? "unknown"))];
+  const network = networks.length === 1 ? networks[0] ?? "unknown" : "unknown";
   const warnings = matches.some((match) => isReferenceBittensorData(match.subnet.source))
     ? ["Reference metadata is shown because live Bittensor metrics are unavailable. Refresh before acting."]
     : [];
-  return { goal, matches, cards, source, warnings };
+  if (matches.some((match) => match.subnet.network === "unknown" || !match.subnet.network)) {
+    warnings.push("Bittensor network provenance is missing or does not match the configured connection; treat the network as unknown.");
+  }
+  return { goal, matches, cards, network, source, warnings };
 }
 
 export async function listBittensorCapabilities(): Promise<BittensorCapabilityManifest[]> {
@@ -9902,6 +9927,7 @@ export async function analyzeBittensorSubnetIntelligence(netuid: number): Promis
         : "Current provider data is a subnet-level summary. Mechanism-specific metagraph support is a follow-up contract.",
     },
     market: {
+      network: detail.network ?? "unknown",
       priceTao: detail.priceTao,
       emission: detail.emission,
       tempo: detail.tempo,
@@ -12809,8 +12835,15 @@ export class TaoAppBittensorProvider implements BittensorProvider {
       const sidecar = subtensorSidecarClient();
       if (sidecar) {
         const data = await sidecar.listSubnets();
+        const envelopeNetwork = verifiedSidecarReadNetwork(data);
         const normalized = arrayFrom(data?.["subnets"] ?? data)
-          .map((row) => normalizeSubnet(row, firstString(asRecord(row), ["source"]) ?? "subtensor-sidecar"))
+          .map((row) => normalizeSubnet(
+            row,
+            firstString(asRecord(row), ["source"]) ?? "subtensor-sidecar",
+            envelopeNetwork !== "unknown" && verifiedSidecarReadNetwork(row) === envelopeNetwork
+              ? envelopeNetwork
+              : "unknown",
+          ))
           .filter(Boolean) as BittensorSubnetSummary[];
         if (normalized.length) return normalized.sort((a, b) => a.netuid - b.netuid);
         if (data) return FALLBACK_SUBNETS;
@@ -12818,7 +12851,7 @@ export class TaoAppBittensorProvider implements BittensorProvider {
 
       try {
         const data = await taoAppClient().get("/api/beta/analytics/subnets/info");
-        const normalized = arrayFrom(data).map((row) => normalizeSubnet(row, "tao.app")).filter(Boolean) as BittensorSubnetSummary[];
+        const normalized = arrayFrom(data).map((row) => normalizeSubnet(row, "tao.app", "mainnet")).filter(Boolean) as BittensorSubnetSummary[];
         return normalized.length ? normalized.sort((a, b) => a.netuid - b.netuid) : FALLBACK_SUBNETS;
       } catch {
         return FALLBACK_SUBNETS;
@@ -12838,14 +12871,16 @@ export class TaoAppBittensorProvider implements BittensorProvider {
 
       if (sidecar) {
         const dynamicRaw = await sidecar.getSubnetDynamic(netuid);
-        const dynamicSummary = dynamicRaw ? normalizeSubnet(dynamicRaw, firstString(dynamicRaw, ["source"]) ?? "subtensor-sidecar") : null;
+        const dynamicSummary = dynamicRaw
+          ? normalizeSubnet(dynamicRaw, firstString(dynamicRaw, ["source"]) ?? "subtensor-sidecar", verifiedSidecarReadNetwork(dynamicRaw))
+          : null;
         if (dynamicSummary) summary = dynamicSummary;
       }
 
       if (!sidecar && !summary.source.includes("sidecar") && !summary.source.includes("bittensor-python-sdk")) {
         try {
           const data = await taoAppClient().get(`/api/beta/analytics/subnets/info/${netuid}`);
-          summary = normalizeSubnet(data, "tao.app") ?? summary;
+          summary = normalizeSubnet(data, "tao.app", "mainnet") ?? summary;
         } catch {
           // Keep list/fallback summary.
         }
@@ -12853,6 +12888,8 @@ export class TaoAppBittensorProvider implements BittensorProvider {
 
       if (sidecar) {
         metagraphRaw = await sidecar.getSubnetMetagraph(netuid);
+        const metagraphNetwork = verifiedSidecarReadNetwork(metagraphRaw);
+        if (summary.network !== metagraphNetwork) summary = { ...summary, network: "unknown" };
       }
 
       if (!sidecar && !metagraphRaw) {

@@ -581,13 +581,31 @@ function containsForbiddenToolResultSecret(value: unknown): boolean {
     || (isJsonObject(value) && findForbiddenMemorySecretFields(value).length > 0);
 }
 
+function canonicalBittensorReadNetwork(value: unknown): "mainnet" | "testnet" | "local" | "unknown" {
+  return value === "mainnet" || value === "testnet" || value === "local" ? value : "unknown";
+}
+
 function projectBittensorDiscovery(result: JsonObject): JsonObject {
   const data = result.data;
-  if (!isJsonObject(data) || !isJsonObject(data.discovery)) return result;
+  if (!isJsonObject(data)) return result;
+  if (!isJsonObject(data.discovery)) {
+    const intelligence = data.intelligence;
+    if (!isJsonObject(intelligence) || !isJsonObject(intelligence.market)) return result;
+    return {
+      ...result,
+      data: {
+        ...data,
+        intelligence: {
+          ...intelligence,
+          market: { ...intelligence.market, network: canonicalBittensorReadNetwork(intelligence.market.network) },
+        },
+      },
+    };
+  }
   const discovery = data.discovery;
   const matches = discovery.matches;
   if (!Array.isArray(matches)) return result;
-  const subnetKeys = ["netuid", "name", "source", "block", "updatedAt", "freshness", "warnings", "priceTao", "emission", "tempo"];
+  const subnetKeys = ["netuid", "name", "network", "source", "block", "updatedAt", "freshness", "warnings", "priceTao", "emission", "tempo"];
   // Discovery also carries duplicate UI cards, capability catalog entries and
   // suggested workflows. Spend model context on the requested chain evidence.
   const { plan: _plan, data: _data, ...answer } = result;
@@ -600,8 +618,9 @@ function projectBittensorDiscovery(result: JsonObject): JsonObject {
           if (!isJsonObject(subnet)) return {};
           return { subnet: Object.fromEntries(subnetKeys
             .filter(key => subnet[key] !== undefined)
-            .map(key => [key, subnet[key]])) };
+            .map(key => [key, key === "network" ? canonicalBittensorReadNetwork(subnet[key]) : subnet[key]])) };
         }),
+        network: canonicalBittensorReadNetwork(discovery.network),
         source: discovery.source,
         warnings: discovery.warnings,
       },
