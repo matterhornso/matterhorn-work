@@ -31,12 +31,15 @@ No colors, fonts, logo assets, desk order, privacy policy, approvals, usage limi
 | `UI_QA_BROWSER=webkit bun test apps/app/scripts/responsive-chat.browser.test.ts` | WebKit: 5 passed, 903 assertions; 39.11s. WebKit automation is not real Safari/iPhone certification. |
 | `UI_QA_BROWSER=firefox bun test apps/app/scripts/responsive-chat.browser.test.ts` | Unverified: browser startup exceeded the 60s setup deadline; no tests ran. No layout pass or failure inferred. |
 | `pnpm release:secret-scan` | 1,235 source files, zero findings, zero oversized skips. |
+| `pnpm test:matterhorn-customer-onboarding-ui` / `pnpm smoke:customer-ready-crypto` | Passed after updating the stale floating-navigation assertion; every offline smoke stage passed with loopback fixture permission. This runner's `READY` label is offline contract evidence, not launch or live-chain acceptance. |
 | Independent source review / `git diff --check` | Passed after the Agent keyboard and narrow-column menu corrections; no remaining blocking findings. |
 | New-head CI | Pending at report commit; final status belongs to the exact head recorded on the PR, not the earlier green checkpoint. |
 
 The responsive suite exercises Light/Dark at 320×740, 390×844, 523×725, 768×900, 1280×900, 640×450 and 844×390. It checks page overflow, real header hit targets, readable transcript space, receipt/navigation separation, reachable model/privacy/private-mode/options/attachment/Tools controls, draft retention through disclosures and resize, and one synthetic dispatch followed by one abort. It also checks empty placeholder sizing and a 30-line draft with 200% root text. Additional tests cover a tall 320px viewport and a 360px chat column in a 1280px desktop window, including resizing 360→700→360 with the menu open, first/last menu actions, native Tab/Shift+Tab/Enter/Space, Escape/outside dismissal and focus restoration. 640×450 models the CSS viewport of a 1280×900 window at 200% browser zoom; these are not physical-device or OS-keyboard tests. Reduced motion is enabled in the matrix.
 
 Privacy/private-setup callbacks in this layout fixture deliberately open labelled fixture dialogs. Model-picker data and network responses are synthetic and loopback-only. Production behavior and prior real-provider evidence remain documented separately in the [CUDOS report](../../cudos-model-selection/2026-10-15/RESULTS.md).
+
+Initial published-head CI on `f283da5e490d9fc03c439a4af9a6346a6c93301d` exposed two outdated onboarding source assertions requiring the old floating jump-control overlay. The assertion correction requires the labelled nonshrinking navigation row and explicitly prohibits that overlay; browser receipt/non-overlap coverage remains unchanged. Independent review and the complete local offline customer-crypto smoke passed afterward. Final exact-head CI must supersede that failed checkpoint, not silently relabel it as green.
 
 ## Visual evidence
 
