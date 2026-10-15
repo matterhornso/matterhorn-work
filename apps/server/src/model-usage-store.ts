@@ -236,6 +236,10 @@ export function modelUsageAssistantMessages(value: unknown): ModelUsageAssistant
     const cacheReadTokens = finiteInteger(cache?.read);
     const cacheWriteTokens = finiteInteger(cache?.write);
     const reportedTotal = finiteInteger(tokens?.total);
+    // Without a total, input/output must both be reported. A partial positive
+    // breakdown is no more complete than the all-zero counters left on Stop.
+    const completeBreakdown = [tokens?.input, tokens?.output, tokens?.reasoning === undefined ? 0 : tokens.reasoning]
+      .every((value) => typeof value === "number" && Number.isFinite(value) && value >= 0);
     messages.push({
       id,
       sessionId: typeof info.sessionID === "string" ? info.sessionID : undefined,
@@ -259,7 +263,7 @@ export function modelUsageAssistantMessages(value: unknown): ModelUsageAssistant
       reasoningTokens,
       cacheReadTokens,
       cacheWriteTokens,
-      rawTokens: reportedTotal || inputTokens + outputTokens + reasoningTokens,
+      rawTokens: reportedTotal || (completeBreakdown ? inputTokens + outputTokens + reasoningTokens : 0),
       providerCostUsd: finiteNumber(info.cost),
     });
   }

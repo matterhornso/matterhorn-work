@@ -34,7 +34,9 @@ async function store(config: Partial<MatterhornModelUsageConfig> = {}) {
 }
 
 describe("MatterhornModelUsageStore", () => {
-  for (const tokens of [undefined, {}, { input: 0, output: 0, reasoning: 0, total: 0 }, { total: Number.NaN }]) {
+  for (const tokens of [undefined, {}, { input: 0, output: 0, reasoning: 0, total: 0 }, { total: Number.NaN },
+    { input: 120 }, { output: 36 }, { input: 120, output: Number.NaN }, { input: -1, output: 36 },
+    { input: 120, output: 36, reasoning: Number.NaN }]) {
     test(`retains unknown stopped usage until an exact receipt arrives (${JSON.stringify(tokens)})`, async () => {
       const usage = await store({ dailyLimit: 20_000, monthlyLimit: 20_000 });
       try {
