@@ -73,6 +73,30 @@ beforeAll(async () => {
 }, 60_000);
 afterAll(async () => { await browser?.close(); server?.stop(true); });
 
+test("unknown usage allowance copy fits both themes and mobile/desktop", async () => {
+  for (const theme of ["light", "dark"]) {
+    for (const width of [390, 1280]) {
+      const page = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
+      try {
+        await page.route("**/*", route => new URL(route.request().url()).origin === server.url.origin ? route.continue() : route.abort());
+        await page.goto(`${server.url}?allowance&theme=${theme}`);
+        const notice = page.getByText(/1 request is awaiting usage totals/);
+        await notice.scrollIntoViewIfNeeded();
+        expect(await notice.isVisible()).toBe(true);
+        expect(await notice.innerText()).toContain("even after Stop or an allowance reset");
+        expect(await page.getByText(/used or reserved/).count()).toBe(2);
+        expect(await page.locator("body").innerText()).not.toContain("active request");
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        const captureRoot = process.env.UI_QA_CAPTURE_DIR;
+        if (captureRoot) {
+          await mkdir(captureRoot, { recursive: true });
+          await page.screenshot({ path: `${captureRoot}/allowance-${theme}-${width}.png`, fullPage: true });
+        }
+      } finally { await page.close(); }
+    }
+  }
+}, 30_000);
+
 test("bundled fonts load and auth typography matches the local distribution when supplied", async () => {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   try {

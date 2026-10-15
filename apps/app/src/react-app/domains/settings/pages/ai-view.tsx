@@ -810,7 +810,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
               >
                 <span className="font-medium text-dls-text">{label}</span>
                 <span className="text-dls-secondary">
-                  {compactTokenCount(period.chargedTokens)} used
+                  {compactTokenCount(period.chargedTokens)} {period.reservedTokens > 0 ? "used or reserved" : "used"}
                   {period.limit === null
                     ? ""
                     : ` of ${compactTokenCount(period.limit)} weighted tokens`}
@@ -824,7 +824,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
           <p className="mt-2 text-xs leading-5 text-muted-foreground">
             Requests pause when an allowance is reached. Different models may use allowance at different rates.
             {workspaceModelUsageQuery.data.status.pendingRequests > 0
-              ? ` ${workspaceModelUsageQuery.data.status.pendingRequests} active request${workspaceModelUsageQuery.data.status.pendingRequests === 1 ? " is" : "s are"} still being counted.`
+              ? ` ${workspaceModelUsageQuery.data.status.pendingRequests} request${workspaceModelUsageQuery.data.status.pendingRequests === 1 ? " is" : "s are"} awaiting usage totals. Reserved allowance stays held until totals arrive, even after Stop or an allowance reset.`
               : ""}
           </p>
           {!workspaceModelUsageQuery.data.status.enabled ? (

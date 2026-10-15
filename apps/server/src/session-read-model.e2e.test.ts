@@ -1559,6 +1559,120 @@ describe("workspace session read APIs", () => {
     expect(mock.requests.filter((request) => request.pathname.endsWith("/prompt_async"))).toHaveLength(1);
   });
 
+  for (const omittedTokens of [true, false]) {
+    test(`retains an accepted stopped ${omittedTokens ? "missing" : "zero"}-usage hold until exact-parent usage arrives`, async () => {
+      const workspaceRoot = await createWorkspaceRoot();
+      const promptReached = deferred();
+      const releasePrompt = deferred();
+      let parentId = "";
+      let authoritativeUsage = false;
+      const mock = startMockOpencode({
+        sessionStatus: "idle",
+        holdPrompt: releasePrompt.promise,
+        onPrompt: promptReached.resolve,
+        sessionMessages: () => parentId ? [{
+          info: {
+            id: "msg_stop_unknown_usage",
+            parentID: parentId,
+            sessionID: "ses_1",
+            role: "assistant",
+            providerID: "openai",
+            modelID: "gpt-4.1",
+            error: { name: "MessageAbortedError", data: { message: "Stopped" } },
+            time: { created: 100, completed: 200 },
+            ...(authoritativeUsage ? { tokens: { total: 321 } } : omittedTokens ? {} : {
+              tokens: { total: 0, input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            }),
+          },
+          parts: [{
+            id: "part_stop_unknown_usage",
+            messageID: "msg_stop_unknown_usage",
+            sessionID: "ses_1",
+            type: "text",
+            text: "A partial public Bittensor explanation was generated before Stop.",
+          }],
+        }, {
+          info: {
+            id: "msg_unrelated_known_usage",
+            parentID: "different_request",
+            sessionID: "ses_1",
+            role: "assistant",
+            providerID: "openai",
+            modelID: "gpt-4.1",
+            finish: "stop",
+            time: { created: 100, completed: 200 },
+            tokens: { total: 999 },
+          },
+          parts: [],
+        }] : [],
+      });
+      const openwork = await startOpenworkServer({
+        workspaceRoot,
+        opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+        readOnly: false,
+        hardModelUsageLimit: 32_000,
+      });
+      const base = `http://127.0.0.1:${openwork.server.port}`;
+      const send = (requestId = "req_stop_unknown_usage") => fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+        method: "POST",
+        headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messageID: requestId,
+          message: "Explain Bittensor without tools.",
+          agentId: "matterhorn-bittensor",
+          model: { providerID: "openai", modelID: "gpt-4.1" },
+        }),
+      });
+      const pending = send();
+      await promptReached.promise;
+      const upstreamBody = mock.requests.find((request) => request.pathname.endsWith("/prompt_async"))?.body;
+      if (!upstreamBody || typeof upstreamBody !== "object" || !("messageID" in upstreamBody)
+        || typeof upstreamBody.messageID !== "string") {
+        throw new Error("Expected the dispatched prompt message ID");
+      }
+      parentId = upstreamBody.messageID;
+      const stopped = await fetch(`${base}/w/ws_1/opencode/session/ses_1/abort`, {
+        method: "POST",
+        headers: auth(openwork.token),
+      });
+      expect(stopped.status).toBe(200);
+      releasePrompt.resolve();
+      const accepted = await pending;
+      expect(accepted.status).toBe(202);
+      await expect(accepted.json()).resolves.toMatchObject({ ok: true, accepted: true, stopped: true });
+
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const repeated = await send();
+        expect(repeated.status).toBe(202);
+        await expect(repeated.json()).resolves.toMatchObject({ ok: true, accepted: true, stopped: true });
+        const held = await fetch(`${base}/workspace/ws_1/model-usage/status`, { headers: auth(openwork.token) });
+        await expect(held.json()).resolves.toMatchObject({ status: {
+          pendingRequests: 1,
+          daily: { usedTokens: 0, reservedTokens: 32_000, chargedTokens: 32_000, remainingTokens: 0 },
+          monthly: { usedTokens: 0, reservedTokens: 32_000, chargedTokens: 32_000, remainingTokens: 0 },
+        } });
+      }
+      const blocked = await send("req_another_while_unknown_usage");
+      await expect(blocked.json()).resolves.toMatchObject({ code: "model_usage_limit_reached" });
+      expect(blocked.status).toBe(429);
+      expect(mock.requests.filter((request) => request.pathname.endsWith("/prompt_async"))).toHaveLength(1);
+
+      authoritativeUsage = true;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const usage = await fetch(`${base}/workspace/ws_1/model-usage/status`, { headers: auth(openwork.token) });
+        await expect(usage.json()).resolves.toMatchObject({ status: {
+          pendingRequests: 0,
+          daily: { usedTokens: 321, reservedTokens: 0, chargedTokens: 321, remainingTokens: 31_679 },
+          monthly: { usedTokens: 321, reservedTokens: 0, chargedTokens: 321, remainingTokens: 31_679 },
+        } });
+        const repeated = await send();
+        expect(repeated.status).toBe(202);
+        await expect(repeated.json()).resolves.toMatchObject({ ok: true, accepted: true, stopped: true });
+      }
+      expect(mock.requests.filter((request) => request.pathname.endsWith("/prompt_async"))).toHaveLength(1);
+    });
+  }
+
   test("retains a stopped transport-unknown dispatch until exact-parent history settles it", async () => {
     const workspaceRoot = await createWorkspaceRoot();
     const promptAccepted = deferred();
