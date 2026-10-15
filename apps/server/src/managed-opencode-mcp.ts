@@ -617,6 +617,72 @@ function boundedModelStrings(value: unknown, maxItems: number, maxChars: number)
 function projectBittensorRead(result: JsonObject): JsonObject {
   const data = result.data;
   if (!isJsonObject(data)) return result;
+  if (isJsonObject(data.subnet)) {
+    const subnet = data.subnet;
+    const responseText = boundedModelString(result.responseText, 300);
+    const clarificationQuestion = boundedModelString(result.clarificationQuestion, 300);
+    const benefitSummary = boundedModelString(subnet.benefitSummary, 180);
+    const risks = boundedModelStrings(subnet.risks, 4, 180);
+    const knownUseCases = boundedModelStrings(subnet.knownUseCases, 2, 140);
+    const topWarningProjection = boundedModelStrings(result.warnings, 3, 180);
+    const distinctTopWarnings = topWarningProjection.values
+      .filter((warning) => !risks.values.includes(warning));
+    const warnings = distinctTopWarnings.slice(0, 2);
+    const topWarningsTruncated = topWarningProjection.truncated || distinctTopWarnings.length > warnings.length;
+    const topOmittedWarningCount = topWarningProjection.omittedCount
+      + Math.max(0, distinctTopWarnings.length - warnings.length);
+    const validatorSource = Array.isArray(subnet.topValidators)
+      ? subnet.topValidators.filter(isJsonObject)
+      : [];
+    const topValidators = validatorSource.slice(0, 2).map((validator) => {
+      const hotkey = boundedModelString(validator.hotkey, 64);
+      return {
+        ...pickDefinedFields(validator, ["uid", "stake", "trust", "dividends"]),
+        ...(hotkey === undefined ? {} : { hotkey }),
+      };
+    });
+    const benefitSummaryTruncated = typeof subnet.benefitSummary === "string"
+      && subnet.benefitSummary.trim().length > 180;
+    return {
+      ...(typeof result.success === "boolean" ? { success: result.success } : {}),
+      ...(typeof result.execution === "string" ? { execution: result.execution.slice(0, 80) } : {}),
+      ...(typeof result.requiresClarification === "boolean" ? { requiresClarification: result.requiresClarification } : {}),
+      ...(responseText === undefined ? {} : { responseText }),
+      ...(clarificationQuestion === undefined ? {} : { clarificationQuestion }),
+      ...(warnings.length ? { warnings } : {}),
+      ...(topWarningsTruncated ? {
+        warningsTruncated: true,
+        omittedWarningCount: topOmittedWarningCount,
+      } : {}),
+      data: {
+        subnet: {
+          ...pickDefinedFields(subnet, [
+            "netuid", "name", "symbol", "category", "priceTao", "emission", "tempo",
+            "updatedAt", "source", "block", "freshness",
+          ]),
+          network: canonicalBittensorReadNetwork(subnet.network),
+          ...(benefitSummary === undefined ? {} : { benefitSummary }),
+          ...(benefitSummaryTruncated ? { benefitSummaryTruncated: true } : {}),
+          metagraphSummary: pickDefinedFields(subnet.metagraphSummary, ["neurons", "totalStake", "block"]),
+          ...(topValidators.length ? { topValidators } : {}),
+          ...(validatorSource.length > topValidators.length ? {
+            validatorsTruncated: true,
+            omittedValidatorCount: validatorSource.length - topValidators.length,
+          } : {}),
+          ...(knownUseCases.values.length ? { knownUseCases: knownUseCases.values } : {}),
+          ...(knownUseCases.truncated ? {
+            knownUseCasesTruncated: true,
+            omittedKnownUseCaseCount: knownUseCases.omittedCount,
+          } : {}),
+          ...(risks.values.length ? { risks: risks.values } : {}),
+          ...(risks.truncated ? {
+            risksTruncated: true,
+            omittedRiskCount: risks.omittedCount,
+          } : {}),
+        },
+      },
+    };
+  }
   if (!isJsonObject(data.discovery)) {
     const intelligence = data.intelligence;
     if (!isJsonObject(intelligence) || intelligence.kind !== "subnet" || !isJsonObject(intelligence.market)) return result;
