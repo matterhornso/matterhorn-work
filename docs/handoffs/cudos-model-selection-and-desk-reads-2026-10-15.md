@@ -4,6 +4,8 @@ Prepared on 15 October 2026 for the team operating `https://desks.matterhorn.so`
 
 ## Release identity and change scope
 
+Responsive follow-up: the restored chat now adapts to narrow columns and short-height windows without hiding model, privacy, attachment or chat-option controls. See the [responsive QA report](../../../qa-reports/responsive-chat/2026-10-15/RESULTS.md) for local Chromium/WebKit checks and before/after captures. These synthetic layout checks do not replace provider-backed or hosted acceptance; the existing logged-in preview remains unchanged. Require the actual PR head's CI before review, and retain all release gates below.
+
 | Item | Value |
 | --- | --- |
 | Repository | `matterhornso/matterhorn-work` |
