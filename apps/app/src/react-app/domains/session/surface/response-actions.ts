@@ -49,6 +49,13 @@ export async function runAssistantResponseRetry<T>(
     await transaction.dispatch(prepared);
   } catch (dispatchError) {
     requireCurrentAccount();
+    // A lost acknowledgement may hide an accepted replacement. Preserve that
+    // history until the gateway reconciles it; restoring would mutate a live run.
+    const unknownOutcome = typeof dispatchError === "object" && dispatchError !== null
+      && "code" in dispatchError && dispatchError.code === "message_outcome_unknown";
+    if (unknownOutcome || (dispatchError instanceof Error && /\bmessage_outcome_unknown\b/.test(dispatchError.message))) {
+      throw dispatchError;
+    }
     try {
       await transaction.restore();
     } catch {

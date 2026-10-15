@@ -682,7 +682,7 @@ export type SessionSurfaceProps = {
   onPrivateModeChange?: (enabled: boolean) => void;
   onModelPickerOpenChange: (open: boolean) => void;
   onModelChange: (model: ModelRef) => void;
-  onSendDraft: (draft: ComposerDraft) => Promise<void> | void;
+  onSendDraft: (draft: ComposerDraft, signal?: AbortSignal) => Promise<void> | void;
   onDraftChange: (draft: ComposerDraft) => void;
   attachmentsEnabled: boolean;
   attachmentsDisabledReason: string | null;
@@ -1612,6 +1612,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const pendingRetryRef = useRef<{ sessionId: string; messageId: string } | null>(null);
   const retrySendingRef = useRef(false);
   const continuationSendingRef = useRef(false);
+  const promptCancellationRef = useRef<{ sessionId: string; controller: AbortController } | null>(null);
   const opencodeClient = useMemo(
     () => createClient(props.opencodeBaseUrl, undefined, {
       token: props.matterhornToken,
@@ -2368,9 +2369,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
           });
       }
 
+      const cancellation = new AbortController();
+      promptCancellationRef.current = { sessionId: props.sessionId, controller: cancellation };
       const prepared = await jevChat.prepare(nextDraft);
       if (!isCurrentAccount()) return;
-      await props.onSendDraft(prepared);
+      await props.onSendDraft(prepared, cancellation.signal);
       if (!isCurrentAccount()) return;
       recordModelOperationAccepted(operation);
       if (useComposerStateStore.getState().clearSubmittedSession(props.sessionId, submittedComposer)) {
@@ -2404,6 +2407,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
       throw new Error("Refresh this chat and continue only its latest incomplete answer.");
     }
     continuationSendingRef.current = true;
+    const cancellation = new AbortController();
+    promptCancellationRef.current = { sessionId: props.sessionId, controller: cancellation };
     pendingRetryRef.current = null;
     pendingContinuationRef.current = { sessionId: props.sessionId, messageId };
     setError(null);
@@ -2419,7 +2424,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       const continuation = { ...buildDraft(MATTERHORN_CONTINUE_ANSWER_TEXT, [], { privacyConsentToken }), continuationOf: messageId };
       const prepared = await jevChat.prepare(continuation);
       if (!isCurrentAccount()) return;
-      await props.onSendDraft(prepared);
+      await props.onSendDraft(prepared, cancellation.signal);
       if (!isCurrentAccount()) return;
       recordModelOperationAccepted(operation);
       pendingContinuationRef.current = null;
@@ -2441,6 +2446,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
   const handleAbort = useCallback(async () => {
     if (!isCurrentAccount()) return;
+    if (promptCancellationRef.current?.sessionId === props.sessionId) {
+      promptCancellationRef.current.controller.abort();
+    }
     jevChat.cancel();
     if (!chatStreaming) return;
     suppressNextAbortFailureRef.current = true;
@@ -2479,6 +2487,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
     if (!prompt) throw new Error("This response came from an attachment-only prompt. Re-send it from the composer to include the attachment.");
 
     retrySendingRef.current = true;
+    const cancellation = new AbortController();
+    promptCancellationRef.current = { sessionId: props.sessionId, controller: cancellation };
     pendingContinuationRef.current = null;
     pendingRetryRef.current = { sessionId: props.sessionId, messageId };
     suppressNextAbortFailureRef.current = false;
@@ -2510,7 +2520,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
         }),
         abort: () => abortSession(opencodeClient, props.sessionId),
         revert: () => revertSession(opencodeClient, props.sessionId, retryTurn.promptMessageId),
-        dispatch: (prepared) => props.onSendDraft(prepared),
+        dispatch: (prepared) => props.onSendDraft(prepared, cancellation.signal),
         restore: () => unrevertSession(opencodeClient, props.sessionId),
       });
       if (!isCurrentAccount()) return;

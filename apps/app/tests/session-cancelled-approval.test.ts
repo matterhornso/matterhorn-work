@@ -3,6 +3,7 @@ import { recordSessionSubmissionFailure } from "../src/react-app/domains/session
 import { useSessionActivityStore } from "../src/react-app/domains/session/status/session-activity-store";
 import { useComposerStateStore } from "../src/react-app/domains/session/surface/composer-state-store";
 import { JevPreparationCancelledError } from "../src/react-app/domains/session/surface/use-jev-chat";
+import { assertPromptActive } from "../src/react-app/shell/prompt-cancellation";
 import {
   beginModelOperation, clearModelOperationMetrics, pendingModelOperation,
   readModelOperationMetrics, recordModelOperationCancelled,
@@ -11,6 +12,11 @@ import {
 const workspaceId = "ws_cancelled_approval";
 const sessionId = "ses_cancelled_approval";
 const cancelled = new Error(JSON.stringify({ code: "write_denied", details: { reason: "cancelled" } }));
+const cancelledPreflight = (() => {
+  const controller = new AbortController();
+  controller.abort();
+  try { assertPromptActive(controller.signal); } catch (error) { return error; }
+})();
 
 beforeEach(() => {
   clearModelOperationMetrics();
@@ -18,7 +24,7 @@ beforeEach(() => {
   useComposerStateStore.getState().clearSession(sessionId);
 });
 
-for (const { label, error } of [{ label: "approval", error: cancelled }, { label: "Jev preparation", error: new JevPreparationCancelledError() }]) {
+for (const { label, error } of [{ label: "approval", error: cancelled }, { label: "privacy preflight", error: cancelledPreflight }, { label: "Jev preparation", error: new JevPreparationCancelledError() }]) {
 for (const stopFirst of [false, true]) {
   test(`cancelled ${label} returns to idle and records cancellation once (Stop first: ${stopFirst})`, () => {
     const operation = beginModelOperation({ workspaceId, sessionId, source: "chat" });

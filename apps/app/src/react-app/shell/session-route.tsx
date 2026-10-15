@@ -12,6 +12,7 @@ import {
 } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { AccountStateChangedError, captureAccountGeneration } from "../../app/lib/account-client-state";
+import { assertPromptActive, prepareActivePrompt } from "./prompt-cancellation";
 import type {
   AgentPartInput,
   FilePartInput,
@@ -2823,9 +2824,13 @@ export function SessionRoute() {
       onOpenSettingsSection: (section: "commands" | "skills" | "mcps" | "extensions" | "plugins") => {
         handleOpenSettings(section === "skills" ? "/settings/skills" : section === "mcps" || section === "extensions" ? "/settings/extensions/mcp" : section === "plugins" ? "/settings/extensions/plugins" : "/settings/general");
       },
-      onSendDraft: async (draft: ComposerDraft) => {
+      onSendDraft: async (draft: ComposerDraft, signal?: AbortSignal) => {
         const requireCurrentAccount = () => { if (!isCurrentAccount()) throw new AccountStateChangedError(); };
-        requireCurrentAccount();
+        const requireActiveSubmission = () => {
+          requireCurrentAccount();
+          assertPromptActive(signal);
+        };
+        requireActiveSubmission();
         validatePrivacyConsentToken(draft.privacy?.consentToken);
         const text = (draft.resolvedText ?? draft.text).trim();
         if (!text && draft.attachments.length === 0) return;
@@ -2894,7 +2899,7 @@ export function SessionRoute() {
             ...(draft.privacy?.mode ? { privacyMode: draft.privacy.mode } : {}),
             ...(draft.privacy?.consentToken ? { privacyConsentToken: draft.privacy.consentToken } : {}),
           };
-          requireCurrentAccount();
+          requireActiveSubmission();
           const result = await opencodeClient.session.command(commandRequest);
           if (result.error) {
             throw new Error(serializeSDKError(result.error));
@@ -2912,13 +2917,13 @@ export function SessionRoute() {
           sessionId: selectedSessionId,
           record: recordInspectorEvent,
         });
-        const [parts, systemContext] = await Promise.all([
+        const [parts, systemContext] = await prepareActivePrompt(signal, () => Promise.all([
           draftToParts(draft, selectedWorkspaceRoot),
           publicBetaWeb
             ? Promise.resolve(undefined)
             : buildSessionSystemContext(text, selectedSessionId, selectedAgent, executionMode),
-        ]);
-        requireCurrentAccount();
+        ]));
+        requireActiveSubmission();
         const executionModeTools = draft.answerOnly || draft.continuationOf ? { "*": false } : buildMatterhornPromptTools({
           mode: executionMode,
           agentId: selectedAgent,
@@ -2927,7 +2932,7 @@ export function SessionRoute() {
         });
 
         if (!draft.privacy?.consentToken || draft.continuationOf) {
-          const privacyPreflight = await requestDiagnostics.observe("preflight", () => client.preflightAgentMessage(selectedWorkspaceId, selectedSessionId, {
+          const privacyPreflight = await prepareActivePrompt(signal, () => requestDiagnostics.observe("preflight", () => client.preflightAgentMessage(selectedWorkspaceId, selectedSessionId, {
             parts,
             ...(draft.continuationOf ? { continuationOf: draft.continuationOf } : {}),
             ...(draft.jevReceipt ? { jevReceipt: draft.jevReceipt } : {}),
@@ -2944,7 +2949,7 @@ export function SessionRoute() {
               agentFileIds: draft.privacy.agentFileIds,
             } : {}),
             ...(draft.privacy?.memoryIds?.length ? { memoryIds: draft.privacy.memoryIds } : {}),
-          }));
+          })));
           if (draft.continuationOf) requireAnswerContinuationSupport(privacyPreflight, draft.continuationOf);
           if (!draft.privacy?.consentToken && privacyPreflight.decision !== "allow") {
             throw new Error(JSON.stringify({
@@ -2955,7 +2960,7 @@ export function SessionRoute() {
           }
         }
 
-        requireCurrentAccount();
+        requireActiveSubmission();
         const dispatchStartedAt = performance.now();
         promptTimingRef.current.set(selectedSessionId, {
           startedAt: dispatchStartedAt,
