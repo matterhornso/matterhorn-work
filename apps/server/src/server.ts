@@ -1493,6 +1493,7 @@ export async function startServer(
   };
   const operationalMetrics = new OperationalMetrics();
   const modelUsageStore = new MatterhornModelUsageStore();
+  const sessionPromptCancellations = new SessionPromptCancellationRegistry();
   const guardedRuntime = new MatterhornGuardedAgentRuntime();
   const recoveryErasureLedger = recoveryErasureLedgerFromEnv(process.env);
   if (recoveryErasureLedger) guardedRuntime.reconcileRecoveryErasures(recoveryErasureLedger);
@@ -1869,6 +1870,7 @@ export async function startServer(
     operationalMetrics,
     requestRateLimitStore,
     modelUsageStore,
+    sessionPromptCancellations,
     guardedRuntime,
     cryptoAppRuntime,
     coworkerRuntime,
@@ -1950,6 +1952,7 @@ export async function startServer(
             proxyPath: mount.restPath,
             access,
             modelUsageStore,
+            sessionPromptCancellations,
             guardedRuntime,
           });
           return finalize(response);
@@ -2039,6 +2042,7 @@ export async function startServer(
             workspace,
             access,
             modelUsageStore,
+            sessionPromptCancellations,
             guardedRuntime,
           });
           return finalize(response);
@@ -2804,6 +2808,44 @@ function modelUsageSubject(access: Pick<ClientAccess, "actor" | "session">): Mod
   throw new ApiError(401, "unauthorized", "An authenticated account is required for model usage.");
 }
 
+type SessionPromptCancellationScope = { workspaceId: string; sessionId: string; subjectId: string };
+
+class SessionPromptCancellationRegistry {
+  private readonly active = new Map<string, Set<AbortController>>();
+
+  private key(scope: SessionPromptCancellationScope): string {
+    return JSON.stringify([scope.workspaceId, scope.sessionId, scope.subjectId]);
+  }
+
+  register(scope: SessionPromptCancellationScope): { signal: AbortSignal; close: () => void } {
+    const key = this.key(scope);
+    const controller = new AbortController();
+    const controllers = this.active.get(key) ?? new Set<AbortController>();
+    controllers.add(controller);
+    this.active.set(key, controllers);
+    return {
+      signal: controller.signal,
+      close: () => {
+        const current = this.active.get(key);
+        current?.delete(controller);
+        if (current?.size === 0) this.active.delete(key);
+      },
+    };
+  }
+
+  cancel(scope: SessionPromptCancellationScope): void {
+    const key = this.key(scope);
+    const controllers = this.active.get(key);
+    if (!controllers) return;
+    this.active.delete(key);
+    for (const controller of controllers) controller.abort();
+  }
+}
+
+function cancelledSessionPromptError(): ApiError {
+  return new ApiError(403, "write_denied", "Write request denied", { reason: "cancelled" });
+}
+
 function clientAccessFromRequestContext(ctx: RequestContext, workspace: WorkspaceInfo): ClientAccess {
   if (!ctx.actor) throw new ApiError(401, "unauthorized", "An authenticated account is required.");
   return {
@@ -2910,6 +2952,7 @@ async function proxyOpencodeRequest(input: {
   proxyPath?: string;
   access?: ClientAccess;
   modelUsageStore?: MatterhornModelUsageStore;
+  sessionPromptCancellations: SessionPromptCancellationRegistry;
   guardedRuntime: MatterhornGuardedAgentRuntime;
 }) {
   const workspace = input.workspace;
@@ -2965,11 +3008,13 @@ async function proxyOpencodeRequest(input: {
     : null;
   const stopSessionId = stopSessionMatch ? decodePathSegment(stopSessionMatch[1]) : null;
   if (stopSessionId && workspace && input.access) {
-    input.approvals.cancelSession({
+    const cancellationScope = {
       workspaceId: workspace.id,
       sessionId: stopSessionId,
       subjectId: modelUsageSubject(input.access).id,
-    });
+    };
+    input.approvals.cancelSession(cancellationScope);
+    input.sessionPromptCancellations.cancel(cancellationScope);
   }
   let body: BodyInit | undefined = rawBody;
   let promptAudit: { executionMode: MatterhornExecutionMode; agent?: string; sessionId: string } | null = null;
@@ -10154,6 +10199,7 @@ function createRoutes(
   operationalMetrics: OperationalMetrics,
   requestRateLimitStore: RequestRateLimitStore,
   modelUsageStore: MatterhornModelUsageStore,
+  sessionPromptCancellations: SessionPromptCancellationRegistry,
   guardedRuntime: MatterhornGuardedAgentRuntime,
   cryptoAppRuntime: MatterhornCryptoAppRuntimeServices,
   coworkerRuntime: MatterhornCoworkerRuntimeServices,
@@ -13732,7 +13778,6 @@ function createRoutes(
     }
     const currentModels = await buildWorkspaceBackendModels(config, workspace);
     assertModelSelectionInCatalog(currentModels.catalog, requestSelection);
-    assertPromptProviderPrivacy(requestSelection.providerId, requestSelection.modelId);
 
     let selection;
     try {
@@ -15756,6 +15801,12 @@ function createRoutes(
       throw new ApiError(400, "invalid_payload", "Invalid message request ID");
     }
     const subjectId = modelUsageSubject(clientAccessFromRequestContext(ctx, workspace)).id;
+    const cancellation = sessionPromptCancellations.register({ workspaceId: workspace.id, sessionId, subjectId });
+    const throwIfCancelled = () => {
+      if (cancellation.signal.aborted) throw cancelledSessionPromptError();
+    };
+    try {
+    throwIfCancelled();
     // Jev receipts expire/renew independently of the user's logical request.
     // Keep retries idempotent; new dispatch still validates the current receipt.
     const { jevReceipt: _jevReceipt, ...requestIdentity } = body;
@@ -15772,6 +15823,7 @@ function createRoutes(
       let accepted = unresolved.accepted;
       if (!accepted && unresolved.response) {
         const history = await readWorkspaceSessionMessages(config, workspace, sessionId, {}).catch(() => []);
+        throwIfCancelled();
         accepted = history.some((message) => message.info.id === unresolved.messageId
           || ("parentID" in message.info && message.info.parentID === unresolved.messageId));
         if (accepted) modelUsageStore.updateMessageDispatch(subjectId, workspace.id, sessionId, unresolved.requestId, unresolved.response, true);
@@ -15790,6 +15842,7 @@ function createRoutes(
       throw new ApiError(400, "execution_mode_mismatch", "Prompt execution mode does not match the request header");
     }
     const modelResolution = await resolveSessionPromptModel(config, workspace, parseSessionPromptModel(body));
+    throwIfCancelled();
     const requestVariant = typeof body.variant === "string" && body.variant.trim()
       ? body.variant.trim()
       : undefined;
@@ -15829,6 +15882,7 @@ function createRoutes(
       sessionId,
       ...(requestedAgent ? { agentId: requestedAgent } : {}),
     });
+    throwIfCancelled();
     const agent = agentContext.agentId;
     auditMetadata.agent = agent;
     const coworkerState = activeCoworkerWorkingState(coworkerRuntime, coworker?.profile);
@@ -15852,6 +15906,7 @@ function createRoutes(
     ]
       .filter((profile): profile is Record<string, boolean> => Boolean(profile));
     const continuationOf = await validateAnswerContinuation(config, workspace, sessionId, body);
+    throwIfCancelled();
     const privacyMode = parseAgentPrivacyMode(body.privacyMode);
     const resolved = await resolveAuthoritativeAgentMessage({
       body,
@@ -15869,6 +15924,7 @@ function createRoutes(
       coworkerState,
       resourceScope: coworker?.resourceScope,
     });
+    throwIfCancelled();
     const jevContext = jevMessageContext(ctx, workspace, body, sessionId, rawParts, modelResolution.model);
     appendJevSystemContext(resolved, jevContext);
     appendAnswerContinuationContext(resolved, continuationOf);
@@ -15891,6 +15947,7 @@ function createRoutes(
       sessionId,
       guardedRuntime,
     });
+    throwIfCancelled();
     const guardedInput = {
       workspaceId: workspace.id,
       sessionId,
@@ -15919,6 +15976,7 @@ function createRoutes(
     } catch (error) {
       throw guardedRuntimeApiError(error);
     }
+    throwIfCancelled();
 
     await requireApproval(ctx, {
       workspaceId: workspace.id,
@@ -15926,12 +15984,15 @@ function createRoutes(
       summary: `Submit prompt to session ${sessionId}`,
       paths: [workspace.path],
     }, { sessionId, subjectId });
+    throwIfCancelled();
     const userMessageId = `msg_${randomUUID().replaceAll("-", "")}`;
     if (!modelUsageStore.claimMessageDispatch({ subjectId, workspaceId: workspace.id, sessionId, requestId, requestHash, messageId: userMessageId })) {
       throw unknownDispatch();
     }
     let dispatchStarted = false;
+    let dispatchAccepted = false;
     const dispatchNewMessage = async () => {
+      throwIfCancelled();
       // Approval can wait. Recheck eligibility after it, before aborting or
       // reserving anything, so a continuation cannot replace a newer turn.
       if (continuationOf) await validateAnswerContinuation(config, workspace, sessionId, body);
@@ -15946,16 +16007,19 @@ function createRoutes(
       });
 
       try {
+        throwIfCancelled();
         // A follow-up is a replacement run. Abort any in-flight response before
         // consuming consent or starting the newly authorized guarded run; abort
         // is idempotent when the session is already idle.
         await abortWorkspaceSessionBeforeReplacement(config, workspace, sessionId);
+        throwIfCancelled();
       } catch (error) {
         modelUsageStore.cancel(usage.reservation.reservationId);
         throw error;
       }
 
       let guardedAcceptance: GuardedPromptAcceptance;
+      let guardedRunId: string | null = null;
       try {
         const currentHistoryPrivacyParts = await guardedSessionPromptHistoryPrivacyParts({
           config,
@@ -15963,7 +16027,9 @@ function createRoutes(
           sessionId,
           guardedRuntime,
         });
+        throwIfCancelled();
         if (continuationOf) await validateAnswerContinuation(config, workspace, sessionId, body);
+        throwIfCancelled();
         guardedAcceptance = await guardedRuntime.startAuthorizedPrompt(
           {
             ...guardedInput,
@@ -15972,8 +16038,14 @@ function createRoutes(
           guardedAuthorization,
           providerSystem,
         );
+        guardedRunId = guardedAcceptance.runId;
+        throwIfCancelled();
       } catch (error) {
         modelUsageStore.cancel(usage.reservation.reservationId);
+        if (guardedRunId) {
+          await guardedRuntime.failRun(guardedRunId, cancellation.signal.aborted ? "cancelled" : "error");
+        }
+        if (cancellation.signal.aborted) throw cancelledSessionPromptError();
         throw guardedRuntimeApiError(error);
       }
       modelUsageStore.bindUserMessage(usage.reservation.reservationId, userMessageId);
@@ -15987,6 +16059,7 @@ function createRoutes(
         ...(coworker ? { coworker: { id: coworker.profile.id, name: coworker.profile.name,
           revision: coworker.profile.revision, policyVersion: coworker.profile.policyVersion } } : {}),
       };
+      let stoppedAfterDispatch = false;
       modelUsageStore.updateMessageDispatch(subjectId, workspace.id, sessionId, requestId, acceptedResponse, false);
       const promptBody = {
         sessionID: sessionId,
@@ -16003,6 +16076,7 @@ function createRoutes(
         parts: resolved.upstreamParts.map((part) => isRecord(part) ? { ...part, id: `prt_${randomUUID().replaceAll("-", "")}` } : part),
       };
       try {
+        throwIfCancelled();
         guardedRuntime.bindUserMessage({
           runId: guardedAcceptance.runId,
           sessionId,
@@ -16017,6 +16091,7 @@ function createRoutes(
           expectedAgentPromptHash: agentContext.promptHash,
           ...(requestToolProfiles.length ? { requestToolProfiles } : {}),
         });
+        throwIfCancelled();
         dispatchStarted = true;
         if (reasoningEffort) {
           const { sessionID: _sessionID, directory: _directory, ...upstreamBody } = promptBody;
@@ -16032,27 +16107,68 @@ function createRoutes(
             `/session/${encodeURIComponent(sessionId)}/prompt_async`,
           );
         }
+        dispatchAccepted = true;
+        throwIfCancelled();
       } catch (error) {
         const rejectedStatus = error instanceof ApiError && isRecord(error.details) ? error.details.status : undefined;
         if (dispatchStarted && typeof rejectedStatus === "number" && rejectedStatus >= 400 && rejectedStatus < 500) {
           // An explicit runtime rejection (not a transport/proxy 5xx) is final.
           dispatchStarted = false;
         }
-        if (!dispatchStarted) {
+        if (cancellation.signal.aborted && dispatchStarted) {
+          try {
+            await abortWorkspaceSessionBeforeReplacement(config, workspace, sessionId);
+          } catch {
+            // The guarded run is still revoked below. The retained dispatch
+            // claim and usage hold prevent a duplicate while history settles.
+          }
+          await guardedRuntime.failRun(guardedAcceptance.runId, "cancelled");
+          const reconciled = await reconcileModelUsageSession({
+            config, workspace, store: modelUsageStore, subject: usage.subject, sessionId,
+          }).catch(() => 0);
+          if (reconciled === 0) {
+            scheduleModelUsageReconciliation({
+              config, workspace, store: modelUsageStore, subject: usage.subject, sessionId,
+            });
+          }
+          if (dispatchAccepted) stoppedAfterDispatch = true;
+          else {
+            // Preserve the user's Stop request on the unresolved receipt. The
+            // receipt remains inaccessible until exact-parent history proves
+            // acceptance, while the claim and usage hold prevent replay.
+            modelUsageStore.updateMessageDispatch(
+              subjectId,
+              workspace.id,
+              sessionId,
+              requestId,
+              { ...acceptedResponse, stopped: true },
+              false,
+            );
+            throw unknownDispatch();
+          }
+        } else if (!dispatchStarted) {
           modelUsageStore.cancel(usage.reservation.reservationId);
-          await guardedRuntime.failRun(guardedAcceptance.runId);
+          await guardedRuntime.failRun(
+            guardedAcceptance.runId,
+            cancellation.signal.aborted ? "cancelled" : "error",
+          );
+          if (cancellation.signal.aborted) throw cancelledSessionPromptError();
           throw error;
+        } else {
+          // A transport error is not proof of rejection. Keep authority and the
+          // usage hold while inspecting the exact parent, never a time heuristic.
+          scheduleModelUsageReconciliation({ config, workspace, store: modelUsageStore, subject: usage.subject, sessionId });
+          const history = await readWorkspaceSessionMessages(config, workspace, sessionId, {}).catch(() => []);
+          const accepted = history.some((message) => message.info.id === userMessageId
+            || ("parentID" in message.info && message.info.parentID === userMessageId));
+          if (!accepted) throw unknownDispatch();
         }
-        // A transport error is not proof of rejection. Keep authority and the
-        // usage hold while inspecting the exact parent, never a time heuristic.
-        scheduleModelUsageReconciliation({ config, workspace, store: modelUsageStore, subject: usage.subject, sessionId });
-        const history = await readWorkspaceSessionMessages(config, workspace, sessionId, {}).catch(() => []);
-        const accepted = history.some((message) => message.info.id === userMessageId
-          || ("parentID" in message.info && message.info.parentID === userMessageId));
-        if (!accepted) throw unknownDispatch();
       }
 
-      modelUsageStore.updateMessageDispatch(subjectId, workspace.id, sessionId, requestId, acceptedResponse, true);
+      const completedResponse = stoppedAfterDispatch
+        ? { ...acceptedResponse, stopped: true as const }
+        : acceptedResponse;
+      modelUsageStore.updateMessageDispatch(subjectId, workspace.id, sessionId, requestId, completedResponse, true);
 
       await recordAudit(workspace.path, {
         id: shortId(),
@@ -16060,7 +16176,7 @@ function createRoutes(
         actor: ctx.actor ?? { type: "remote" },
         action: "session.prompt",
         target: sessionId,
-        summary: "Submitted prompt to chat session",
+        summary: stoppedAfterDispatch ? "Stopped accepted prompt in chat session" : "Submitted prompt to chat session",
         timestamp: Date.now(),
         metadata: auditMetadata,
       });
@@ -16075,13 +16191,16 @@ function createRoutes(
         });
       }
 
-      return jsonResponse(acceptedResponse, 202);
+      return jsonResponse(completedResponse, 202);
     };
     try {
       return await dispatchNewMessage();
     } catch (error) {
       if (!dispatchStarted) modelUsageStore.discardUnsentMessageDispatch(subjectId, workspace.id, sessionId, requestId);
       throw error;
+    }
+    } finally {
+      cancellation.close();
     }
   });
 

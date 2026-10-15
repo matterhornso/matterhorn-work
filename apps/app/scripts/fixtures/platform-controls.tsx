@@ -21,6 +21,7 @@ import { TransactionBatch } from "../../src/react-app/domains/wallet/components/
 import { HostedMcpSummary } from "../../src/react-app/domains/settings/pages/hosted-mcp-summary";
 import { PublicWebSigninPage } from "../../src/react-app/domains/cloud/public-web-signin-page";
 import { AppearanceView } from "../../src/react-app/domains/settings/pages/appearance-view";
+import { AiSettingsView } from "../../src/react-app/domains/settings/pages/ai-view";
 import { PrivacySettingsView } from "../../src/react-app/domains/settings/pages/privacy-view";
 import { ModelPickerModal } from "../../src/react-app/domains/session/modals/model-picker-modal";
 import type { ModelOption, ModelRef } from "../../src/app/types";
@@ -43,6 +44,23 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false 
 const client = createMatterhornServerClient({ baseUrl: location.origin });
 const authConfig = { baseUrl: location.origin, apiBaseUrl: `${location.origin}/fixture-auth`, requireSignin: true };
 const onFixtureSignedIn = () => { throw new Error("This fixture must never authenticate"); };
+function AllowanceFixture() {
+  const period = { usedTokens: 123, reservedTokens: 20_000, chargedTokens: 20_123,
+    limit: 100_000, remainingTokens: 79_877, resetsAt: "2026-11-01T00:00:00Z" };
+  queryClient.setQueryData(["settings-workspace-model-usage", "fixture"], {
+    status: { daily: period, monthly: period, pendingRequests: 1, enabled: true },
+  });
+  return <main className="mx-auto max-w-3xl p-4">
+    <p>Synthetic allowance fixture. No account, provider or billing data.</p>
+    <AiSettingsView busy={false} providerAuthBusy={false} runtimeWorkspaceId="fixture"
+      defaultModelLabel="Fixture model" defaultModelRef="fixture/model" defaultModelProviderId="fixture" defaultModelId="model"
+      connectedModelCount={0} providerStatusLabel="Fixture unavailable" providerStatusStyle="warning" providerSummary="Fixture only"
+      connectedProviders={[]} disconnectingProviderId={null} providerConnectError={null}
+      providerDisconnectStatus={null} providerDisconnectError={null} cudosConnected={false} providerCredentialsManaged
+      onOpenModelPicker={() => undefined} onOpenProviderAuth={() => undefined} onResumePendingDeskTask={() => undefined}
+      onDisconnectProvider={() => undefined} canDisconnectProvider={() => false} />
+  </main>;
+}
 function WalletFixture() {
   const [attempts, setAttempts] = useState(0);
   const [dismissed, setDismissed] = useState(false);
@@ -140,7 +158,7 @@ const root = document.getElementById("root");
 if (!root) throw new Error("Fixture root missing");
 createRoot(root).render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={[params.get("public") ?? "/"]}>
   <StatusToastsProvider>
-    {params.has("picker") ? <PickerFixture /> : params.has("settings") ? <SettingsFixture /> : params.has("auth") ? <PublicWebSigninPage config={authConfig} onSignedIn={onFixtureSignedIn} /> : params.has("wallet") ? <WalletFixture /> : params.has("integrations") ? <IntegrationsFixture /> : params.has("public") ? <PublicTrustRoute /> : params.has("notes") ?
+    {params.has("allowance") ? <AllowanceFixture /> : params.has("picker") ? <PickerFixture /> : params.has("settings") ? <SettingsFixture /> : params.has("auth") ? <PublicWebSigninPage config={authConfig} onSignedIn={onFixtureSignedIn} /> : params.has("wallet") ? <WalletFixture /> : params.has("integrations") ? <IntegrationsFixture /> : params.has("public") ? <PublicTrustRoute /> : params.has("notes") ?
       <div className="mx-auto h-dvh max-w-3xl"><NotesPage client={client} workspaceId="fixture" /></div> :
       params.has("memory") ? <div className="mx-auto h-dvh max-w-3xl"><MemoryPanel client={client} workspaceId="fixture" sessionId={null} onClose={() => undefined} /></div> :
       params.has("chat") ? <ChatFixture /> : <Fixture />}

@@ -51,6 +51,32 @@ type SyncEntry = {
 
 const idleStatus: SessionStatus = { type: "idle" };
 const syncs = new Map<string, SyncEntry>();
+const suppressedTranscriptMessageIds = new Map<string, Set<string>>();
+const pendingTranscriptReplacements = new Map<string, {
+  boundary: SessionTranscriptSnapshotBoundary;
+  knownMessageIds: ReadonlySet<string>;
+  latestCreated: number;
+}>();
+
+function transcriptSessionKey(workspaceId: string, sessionId: string) {
+  return JSON.stringify([workspaceId, sessionId]);
+}
+
+function transcriptMessageIsSuppressed(workspaceId: string, sessionId: string, messageId: string) {
+  return suppressedTranscriptMessageIds.get(transcriptSessionKey(workspaceId, sessionId))?.has(messageId) ?? false;
+}
+
+export function filterSuppressedTranscriptMessages(
+  workspaceId: string,
+  sessionId: string,
+  messages: UIMessage[],
+) {
+  const suppressed = suppressedTranscriptMessageIds.get(transcriptSessionKey(workspaceId, sessionId));
+  return suppressed?.size
+    ? messages.filter((message) => !suppressed.has(message.id))
+    : messages;
+}
+
 accountClientState.register("session-streams", () => {
   for (const [key, entry] of syncs) {
     entry.refs = 0;
@@ -62,6 +88,8 @@ accountClientState.register("session-streams", () => {
     entry.assistantOutputListeners.clear();
     disposeWorkspaceSync(key, entry);
   }
+  suppressedTranscriptMessageIds.clear();
+  pendingTranscriptReplacements.clear();
 }, "stop");
 const todoSnapshotFirstSeen = new WeakMap<MatterhornSessionSnapshot, number>();
 const retainedSessionTtlMs = 10 * 60_000;
@@ -69,10 +97,70 @@ const idleRetainedSessionTtlMs = 10_000;
 
 export const transcriptKey = (workspaceId: string, sessionId: string) =>
   ["react-session-transcript", workspaceId, sessionId] as const;
+export const snapshotKey = (workspaceId: string, sessionId: string) =>
+  ["react-session-snapshot", workspaceId, sessionId] as const;
 export const statusKey = (workspaceId: string, sessionId: string) =>
   ["react-session-status", workspaceId, sessionId] as const;
 export const todoKey = (workspaceId: string, sessionId: string) =>
   ["react-session-todos", workspaceId, sessionId] as const;
+
+export type SessionTranscriptSnapshotBoundary = {
+  workspaceId: string;
+  sessionId: string;
+  replacedMessageIds: ReadonlySet<string>;
+};
+
+export function captureSessionTranscriptSnapshotBoundary(
+  workspaceId: string,
+  sessionId: string,
+  replacedMessageIds: Iterable<string>,
+): SessionTranscriptSnapshotBoundary {
+  return {
+    workspaceId,
+    sessionId,
+    replacedMessageIds: new Set(replacedMessageIds),
+  };
+}
+
+export function retainPendingTranscriptReplacement(
+  boundary: SessionTranscriptSnapshotBoundary,
+  messages: readonly UIMessage[],
+) {
+  const createdTimes = new Map<string, number>();
+  for (const message of messages) {
+    const metadata = message.metadata;
+    if (!metadata || typeof metadata !== "object" || !("opencode" in metadata)) continue;
+    const opencode = metadata.opencode;
+    if (!opencode || typeof opencode !== "object" || !("created" in opencode)) continue;
+    if (typeof opencode.created === "number" && Number.isFinite(opencode.created)) {
+      createdTimes.set(message.id, opencode.created);
+    }
+  }
+  const hasReplacedTimestamps = [...boundary.replacedMessageIds].every((id) => createdTimes.has(id));
+  pendingTranscriptReplacements.set(transcriptSessionKey(boundary.workspaceId, boundary.sessionId), {
+    boundary,
+    knownMessageIds: new Set(messages.map((message) => message.id)),
+    // A missing original-turn timestamp makes bounded/backfilled history
+    // ambiguous. Never infer replacement from absence alone.
+    latestCreated: hasReplacedTimestamps && createdTimes.size ? Math.max(...createdTimes.values()) : Infinity,
+  });
+}
+
+export function getPendingTranscriptReplacement(workspaceId: string, sessionId: string) {
+  return pendingTranscriptReplacements.get(transcriptSessionKey(workspaceId, sessionId))?.boundary ?? null;
+}
+
+function confirmedPendingTranscriptReplacement(workspaceId: string, snapshot: MatterhornSessionSnapshot) {
+  const pending = pendingTranscriptReplacements.get(transcriptSessionKey(workspaceId, snapshot.session.id));
+  if (!pending || snapshot.session.revert) return undefined;
+  if (snapshot.messages.some((message) => pending.boundary.replacedMessageIds.has(message.info.id))) return undefined;
+  // Empty/reverted or stale bounded history is not evidence of acceptance. Wait
+  // for a genuinely newer user turn, using timestamps from the same server.
+  return snapshot.messages.some(({ info }) => info.role === "user"
+    && !pending.knownMessageIds.has(info.id)
+    && Number.isFinite(info.time.created)
+    && info.time.created > pending.latestCreated) ? pending.boundary : undefined;
+}
 export const permissionKey = (workspaceId: string, sessionId: string) =>
   ["react-session-permissions", workspaceId, sessionId] as const;
 export const questionKey = (workspaceId: string, sessionId: string) =>
@@ -589,7 +677,11 @@ function applyEvent(entry: SyncEntry, workspaceId: string, event: OpencodeEvent)
   if (event.type === "session.deleted") {
     const props = (event.properties ?? {}) as { sessionID?: string; info?: { id?: string } };
     const sessionId = props.sessionID ?? props.info?.id ?? "";
-    if (sessionId) useSessionActivityStore.getState().removeSession(workspaceId, sessionId);
+    if (sessionId) {
+      useSessionActivityStore.getState().removeSession(workspaceId, sessionId);
+      suppressedTranscriptMessageIds.delete(transcriptSessionKey(workspaceId, sessionId));
+      pendingTranscriptReplacements.delete(transcriptSessionKey(workspaceId, sessionId));
+    }
     return;
   }
 
@@ -694,6 +786,7 @@ function applyEvent(entry: SyncEntry, workspaceId: string, event: OpencodeEvent)
     if (!info?.id || !info.sessionID || (info.role !== "user" && info.role !== "assistant")) {
       return;
     }
+    if (transcriptMessageIsSuppressed(workspaceId, info.sessionID, info.id)) return;
     useSessionActivityStore.getState().markMessageRole(workspaceId, info.sessionID, info.id, info.role);
     if (!isTrackedSession(entry, info.sessionID)) return;
     const metadata = buildOpenCodeMessageMetadata(info);
@@ -713,6 +806,7 @@ function applyEvent(entry: SyncEntry, workspaceId: string, event: OpencodeEvent)
     const props = (event.properties ?? {}) as { part?: Part };
     const part = props.part;
     if (!part?.sessionID || !part.messageID) return;
+    if (transcriptMessageIsSuppressed(workspaceId, part.sessionID, part.messageID)) return;
     if (partHasVisibleAssistantOutput(part)) {
       useSessionActivityStore.getState().markAssistantOutput(workspaceId, part.sessionID, part.messageID);
     }
@@ -783,6 +877,7 @@ function applyEvent(entry: SyncEntry, workspaceId: string, event: OpencodeEvent)
       delta?: string;
     };
     if (!props.sessionID || !props.messageID || !props.partID || !props.delta) return;
+    if (transcriptMessageIsSuppressed(workspaceId, props.sessionID, props.messageID)) return;
     useSessionActivityStore.getState().markAssistantOutput(workspaceId, props.sessionID, props.messageID, { allowUnknownMessageRole: true });
     if (!isTrackedSession(entry, props.sessionID)) return;
     // Note: we do NOT trust `props.field` to disambiguate reasoning vs
@@ -1027,10 +1122,34 @@ function releaseWorkspaceSessionSync(input: SyncOptions, expectedEntry: SyncEntr
   }
 }
 
-export function seedSessionState(workspaceId: string, snapshot: MatterhornSessionSnapshot) {
+export function seedSessionState(
+  workspaceId: string,
+  snapshot: MatterhornSessionSnapshot,
+  options: { replacementBoundary?: SessionTranscriptSnapshotBoundary } = {},
+) {
   const queryClient = getReactQueryClient();
   const key = transcriptKey(workspaceId, snapshot.session.id);
-  const incoming = snapshotToUIMessages(snapshot);
+  const replacementBoundary = options.replacementBoundary ?? confirmedPendingTranscriptReplacement(workspaceId, snapshot);
+  const authoritativeBoundary = replacementBoundary?.workspaceId === workspaceId
+    && replacementBoundary.sessionId === snapshot.session.id
+    ? replacementBoundary
+    : null;
+  const incomingSnapshot = snapshotToUIMessages(snapshot);
+  const incomingIds = new Set(incomingSnapshot.map((message) => message.id));
+  const suppressionKey = transcriptSessionKey(workspaceId, snapshot.session.id);
+  const suppressed = new Set(suppressedTranscriptMessageIds.get(suppressionKey) ?? []);
+  if (authoritativeBoundary) {
+    if (pendingTranscriptReplacements.get(suppressionKey)?.boundary === authoritativeBoundary) {
+      pendingTranscriptReplacements.delete(suppressionKey);
+    }
+    for (const messageId of authoritativeBoundary.replacedMessageIds) {
+      if (incomingIds.has(messageId)) suppressed.delete(messageId);
+      else suppressed.add(messageId);
+    }
+    if (suppressed.size > 0) suppressedTranscriptMessageIds.set(suppressionKey, suppressed);
+    else suppressedTranscriptMessageIds.delete(suppressionKey);
+  }
+  const incoming = incomingSnapshot.filter((message) => !suppressed.has(message.id));
 
   // Stream events can arrive while a snapshot is in flight. Flush known
   // deltas before reconciliation, then fold still-undeclared cumulative
@@ -1038,6 +1157,14 @@ export function seedSessionState(workspaceId: string, snapshot: MatterhornSessio
   // backwards or duplicates text.
   for (const entry of syncs.values()) {
     if (entry.input.workspaceId !== workspaceId) continue;
+    if (authoritativeBoundary) {
+      entry.deltaFlushBuffer = entry.deltaFlushBuffer.filter(
+        (item) => !suppressed.has(item.messageId),
+      );
+      for (const [partId, pending] of entry.pendingDeltas) {
+        if (suppressed.has(pending.messageId)) entry.pendingDeltas.delete(partId);
+      }
+    }
     flushDeltas(entry, workspaceId);
     for (const message of incoming) {
       for (const part of message.parts) {
@@ -1063,7 +1190,8 @@ export function seedSessionState(workspaceId: string, snapshot: MatterhornSessio
   queryClient.setQueryData(key, reconcileTranscriptMessages({
     currentMessages: existing ?? [],
     snapshotMessages: incoming,
-    reason: "snapshot",
+    reason: authoritativeBoundary ? "history-replacement" : "snapshot",
+    ...(authoritativeBoundary ? { replacedMessageIds: authoritativeBoundary.replacedMessageIds } : {}),
   }));
 
   queryClient.setQueryData(statusKey(workspaceId, snapshot.session.id), snapshot.status);
@@ -1074,6 +1202,15 @@ export function seedSessionState(workspaceId: string, snapshot: MatterhornSessio
   if (!todosState || snapshotFirstSeen > todosState.dataUpdatedAt) {
     queryClient.setQueryData(todosKey, snapshot.todos, { updatedAt: snapshotFirstSeen });
   }
+}
+
+export function seedReplacementSessionState(
+  workspaceId: string,
+  snapshot: MatterhornSessionSnapshot,
+  replacementBoundary: SessionTranscriptSnapshotBoundary,
+) {
+  getReactQueryClient().setQueryData(snapshotKey(workspaceId, snapshot.session.id), snapshot);
+  seedSessionState(workspaceId, snapshot, { replacementBoundary });
 }
 
 export function trackWorkspaceSessionSync(input: SyncOptions, sessionId: string | null | undefined) {

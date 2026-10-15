@@ -757,22 +757,76 @@ select:disabled {
     @apply font-sans;
   }
 }
-@media (max-height: 420px) {
-  .matterhorn-tool-menu {
-    position: fixed !important;
-    inset: 3rem 0.75rem 0.75rem !important;
-    width: auto !important;
-    margin-bottom: 0 !important;
+/* Size chat to its column, including a narrow desktop preview beside tool rails. */
+.matterhorn-chat-column {
+  container: chat-column / inline-size;
+}
+
+.matterhorn-chat-surface {
+  container: chat / inline-size;
+}
+
+@container chat-column (max-width: 40rem) {
+  .matterhorn-workspace-header {
+    height: calc(3.5rem + env(safe-area-inset-top));
+    padding-inline: 0.5rem;
   }
 
-  .matterhorn-tool-menu-frame {
-    height: 100%;
+  .matterhorn-chat-heading {
+    gap: 0.25rem;
   }
 
-  .matterhorn-tool-menu-list {
-    min-height: 0;
-    max-height: none;
+  .matterhorn-chat-location {
     flex: 1;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  .matterhorn-chat-location > span {
+    max-width: 100%;
+  }
+
+  .matterhorn-chat-location > svg {
+    display: none;
+  }
+}
+
+@container chat (max-width: 40rem) {
+  .matterhorn-chat-composer {
+    padding-block: 0.25rem 0;
+  }
+
+  .matterhorn-prompt-composer {
+    padding-inline: 0.75rem;
+    padding-bottom: max(env(safe-area-inset-bottom), 0.5rem);
+  }
+
+  .matterhorn-prompt-editor {
+    min-height: 3rem;
+    max-height: min(10rem, 25dvh);
+  }
+
+  .matterhorn-composer-desk-strip {
+    padding: 0.5rem;
+  }
+}
+
+/* At zoom/landscape/keyboard heights, scroll the surface instead of squeezing
+   the transcript to zero or hiding the composer controls in a horizontal rail. */
+@media (max-height: 540px) {
+  .matterhorn-chat-surface {
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
+
+  .matterhorn-chat-transcript {
+    min-height: 12rem;
+    flex-shrink: 0;
+  }
+
+  .matterhorn-prompt-composer {
+    position: relative;
   }
 }
 

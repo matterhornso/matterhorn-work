@@ -91,6 +91,30 @@ const baseBackendModels: MatterhornBackendModelsResponse = {
 };
 
 describe("model readiness summary", () => {
+  test("separates saving a preference from per-request privacy enforcement", () => {
+    const summary = buildModelReadinessSummary({
+      currentModelLabel: "OpenAI - GPT 4.1",
+      currentModelRef: "openai/gpt-4.1",
+      hasLocalModelOverride: true,
+      backendModels: {
+        ...baseBackendModels,
+        privacy: {
+          ...baseBackendModels.privacy,
+          enforcementMode: "verified_only",
+          providers: baseBackendModels.privacy.providers.map((policy) => ({
+            ...policy,
+            allowed: false,
+          })),
+        },
+      },
+    });
+
+    expect(summary.providerPrivacy.value).toBe("Provider policy not verified");
+    expect(summary.providerPrivacy.detail).toContain("Saving a model does not send a prompt.");
+    expect(summary.providerPrivacy.detail).toContain("may be blocked or require approval");
+    expect(summary.providerPrivacy.detail).not.toContain("Sending is blocked");
+  });
+
   test("separates current picker choice, workspace default, and engine fallback", () => {
     const summary = buildModelReadinessSummary({
       currentModelLabel: "OpenAI - GPT 4.1",

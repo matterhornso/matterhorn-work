@@ -143,10 +143,10 @@ export function AgentRunReceiptDisclosure({ receipt }: { receipt: MatterhornAgen
   ];
 
   return (
-    <details className="mt-3 rounded-lg border border-dls-border bg-dls-surface/45 text-xs text-dls-secondary">
-      <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dls-text/25">
-        <span className="font-medium text-dls-text">Response details</span>
-        <span className="flex flex-wrap justify-end gap-x-3 gap-y-1 tabular-nums">
+    <details className="mt-3 min-w-0 rounded-lg border border-dls-border bg-dls-surface/45 text-xs text-dls-secondary [overflow-wrap:anywhere]">
+      <summary className="flex min-h-10 cursor-pointer list-none flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dls-text/25">
+        <span className="shrink-0 font-medium text-dls-text">Response details</span>
+        <span className="flex min-w-0 flex-wrap gap-x-3 gap-y-1 tabular-nums">
           <span>{receiptStatusLabel(receipt.status)}</span>
           <span>{receiptDuration(receipt)}</span>
           <span>{plural(totalTokens, "token")}</span>

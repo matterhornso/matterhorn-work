@@ -34,6 +34,94 @@ async function store(config: Partial<MatterhornModelUsageConfig> = {}) {
 }
 
 describe("MatterhornModelUsageStore", () => {
+  for (const tokens of [undefined, {}, { input: 0, output: 0, reasoning: 0, total: 0 }, { total: Number.NaN },
+    { input: 120 }, { output: 36 }, { input: 120, output: Number.NaN }, { input: -1, output: 36 },
+    { input: 120, output: 36, reasoning: Number.NaN }]) {
+    test(`retains unknown stopped usage until an exact receipt arrives (${JSON.stringify(tokens)})`, async () => {
+      const usage = await store({ dailyLimit: 20_000, monthlyLimit: 20_000 });
+      try {
+        const now = Date.now();
+        const scope = { subject: { id: "unknown-stop" }, workspaceId: "ws", sessionId: "ses", providerId: "fixture", modelId: "fixture" };
+        const reservation = usage.reserve({ ...scope, now: new Date(now) });
+        expect(reservation.allowed).toBe(true);
+        usage.bindUserMessage(reservation.reservationId, "user");
+        const message = { info: {
+          id: "stopped", parentID: "user", sessionID: "ses", role: "assistant", providerID: "fixture", modelID: "fixture",
+          finish: "unknown", time: { created: now, completed: now + 1 }, tokens,
+          error: { name: "MessageAbortedError" },
+        }, parts: [{ type: "text", text: "A visible partial answer" }] };
+        const input = { ...scope, messages: [message] };
+        expect(usage.reconcile(input)).toBe(0);
+        expect(usage.reconcile(input)).toBe(0);
+        expect(usage.status(scope.subject)).toMatchObject({ pendingRequests: 1,
+          monthly: { usedTokens: 0, reservedTokens: 20_000, chargedTokens: 20_000 } });
+        expect(usage.pendingSessions(scope.subject)).toEqual([{ workspaceId: "ws", sessionId: "ses" }]);
+        expect(usage.reserve(scope).allowed).toBe(false);
+        const reconciled = { ...message, info: { ...message.info, tokens: { input: 120, output: 36 } } };
+        expect(usage.reconcile({ ...scope, subject: { id: "other" }, messages: [reconciled] })).toBe(0);
+        expect(usage.reconcile({ ...scope, messages: [{ ...reconciled, info: { ...reconciled.info, parentID: "other" } }] })).toBe(0);
+        expect(usage.reconcile({ ...scope, messages: [reconciled] })).toBe(1);
+        expect(usage.reconcile({ ...scope, messages: [reconciled] })).toBe(0);
+        expect(usage.status(scope.subject)).toMatchObject({ pendingRequests: 0,
+          monthly: { usedTokens: 156, reservedTokens: 0, chargedTokens: 156 } });
+      } finally { usage.close(); }
+    });
+  }
+
+  test("does not settle a partially known multi-step request, even after restart and month rollover", async () => {
+    const root = await mkdtemp(join(tmpdir(), "matterhorn-unknown-stop-"));
+    roots.push(root);
+    const options = { path: join(root, "usage.db"), config: resolveMatterhornModelUsageConfig({
+      MATTERHORN_MODEL_USAGE_ENFORCEMENT: "hard", MATTERHORN_MODEL_USAGE_RESERVATION_TOKENS: "20000",
+      MATTERHORN_MODEL_USAGE_DAILY_LIMIT: "20000", MATTERHORN_MODEL_USAGE_MONTHLY_LIMIT: "20000",
+    }) };
+    let usage = new MatterhornModelUsageStore(options);
+    try {
+      const now = Date.UTC(2026, 8, 30, 23, 59);
+      const later = new Date(now + 24 * 60 * 60_000);
+      const scope = { subject: { id: "multi-step" }, workspaceId: "ws", sessionId: "ses", providerId: "fixture", modelId: "fixture" };
+      const reservation = usage.reserve({ ...scope, now: new Date(now) });
+      expect(reservation.allowed).toBe(true);
+      usage.bindUserMessage(reservation.reservationId, "user");
+      const known = { info: { id: "tool", parentID: "user", sessionID: "ses", role: "assistant",
+        providerID: "fixture", modelID: "fixture", finish: "tool-calls",
+        time: { created: now, completed: now + 1 }, tokens: { total: 350 } }, parts: [] };
+      const stopped = { info: { ...known.info, id: "stopped", finish: "stop", time: { created: now + 2, completed: now + 3 },
+        tokens: { total: 0 }, error: { name: "MessageAbortedError" } }, parts: [{ type: "text", text: "Partial" }] };
+      expect(usage.reconcile({ ...scope, messages: [known, stopped] })).toBe(0);
+      usage.close();
+      usage = new MatterhornModelUsageStore(options);
+      expect(usage.reconcile({ ...scope, messages: [known, stopped] })).toBe(0);
+      expect(usage.status(scope.subject, later)).toMatchObject({ pendingRequests: 1,
+        daily: { chargedTokens: 20_000, reservedTokens: 20_000 }, monthly: { chargedTokens: 20_000, reservedTokens: 20_000 } });
+      expect(usage.reserve({ ...scope, now: later }).allowed).toBe(false);
+      const corrected = { ...stopped, info: { ...stopped.info, tokens: { total: 123 } } };
+      expect(usage.reconcile({ ...scope, messages: [known, corrected] })).toBe(1);
+      expect(usage.reconcile({ ...scope, messages: [known, corrected] })).toBe(0);
+      expect(usage.status(scope.subject, new Date(now)).monthly.usedTokens).toBe(473);
+      expect(usage.status(scope.subject, later)).toMatchObject({ pendingRequests: 0, monthly: { chargedTokens: 0, reservedTokens: 0 } });
+    } finally { usage.close(); }
+  });
+
+  test("does not omit an unknown intermediate step when a later step reports usage", async () => {
+    const usage = await store();
+    try {
+      const now = Date.now();
+      const scope = { subject: { id: "missing-step" }, workspaceId: "ws", sessionId: "ses", providerId: "fixture", modelId: "fixture" };
+      const reservation = usage.reserve(scope);
+      usage.bindUserMessage(reservation.reservationId, "user");
+      const missing = { info: { id: "tool", parentID: "user", sessionID: "ses", role: "assistant",
+        providerID: "fixture", modelID: "fixture", finish: "tool-calls", time: { created: now, completed: now + 1 } }, parts: [] };
+      const stopped = { info: { ...missing.info, id: "stopped", finish: "stop", time: { created: now + 2, completed: now + 3 },
+        tokens: { total: 123 }, error: { name: "MessageAbortedError" } }, parts: [] };
+      expect(usage.reconcile({ ...scope, messages: [missing, stopped] })).toBe(0);
+      expect(usage.status(scope.subject).monthly.reservedTokens).toBe(20_000);
+      const corrected = { ...missing, info: { ...missing.info, tokens: { total: 350 } } };
+      expect(usage.reconcile({ ...scope, messages: [corrected, stopped] })).toBe(1);
+      expect(usage.status(scope.subject).monthly.usedTokens).toBe(473);
+    } finally { usage.close(); }
+  });
+
   for (const finish of ["unknown", "tool-calls", "stop"]) {
     for (const name of ["MessageAbortedError", "APIError"]) {
       test(`settles actual usage after terminal ${name} with stale ${finish} finish`, async () => {

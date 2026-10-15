@@ -5,10 +5,17 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { AiSettingsView, type AiSettingsViewProps } from "../src/react-app/domains/settings/pages/ai-view";
 
-function renderReadySettings(overrides: Partial<AiSettingsViewProps> = {}, savedDefault = false) {
+function renderReadySettings(overrides: Partial<AiSettingsViewProps> = {}, savedDefault = false, pendingRequests?: number) {
   const queryClient = new QueryClient();
   // Seed authoritative catalog data; summary counts cannot identify chat models.
   const connected = overrides.connectedModelCount !== 0;
+  if (pendingRequests !== undefined) {
+    const period = { usedTokens: 123, reservedTokens: pendingRequests * 20_000,
+      chargedTokens: 123 + pendingRequests * 20_000, limit: 100_000, resetsAt: "2026-11-01T00:00:00Z" };
+    queryClient.setQueryData(["settings-workspace-model-usage", overrides.runtimeWorkspaceId ?? null], {
+      status: { daily: period, monthly: period, pendingRequests, enabled: true },
+    });
+  }
   queryClient.setQueryData(overrides.runtimeWorkspaceId
     ? ["settings-workspace-backend-models", overrides.runtimeWorkspaceId]
     : ["settings-backend-models"], {
@@ -55,6 +62,21 @@ function renderReadySettings(overrides: Partial<AiSettingsViewProps> = {}, saved
 }
 
 describe("AI settings rendered hierarchy", () => {
+  test.each([1, 2])("labels %i pending usage holds without claiming a stopped request is active", (pendingRequests) => {
+    const html = renderReadySettings({ runtimeWorkspaceId: "workspace-test" }, false, pendingRequests);
+    expect(html).toContain("used or reserved");
+    expect(html).toContain(`${pendingRequests} request${pendingRequests === 1 ? " is" : "s are"} awaiting usage totals`);
+    expect(html).toContain("Reserved allowance stays held until totals arrive, even after Stop or an allowance reset.");
+    expect(html).not.toContain("active request");
+  });
+
+  test("does not show a usage hold when every request is settled", () => {
+    const html = renderReadySettings({ runtimeWorkspaceId: "workspace-test" }, false, 0);
+    expect(html).toContain("123 used");
+    expect(html).not.toContain("used or reserved");
+    expect(html).not.toContain("awaiting usage totals");
+  });
+
   test("managed-provider settings hide unrelated subscription and cloud-import promotions", () => {
     const html = renderReadySettings({
       showOpenWorkModelsSubscribe: true,

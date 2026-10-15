@@ -2,7 +2,7 @@ import type { UIMessage } from "ai";
 
 import { mergeSnapshotIntoCachedMessages } from "./message-merge";
 
-export type TranscriptReconcileReason = "snapshot" | "revert";
+export type TranscriptReconcileReason = "snapshot" | "history-replacement";
 
 export type ReconcileTranscriptInput = {
   /** Current canonical transcript cache rendered by the session UI. */
@@ -11,6 +11,8 @@ export type ReconcileTranscriptInput = {
   snapshotMessages: UIMessage[];
   /** Why this reconciliation is happening. Reserved for explicit truncation rules. */
   reason?: TranscriptReconcileReason;
+  /** Exact turn IDs replaced by a retry/revert operation. */
+  replacedMessageIds?: ReadonlySet<string>;
 };
 
 /**
@@ -25,6 +27,34 @@ export type ReconcileTranscriptInput = {
 export function reconcileTranscriptMessages(input: ReconcileTranscriptInput): UIMessage[] {
   const current = input.currentMessages;
   const snapshot = input.snapshotMessages;
+
+  if (input.reason === "history-replacement") {
+    // A retry/revert snapshot is authoritative for everything that existed
+    // in the replaced turn. Preserve unrelated earlier history and genuinely
+    // new stream IDs even when they are absent from this bounded snapshot.
+    const replaced = input.replacedMessageIds ?? new Set<string>();
+    const firstReplacedIndex = current.findIndex((message) => replaced.has(message.id));
+    const snapshotIds = new Set(snapshot.map((message) => message.id));
+    const snapshotCache = current.filter((message) => snapshotIds.has(message.id));
+    const mergedSnapshot = snapshot.length > 0
+      ? mergeSnapshotIntoCachedMessages(snapshot, snapshotCache)
+      : [];
+    const retained = current.filter((message) => (
+      !replaced.has(message.id) && !snapshotIds.has(message.id)
+    ));
+    if (snapshot.length === 0) return retained;
+    if (retained.length === 0) return mergedSnapshot;
+    if (firstReplacedIndex < 0) return mergeSnapshotIntoCachedMessages(mergedSnapshot, retained);
+
+    const idsBeforeReplacement = new Set(
+      current.slice(0, firstReplacedIndex).map((message) => message.id),
+    );
+    return [
+      ...retained.filter((message) => idsBeforeReplacement.has(message.id)),
+      ...mergedSnapshot,
+      ...retained.filter((message) => !idsBeforeReplacement.has(message.id)),
+    ];
+  }
 
   if (current.length === 0) return snapshot;
   if (snapshot.length === 0) return current;

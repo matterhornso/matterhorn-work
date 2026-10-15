@@ -585,8 +585,11 @@ assert.equal(sessionPage.includes("rounded-[28px]"), false, "focused desk surfac
 assert.equal(sessionSurface.includes("rounded-[28px]"), false, "session empty surfaces should avoid oversized card radii");
 assert.ok(sessionSurface.includes("activeDeskMode ? ("), "generic starter grid should be bypassed when a protocol desk session is active");
 assert.ok(sessionSurface.includes("ArrowDown"), "Jump to latest should use a visible down-arrow icon");
-assert.ok(sessionSurface.includes("bottom-4 left-1/2 z-40"), "Jump to latest should sit visibly above the composer edge");
-assert.ok(sessionSurface.includes("gap-0.5 rounded-md bg-dls-surface-muted/70 p-0.5 shadow-[0_1px_4px_rgba(0,0,0,0.2)]"), "Jump controls should use a compact, quiet surface");
+assert.ok(
+  sessionSurface.includes('<nav aria-label="Conversation navigation" className="matterhorn-chat-jumps flex min-h-10 shrink-0'),
+  "Jump controls should reserve a labelled row above the composer without covering response receipts",
+);
+assert.equal(sessionSurface.includes("bottom-4 left-1/2 z-40"), false, "Jump controls must not return to the overlapping transcript overlay");
 assert.ok(sessionSurface.includes("inline-flex h-7 items-center gap-1 rounded"), "Jump controls should stay compact above the composer");
 assert.equal(sessionSurface.includes("border border-dls-text bg-dls-text"), false, "Jump controls should not compete with primary composer actions");
 assert.ok(sessionSurface.includes('aria-label="Jump to the latest message"'), "Jump to latest should expose a clear accessible label");

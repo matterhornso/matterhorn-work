@@ -121,13 +121,17 @@ const MANAGED_MCP_TRANSPORTS: ManagedMcpTool[] = [
   {
     name: "matterhorn_bittensor_chat",
     title: "Bittensor desk read",
-    description: "Read public Bittensor data using readOperation and netuid/ss58Address. Never executes actions.",
+    description: "Public Bittensor reads only; never acts.",
     inputSchema: objectSchema({
-      message: { type: "string", description: "Discovery text." },
-      readOperation: { type: "string", enum: ["subnet", "wallet", "validators", "discovery"] },
-      ss58Address: { type: "string", description: "Optional public SS58 address." },
-      netuid: { type: "number" },
-      limit: { type: "number" },
+      message: { type: "string" },
+      readOperation: {
+        type: "string",
+        enum: ["discovery", "subnet", "validators", "wallet"],
+        description: "discovery lists/searches; subnet|validators need netuid; wallet needs ss58Address.",
+      },
+      ss58Address: { type: "string" },
+      netuid: { type: "number", minimum: 0 },
+      limit: { type: "number", minimum: 1, maximum: 20 },
       strategy: { type: "string", enum: ["balanced", "yield", "safety"] },
     }, ["message"]),
     request: (args) => ({ path: "/api/bittensor/chat/execute", method: "POST", body: { ...args, readOnly: true } }),
@@ -465,6 +469,8 @@ const MODEL_SAFE_MCP_ERROR_CODES = new Set([
   "adapter_upstream_failed",
   "adapter_usage_reconciliation_failed",
   "certified_crypto_app_required",
+  "bittensor_netuid_required",
+  "bittensor_ss58_address_required",
   "coworker_certified_access_denied",
   "coworker_certified_arguments_invalid",
   "coworker_certified_gateway_unavailable",
@@ -575,13 +581,162 @@ function containsForbiddenToolResultSecret(value: unknown): boolean {
     || (isJsonObject(value) && findForbiddenMemorySecretFields(value).length > 0);
 }
 
-function projectBittensorDiscovery(result: JsonObject): JsonObject {
+function canonicalBittensorReadNetwork(value: unknown): "mainnet" | "testnet" | "local" | "unknown" {
+  return value === "mainnet" || value === "testnet" || value === "local" ? value : "unknown";
+}
+
+function pickDefinedFields(value: unknown, keys: readonly string[]): JsonObject {
+  if (!isJsonObject(value)) return {};
+  return Object.fromEntries(keys
+    .filter((key) => value[key] !== undefined)
+    .map((key) => [key, value[key]]));
+}
+
+function boundedModelString(value: unknown, maxChars: number): string | undefined {
+  if (typeof value !== "string" || value.trim().length === 0) return undefined;
+  return value.trim().slice(0, maxChars);
+}
+
+function boundedModelStrings(value: unknown, maxItems: number, maxChars: number): {
+  values: string[];
+  omittedCount: number;
+  truncated: boolean;
+} {
+  if (!Array.isArray(value)) return { values: [], omittedCount: 0, truncated: false };
+  const source = value
+    .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    .map((item) => item.trim());
+  const selected = source.slice(0, maxItems);
+  return {
+    values: selected.map((item) => item.slice(0, maxChars)),
+    omittedCount: Math.max(0, source.length - selected.length),
+    truncated: source.length > selected.length || selected.some((item) => item.length > maxChars),
+  };
+}
+
+function projectBittensorRead(result: JsonObject): JsonObject {
   const data = result.data;
-  if (!isJsonObject(data) || !isJsonObject(data.discovery)) return result;
+  if (!isJsonObject(data)) return result;
+  if (isJsonObject(data.subnet)) {
+    const subnet = data.subnet;
+    const responseText = boundedModelString(result.responseText, 300);
+    const clarificationQuestion = boundedModelString(result.clarificationQuestion, 300);
+    const benefitSummary = boundedModelString(subnet.benefitSummary, 180);
+    const risks = boundedModelStrings(subnet.risks, 4, 180);
+    const knownUseCases = boundedModelStrings(subnet.knownUseCases, 2, 140);
+    const topWarningProjection = boundedModelStrings(result.warnings, 3, 180);
+    const distinctTopWarnings = topWarningProjection.values
+      .filter((warning) => !risks.values.includes(warning));
+    const warnings = distinctTopWarnings.slice(0, 2);
+    const topWarningsTruncated = topWarningProjection.truncated || distinctTopWarnings.length > warnings.length;
+    const topOmittedWarningCount = topWarningProjection.omittedCount
+      + Math.max(0, distinctTopWarnings.length - warnings.length);
+    const validatorSource = Array.isArray(subnet.topValidators)
+      ? subnet.topValidators.filter(isJsonObject)
+      : [];
+    const topValidators = validatorSource.slice(0, 2).map((validator) => {
+      const hotkey = boundedModelString(validator.hotkey, 64);
+      return {
+        ...pickDefinedFields(validator, ["uid", "stake", "trust", "dividends"]),
+        ...(hotkey === undefined ? {} : { hotkey }),
+      };
+    });
+    const benefitSummaryTruncated = typeof subnet.benefitSummary === "string"
+      && subnet.benefitSummary.trim().length > 180;
+    return {
+      ...(typeof result.success === "boolean" ? { success: result.success } : {}),
+      ...(typeof result.execution === "string" ? { execution: result.execution.slice(0, 80) } : {}),
+      ...(typeof result.requiresClarification === "boolean" ? { requiresClarification: result.requiresClarification } : {}),
+      ...(responseText === undefined ? {} : { responseText }),
+      ...(clarificationQuestion === undefined ? {} : { clarificationQuestion }),
+      ...(warnings.length ? { warnings } : {}),
+      ...(topWarningsTruncated ? {
+        warningsTruncated: true,
+        omittedWarningCount: topOmittedWarningCount,
+      } : {}),
+      data: {
+        subnet: {
+          ...pickDefinedFields(subnet, [
+            "netuid", "name", "symbol", "category", "priceTao", "emission", "tempo",
+            "updatedAt", "source", "block", "freshness",
+          ]),
+          network: canonicalBittensorReadNetwork(subnet.network),
+          ...(benefitSummary === undefined ? {} : { benefitSummary }),
+          ...(benefitSummaryTruncated ? { benefitSummaryTruncated: true } : {}),
+          metagraphSummary: pickDefinedFields(subnet.metagraphSummary, ["neurons", "totalStake", "block"]),
+          ...(topValidators.length ? { topValidators } : {}),
+          ...(validatorSource.length > topValidators.length ? {
+            validatorsTruncated: true,
+            omittedValidatorCount: validatorSource.length - topValidators.length,
+          } : {}),
+          ...(knownUseCases.values.length ? { knownUseCases: knownUseCases.values } : {}),
+          ...(knownUseCases.truncated ? {
+            knownUseCasesTruncated: true,
+            omittedKnownUseCaseCount: knownUseCases.omittedCount,
+          } : {}),
+          ...(risks.values.length ? { risks: risks.values } : {}),
+          ...(risks.truncated ? {
+            risksTruncated: true,
+            omittedRiskCount: risks.omittedCount,
+          } : {}),
+        },
+      },
+    };
+  }
+  if (!isJsonObject(data.discovery)) {
+    const intelligence = data.intelligence;
+    if (!isJsonObject(intelligence) || intelligence.kind !== "subnet" || !isJsonObject(intelligence.market)) return result;
+    const responseText = boundedModelString(result.responseText, 500);
+    const clarificationQuestion = boundedModelString(result.clarificationQuestion, 300);
+    const intelligenceWarningProjection = boundedModelStrings(intelligence.warnings, 3, 220);
+    const topWarningProjection = boundedModelStrings(result.warnings, 3, 220);
+    const distinctTopWarnings = topWarningProjection.values
+      .filter((warning) => !intelligenceWarningProjection.values.includes(warning));
+    const warnings = distinctTopWarnings.slice(0, 2);
+    const topWarningsTruncated = topWarningProjection.truncated || distinctTopWarnings.length > warnings.length;
+    const topOmittedWarningCount = topWarningProjection.omittedCount
+      + Math.max(0, distinctTopWarnings.length - warnings.length);
+    const mechanismNote = isJsonObject(intelligence.mechanismSummary)
+      ? boundedModelString(intelligence.mechanismSummary.note, 240)
+      : undefined;
+    return {
+      ...(typeof result.success === "boolean" ? { success: result.success } : {}),
+      ...(typeof result.execution === "string" ? { execution: result.execution.slice(0, 80) } : {}),
+      ...(typeof result.requiresClarification === "boolean" ? { requiresClarification: result.requiresClarification } : {}),
+      ...(responseText === undefined ? {} : { responseText }),
+      ...(clarificationQuestion === undefined ? {} : { clarificationQuestion }),
+      ...(warnings.length ? { warnings } : {}),
+      ...(topWarningsTruncated ? {
+        warningsTruncated: true,
+        omittedWarningCount: topOmittedWarningCount,
+      } : {}),
+      data: {
+        intelligence: {
+          ...pickDefinedFields(intelligence, ["kind", "netuid", "name", "category", "score", "rating", "updatedAt"]),
+          mechanismSummary: {
+            ...pickDefinedFields(intelligence.mechanismSummary, ["available", "count"]),
+            ...(mechanismNote === undefined ? {} : { note: mechanismNote }),
+          },
+          market: {
+            ...pickDefinedFields(intelligence.market, ["priceTao", "emission", "tempo", "source", "block", "freshness"]),
+            network: canonicalBittensorReadNetwork(intelligence.market.network),
+          },
+          metagraph: pickDefinedFields(intelligence.metagraph, [
+            "neurons", "totalStake", "validatorsSampled", "topValidatorStakeShare", "concentrationRisk", "dataQuality",
+          ]),
+          ...(intelligenceWarningProjection.values.length ? { warnings: intelligenceWarningProjection.values } : {}),
+          ...(intelligenceWarningProjection.truncated ? {
+            warningsTruncated: true,
+            omittedWarningCount: intelligenceWarningProjection.omittedCount,
+          } : {}),
+        },
+      },
+    };
+  }
   const discovery = data.discovery;
   const matches = discovery.matches;
   if (!Array.isArray(matches)) return result;
-  const subnetKeys = ["netuid", "name", "source", "block", "updatedAt", "freshness", "warnings", "priceTao", "emission", "tempo"];
+  const subnetKeys = ["netuid", "name", "network", "source", "block", "updatedAt", "freshness", "warnings", "priceTao", "emission", "tempo"];
   // Discovery also carries duplicate UI cards, capability catalog entries and
   // suggested workflows. Spend model context on the requested chain evidence.
   const { plan: _plan, data: _data, ...answer } = result;
@@ -594,8 +749,9 @@ function projectBittensorDiscovery(result: JsonObject): JsonObject {
           if (!isJsonObject(subnet)) return {};
           return { subnet: Object.fromEntries(subnetKeys
             .filter(key => subnet[key] !== undefined)
-            .map(key => [key, subnet[key]])) };
+            .map(key => [key, key === "network" ? canonicalBittensorReadNetwork(subnet[key]) : subnet[key]])) };
         }),
+        network: canonicalBittensorReadNetwork(discovery.network),
         source: discovery.source,
         warnings: discovery.warnings,
       },
@@ -709,7 +865,7 @@ function projectManagedMcpResult(input: {
     closed = Object.fromEntries(keys
       .filter((key) => rawResult[key] !== undefined)
       .map((key) => [key, rawResult[key]]));
-    if (input.tool.name === "matterhorn_bittensor_chat") closed = projectBittensorDiscovery(closed);
+    if (input.tool.name === "matterhorn_bittensor_chat") closed = projectBittensorRead(closed);
   }
   if (Object.keys(closed).length === 0) {
     throw new Error("matterhorn_tool_result_rejected");
@@ -926,6 +1082,19 @@ function assertReadToolArguments(tool: ManagedMcpTool, args: JsonObject): void {
   }
 }
 
+function assertBittensorReadSelectors(tool: ManagedMcpTool, args: JsonObject): void {
+  if (tool.name !== "matterhorn_bittensor_chat") return;
+  const operation = args.readOperation;
+  if (operation === "subnet" || operation === "validators") {
+    if (typeof args.netuid !== "number" || !Number.isInteger(args.netuid) || args.netuid < 0) {
+      throw new Error("bittensor_netuid_required");
+    }
+  }
+  if (operation === "wallet" && (typeof args.ss58Address !== "string" || !args.ss58Address.trim())) {
+    throw new Error("bittensor_ss58_address_required");
+  }
+}
+
 function buildCryptoEvidenceEnvelope(input: {
   definition: NonNullable<ReturnType<typeof getMatterhornCryptoTool>>;
   status: "success" | "error";
@@ -1030,6 +1199,7 @@ async function callBackendTool(input: {
   let source: string | undefined;
   let freshness: string | undefined;
   try {
+    assertBittensorReadSelectors(input.tool, input.args);
     if (input.tool.name === "matterhorn_sui_get_balance"
       && input.args.network !== "mainnet" && input.args.network !== "testnet") {
       throw new Error("sui_network_required");

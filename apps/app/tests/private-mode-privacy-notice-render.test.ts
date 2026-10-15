@@ -100,7 +100,7 @@ describe("Private mode privacy notice rendered behavior", () => {
     expect(html).toContain(">Privacy details</button>");
   });
 
-  test("keeps an unverified provider fail-closed", () => {
+  test("discloses unverified terms without claiming every guarded request is blocked", () => {
     const html = renderNotice({
       providerPrivacyPolicy: {
         ...allowedPolicy,
@@ -112,7 +112,11 @@ describe("Private mode privacy notice rendered behavior", () => {
       privateModeAvailable: true,
     });
 
-    expect(html).toContain("Sending blocked");
+    expect(html).toContain("Provider privacy unverified");
     expect(html).toContain("training and retention terms are not verified");
+    expect(html).toContain("Requests are checked before sending.");
+    expect(html).not.toContain("Sending blocked");
+    expect(html).not.toContain("does not retain");
+    expect(html).not.toContain("No training");
   });
 });

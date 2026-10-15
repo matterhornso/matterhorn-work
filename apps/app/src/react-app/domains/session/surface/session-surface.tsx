@@ -96,13 +96,19 @@ import { deriveRenderedSessionMessages, resolveRenderedSessionSnapshot } from ".
 import { useLocal } from "../../../kernel/local-provider";
 import { deriveSessionRenderModel } from "../sync/transition-controller";
 import { useSessionScrollController } from "./scroll-controller";
-import { failedContinuationResponseId, resolveAssistantResponseRetryTurn, responseOutputTitle, runAssistantResponseRetry } from "./response-actions";
+import { failedContinuationResponseId, isUnknownMessageOutcome, resolveAssistantResponseRetryTurn, responseOutputTitle, runAssistantResponseRetry } from "./response-actions";
 import { getSessionActivityStatusLabel, useSessionActivityStore, type SessionActivityStatus } from "../status/session-activity-store";
 import { deriveOpenTargets, selectAutoOpenTarget, type OpenTarget } from "../artifacts/open-target";
 import {
+  captureSessionTranscriptSnapshotBoundary,
+  getPendingTranscriptReplacement,
+  retainPendingTranscriptReplacement,
+  seedReplacementSessionState,
   seedSessionState,
+  snapshotKey as reactSnapshotKey,
   statusKey as reactStatusKey,
   transcriptKey as reactTranscriptKey,
+  type SessionTranscriptSnapshotBoundary,
 } from "../sync/session-sync";
 import { useSessionDraftSnapshot } from "../sync/draft-store";
 import {
@@ -317,8 +323,8 @@ function MatterhornDeskSessionStrip({ mode }: { mode: MatterhornDeskMode }) {
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[iconHint];
   const agent = getMatterhornDeskAgent(mode);
   return (
-    <div style={deskToneStyle(iconHint)} className="mb-1 rounded-lg bg-[rgb(var(--matterhorn-desk-rgb)/0.05)] px-3 py-2.5">
-      <div className="flex items-start gap-3">
+    <div style={deskToneStyle(iconHint)} className="matterhorn-composer-desk-strip mb-1 rounded-lg bg-[rgb(var(--matterhorn-desk-rgb)/0.05)] px-3 py-2.5">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2">
         <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-[rgb(var(--matterhorn-desk-rgb)/0.12)] text-[var(--matterhorn-desk-color)]">
           {copy.id === "bittensor" || copy.id === "hyperliquid" || copy.id === "polymarket" ? (
             <ProtocolLogo iconHint={copy.id} size={22} />
@@ -330,10 +336,10 @@ function MatterhornDeskSessionStrip({ mode }: { mode: MatterhornDeskMode }) {
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-[12px] font-semibold text-dls-text">{copy.sessionTitle}</span>
             <span className="text-[10px] font-semibold text-[var(--matterhorn-desk-color)]">{agent?.displayName ?? copy.agentName}</span>
-            <DeskSafetyInfoButton label={`${copy.displayName} desk safety info`} detail={copy.sessionBoundary} />
           </div>
           <p className="mt-1 text-[11px] leading-5 text-dls-secondary">{copy.shortDescription}</p>
         </div>
+        <DeskSafetyInfoButton label={`${copy.displayName} desk safety info`} detail={copy.sessionBoundary} />
       </div>
     </div>
   );
@@ -651,7 +657,7 @@ function starterWorkflowCapabilityItems(item: CustomerWorkflowStarterCard): stri
 type SessionError = {
   message: string;
   detail?: string;
-  kind?: "model-not-found" | "provider-unavailable" | "rate-limited" | "privacy-blocked" | "privacy-consent" | "cancelled" | "generic";
+  kind?: "model-not-found" | "provider-unavailable" | "rate-limited" | "privacy-blocked" | "privacy-consent" | "cancelled" | "outcome-unknown" | "generic";
   retryable?: boolean;
   /** For model-not-found: the model that failed. */
   failedModel?: { providerID: string; modelID: string };
@@ -682,7 +688,7 @@ export type SessionSurfaceProps = {
   onPrivateModeChange?: (enabled: boolean) => void;
   onModelPickerOpenChange: (open: boolean) => void;
   onModelChange: (model: ModelRef) => void;
-  onSendDraft: (draft: ComposerDraft) => Promise<void> | void;
+  onSendDraft: (draft: ComposerDraft, signal?: AbortSignal) => Promise<void> | void;
   onDraftChange: (draft: ComposerDraft) => void;
   attachmentsEnabled: boolean;
   attachmentsDisabledReason: string | null;
@@ -925,19 +931,6 @@ function AssistantNoVisibleOutputCard(props: { text: string }) {
   );
 }
 
-function AssistantStatusSpacer() {
-  return (
-    <div className="invisible" aria-hidden="true">
-      <AssistantWaitingCard
-        label={t("session.assistant_responding")}
-        activity="composing"
-        collapseLayout
-        trackElapsed={false}
-      />
-    </div>
-  );
-}
-
 function TodoPanel(props: { todos: TodoItem[] }) {
   const [expanded, setExpanded] = useState(false);
   const todos = props.todos.filter((todo) => todo.content.trim());
@@ -1122,11 +1115,11 @@ export function parseSessionError(thrown: unknown): SessionError {
       retryable: false,
     };
   }
-  if (/message_outcome_unknown/i.test(diagnostic)) {
+  if (isUnknownMessageOutcome(thrown)) {
     return {
       message: "Checking whether your message was received.",
       detail: "The run may still be active. Check chat history, or retry to check its status without starting another run.",
-      kind: "generic",
+      kind: "outcome-unknown",
       retryable: true,
     };
   }
@@ -1553,6 +1546,13 @@ function revokeAttachmentPreview(attachment: { previewUrl?: string | undefined }
 
 export function SessionSurface(props: SessionSurfaceProps) {
   const isCurrentAccount = useRef(captureAccountGeneration()).current;
+  const currentSessionIdentityRef = useRef({ workspaceId: props.workspaceId, sessionId: props.sessionId });
+  currentSessionIdentityRef.current = { workspaceId: props.workspaceId, sessionId: props.sessionId };
+  const isCurrentSession = useCallback(() => (
+    isCurrentAccount()
+    && currentSessionIdentityRef.current.workspaceId === props.workspaceId
+    && currentSessionIdentityRef.current.sessionId === props.sessionId
+  ), [isCurrentAccount, props.sessionId, props.workspaceId]);
   const publicBetaWeb = isPublicBetaWebDeployment();
   const local = useLocal();
   const { openQuickJot } = useQuickJot();
@@ -1610,8 +1610,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const suppressNextAbortFailureRef = useRef(false);
   const pendingContinuationRef = useRef<{ sessionId: string; messageId: string } | null>(null);
   const pendingRetryRef = useRef<{ sessionId: string; messageId: string } | null>(null);
+  const retryTranscriptBoundaryRef = useRef<SessionTranscriptSnapshotBoundary | null>(null);
   const retrySendingRef = useRef(false);
   const continuationSendingRef = useRef(false);
+  const promptCancellationRef = useRef<{ sessionId: string; controller: AbortController } | null>(null);
   const opencodeClient = useMemo(
     () => createClient(props.opencodeBaseUrl, undefined, {
       token: props.matterhornToken,
@@ -1622,7 +1624,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
   );
 
   const snapshotQueryKey = useMemo(
-    () => ["react-session-snapshot", props.workspaceId, props.sessionId],
+    () => reactSnapshotKey(props.workspaceId, props.sessionId),
     [props.workspaceId, props.sessionId],
   );
   const transcriptQueryKey = useMemo(
@@ -1725,6 +1727,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     suppressNextAbortFailureRef.current = false;
     pendingContinuationRef.current = null;
     pendingRetryRef.current = null;
+    retryTranscriptBoundaryRef.current = null;
     setVerifiedOpenTargets([]);
   }, [props.sessionId]);
 
@@ -1781,15 +1784,21 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
   useEffect(() => {
     if (!currentSnapshot) return;
-    const key = `${props.sessionId}:${currentSnapshot.session.time?.updated ?? currentSnapshot.session.time?.created ?? 0}:${currentSnapshot.messages.length}`;
+    const key = `${props.sessionId}:${snapshotQuery.dataUpdatedAt}`;
     if (hydratedKeyRef.current === key) return;
     hydratedKeyRef.current = key;
     const id = window.setTimeout(() => {
       if (!isCurrentAccount()) return;
+      const pending = getPendingTranscriptReplacement(props.workspaceId, props.sessionId);
       seedSessionState(props.workspaceId, currentSnapshot);
+      if (pending && !getPendingTranscriptReplacement(props.workspaceId, props.sessionId)) {
+        pendingRetryRef.current = null;
+        if (retryTranscriptBoundaryRef.current === pending) retryTranscriptBoundaryRef.current = null;
+        setError((current) => current?.kind === "outcome-unknown" ? null : current);
+      }
     }, 0);
     return () => window.clearTimeout(id);
-  }, [props.sessionId, currentSnapshot, props.workspaceId, isCurrentAccount]);
+  }, [props.sessionId, currentSnapshot, snapshotQuery.dataUpdatedAt, props.workspaceId, isCurrentAccount]);
 
   useEffect(() => {
     if (!currentSnapshot) return;
@@ -1830,20 +1839,59 @@ export function SessionSurface(props: SessionSurfaceProps) {
     sessionActivityStatus === "responding"
   );
 
+  const pendingTranscriptReplacement = getPendingTranscriptReplacement(props.workspaceId, props.sessionId);
   useEffect(() => {
-    if (!chatStreaming) return;
+    if (!chatStreaming && !pendingTranscriptReplacement) return;
     const id = window.setInterval(() => {
       void snapshotQuery.refetch();
     }, 2_000);
     return () => window.clearInterval(id);
-  }, [chatStreaming, snapshotQuery.refetch]);
+  }, [chatStreaming, pendingTranscriptReplacement, snapshotQuery.refetch]);
   const renderedMessages = useMemo(
     () => [
-      ...deriveRenderedSessionMessages({ transcriptState, snapshot }),
+      ...deriveRenderedSessionMessages({
+        workspaceId: props.workspaceId,
+        sessionId: props.sessionId,
+        transcriptState,
+        snapshot,
+      }),
       ...localReviewedActionMessages,
     ],
-    [localReviewedActionMessages, snapshot, transcriptState],
+    [localReviewedActionMessages, props.sessionId, props.workspaceId, snapshot, transcriptState],
   );
+  const refetchReplacementSnapshot = useCallback(async (
+    boundary: SessionTranscriptSnapshotBoundary,
+  ) => {
+    let refreshed: MatterhornSessionSnapshot;
+    try {
+      refreshed = (await props.client.getSessionSnapshot(
+        boundary.workspaceId,
+        boundary.sessionId,
+        { limit: 140 },
+      )).item;
+    } catch {
+      return false;
+    }
+    if (!isCurrentAccount()) return false;
+    if (refreshed.session.id !== boundary.sessionId) return false;
+    if (getPendingTranscriptReplacement(boundary.workspaceId, boundary.sessionId)) {
+      // Stop/status checks must not treat a stale or empty snapshot as proof
+      // that an unacknowledged replacement was accepted.
+      seedSessionState(boundary.workspaceId, refreshed);
+      if (getPendingTranscriptReplacement(boundary.workspaceId, boundary.sessionId)) return false;
+      if (isCurrentSession()) {
+        pendingRetryRef.current = null;
+        setError((current) => current?.kind === "outcome-unknown" ? null : current);
+      }
+      void snapshotQuery.refetch();
+    } else {
+      seedReplacementSessionState(boundary.workspaceId, refreshed, boundary);
+    }
+    if (isCurrentSession() && retryTranscriptBoundaryRef.current === boundary) {
+      retryTranscriptBoundaryRef.current = null;
+    }
+    return true;
+  }, [isCurrentAccount, isCurrentSession, props.client, snapshotQuery.refetch]);
   useEffect(() => {
     if (renderedMessages.length === 0) return;
     void runReceiptsQuery.refetch();
@@ -2014,7 +2062,6 @@ export function SessionSurface(props: SessionSurfaceProps) {
         ? "synthesizing"
         : null;
   const showNoVisibleAssistantOutput = noVisibleAssistantOutputBaseline !== null && !assistantOutputAfterNoVisibleFallback;
-  const reserveAssistantStatusSpace = effectiveActivityStatus === "idle" && awaitingAssistantBaseline !== null && assistantOutputAfterAwaitStart && !chatStreaming;
   const assistantStatusFooter = assistantOrbActivity ? (
     <AssistantWaitingCard
       label={assistantActivityLabel}
@@ -2024,8 +2071,6 @@ export function SessionSurface(props: SessionSurfaceProps) {
     />
   ) : showNoVisibleAssistantOutput ? (
     <AssistantNoVisibleOutputCard text={noVisibleAssistantOutputText} />
-  ) : reserveAssistantStatusSpace ? (
-    <AssistantStatusSpacer />
   ) : null;
   useReactRenderWatchdog("SessionSurface", {
     sessionId: props.sessionId,
@@ -2368,9 +2413,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
           });
       }
 
+      const cancellation = new AbortController();
+      promptCancellationRef.current = { sessionId: props.sessionId, controller: cancellation };
       const prepared = await jevChat.prepare(nextDraft);
       if (!isCurrentAccount()) return;
-      await props.onSendDraft(prepared);
+      await props.onSendDraft(prepared, cancellation.signal);
       if (!isCurrentAccount()) return;
       recordModelOperationAccepted(operation);
       if (useComposerStateStore.getState().clearSubmittedSession(props.sessionId, submittedComposer)) {
@@ -2404,6 +2451,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
       throw new Error("Refresh this chat and continue only its latest incomplete answer.");
     }
     continuationSendingRef.current = true;
+    const cancellation = new AbortController();
+    promptCancellationRef.current = { sessionId: props.sessionId, controller: cancellation };
     pendingRetryRef.current = null;
     pendingContinuationRef.current = { sessionId: props.sessionId, messageId };
     setError(null);
@@ -2419,7 +2468,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       const continuation = { ...buildDraft(MATTERHORN_CONTINUE_ANSWER_TEXT, [], { privacyConsentToken }), continuationOf: messageId };
       const prepared = await jevChat.prepare(continuation);
       if (!isCurrentAccount()) return;
-      await props.onSendDraft(prepared);
+      await props.onSendDraft(prepared, cancellation.signal);
       if (!isCurrentAccount()) return;
       recordModelOperationAccepted(operation);
       pendingContinuationRef.current = null;
@@ -2440,18 +2489,25 @@ export function SessionSurface(props: SessionSurfaceProps) {
     props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages, sending, snapshotQuery]);
 
   const handleAbort = useCallback(async () => {
-    if (!isCurrentAccount()) return;
+    if (!isCurrentSession()) return;
+    const replacementBoundary = retryTranscriptBoundaryRef.current?.sessionId === props.sessionId
+      ? retryTranscriptBoundaryRef.current
+      : null;
+    if (promptCancellationRef.current?.sessionId === props.sessionId) {
+      promptCancellationRef.current.controller.abort();
+    }
     jevChat.cancel();
     if (!chatStreaming) return;
     suppressNextAbortFailureRef.current = true;
     setError(null);
     try {
       await abortSession(opencodeClient, props.sessionId);
-      if (!isCurrentAccount()) return;
+      if (!isCurrentSession()) return;
       const operation = pendingModelOperation(props.sessionId);
       if (operation) recordModelOperationCancelled(operation);
-      await snapshotQuery.refetch();
-      if (!isCurrentAccount()) return;
+      if (replacementBoundary) await refetchReplacementSnapshot(replacementBoundary);
+      else await snapshotQuery.refetch();
+      if (!isCurrentSession()) return;
       setSending(false);
       setAwaitingAssistantBaseline(null);
       setNoVisibleAssistantOutputBaseline(null);
@@ -2459,13 +2515,18 @@ export function SessionSurface(props: SessionSurfaceProps) {
       activity.setRunStatus(props.workspaceId, props.sessionId, { type: "idle" });
       activity.clearError(props.workspaceId, props.sessionId);
     } catch (nextError) {
+      if (!isCurrentSession()) return;
       suppressNextAbortFailureRef.current = false;
       setError({ message: nextError instanceof Error ? nextError.message : "Failed to stop run." });
     }
-  }, [chatStreaming, opencodeClient, props.sessionId, props.workspaceId, snapshotQuery.refetch, jevChat.cancel]);
+  }, [chatStreaming, isCurrentSession, opencodeClient, props.sessionId, props.workspaceId, refetchReplacementSnapshot, snapshotQuery.refetch, jevChat.cancel]);
 
   const handleRetryAssistantResponse = useCallback(async (messageId: string, privacyConsentToken?: string) => {
-    if (!isCurrentAccount()) return;
+    if (!isCurrentSession()) return;
+    if (getPendingTranscriptReplacement(props.workspaceId, props.sessionId)) {
+      await snapshotQuery.refetch();
+      return;
+    }
     if (sending || chatStreaming || retrySendingRef.current) {
       throw new Error("Wait for the active response to finish before retrying another response.");
     }
@@ -2477,8 +2538,18 @@ export function SessionSurface(props: SessionSurfaceProps) {
     if (!retryTurn) throw new Error("Matterhorn could not find the prompt for this response.");
     const prompt = retryTurn.prompt;
     if (!prompt) throw new Error("This response came from an attachment-only prompt. Re-send it from the composer to include the attachment.");
+    const replacementStartIndex = renderedMessages.findIndex((message) => message.id === retryTurn.promptMessageId);
+    if (replacementStartIndex < 0) throw new Error("Refresh this chat before retrying its response.");
+    const replacementBoundary = captureSessionTranscriptSnapshotBoundary(
+      props.workspaceId,
+      props.sessionId,
+      renderedMessages.slice(replacementStartIndex).map((message) => message.id),
+    );
 
     retrySendingRef.current = true;
+    retryTranscriptBoundaryRef.current = replacementBoundary;
+    const cancellation = new AbortController();
+    promptCancellationRef.current = { sessionId: props.sessionId, controller: cancellation };
     pendingContinuationRef.current = null;
     pendingRetryRef.current = { sessionId: props.sessionId, messageId };
     suppressNextAbortFailureRef.current = false;
@@ -2510,13 +2581,20 @@ export function SessionSurface(props: SessionSurfaceProps) {
         }),
         abort: () => abortSession(opencodeClient, props.sessionId),
         revert: () => revertSession(opencodeClient, props.sessionId, retryTurn.promptMessageId),
-        dispatch: (prepared) => props.onSendDraft(prepared),
-        restore: () => unrevertSession(opencodeClient, props.sessionId),
+        dispatch: (prepared) => props.onSendDraft(prepared, cancellation.signal),
+        restore: async () => {
+          await unrevertSession(opencodeClient, props.sessionId);
+          const reconciled = await refetchReplacementSnapshot(replacementBoundary);
+          if (!reconciled && isCurrentSession()) {
+            throw new Error("Matterhorn restored the original response, but the refreshed transcript is unavailable.");
+          }
+        },
       });
-      if (!isCurrentAccount()) return;
+      if (!isCurrentSession()) return;
       recordModelOperationAccepted(operation);
       pendingRetryRef.current = null;
-      void snapshotQuery.refetch();
+      await refetchReplacementSnapshot(replacementBoundary);
+      if (!isCurrentSession()) return;
       setSending(false);
       setNotice({
         title: "Response retry started",
@@ -2524,19 +2602,30 @@ export function SessionSurface(props: SessionSurfaceProps) {
         tone: "info",
       });
     } catch (nextError) {
+      // A route change must not discard reconciliation for the original chat.
+      // Account changes still discard all old-identity work.
       if (!isCurrentAccount()) return;
+      if (isUnknownMessageOutcome(nextError)) {
+        retainPendingTranscriptReplacement(replacementBoundary, renderedMessages);
+      }
+      if (!isCurrentSession()) return;
       const parsed = recordSessionSubmissionFailure(operation, nextError);
       setError(parsed);
       setAwaitingAssistantBaseline(null);
       setNoVisibleAssistantOutputBaseline(null);
       setSending(false);
       useSessionActivityStore.getState().setRunStatus(props.workspaceId, props.sessionId, { type: "idle" });
-      void snapshotQuery.refetch();
+      if (isUnknownMessageOutcome(nextError)) {
+        void snapshotQuery.refetch();
+      } else if (!cancellation.signal.aborted) {
+        if (retryTranscriptBoundaryRef.current === replacementBoundary) retryTranscriptBoundaryRef.current = null;
+        void snapshotQuery.refetch();
+      }
       throw nextError;
     } finally {
       retrySendingRef.current = false;
     }
-  }, [bittensorContext, buildDraft, chatStreaming, jevChat.prepare, opencodeClient, props.modelVariant, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages, sending, snapshotQuery]);
+  }, [bittensorContext, buildDraft, chatStreaming, isCurrentAccount, isCurrentSession, jevChat.prepare, opencodeClient, props.modelVariant, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, refetchReplacementSnapshot, renderedMessages, sending, snapshotQuery]);
 
   const handleConfirmPrivacy = useCallback(async () => {
     const preflight = error?.privacyPreflight;
@@ -2566,6 +2655,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
   }, [confirmingPrivacy, error?.privacyPreflight, sendWithConsent, continueAssistantResponse, handleRetryAssistantResponse, props.client, props.sessionId, props.workspaceId, sending]);
 
   const handleRetryResponse = useCallback(async () => {
+    if (getPendingTranscriptReplacement(props.workspaceId, props.sessionId)) {
+      await snapshotQuery.refetch();
+      return;
+    }
     const continuation = pendingContinuationRef.current;
     if (continuation?.sessionId === props.sessionId) {
       try { await continueAssistantResponse(continuation.messageId); } catch { /* The continuation error is already visible. */ }
@@ -2585,7 +2678,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     }
     if (sending || !draft.trim()) return;
     await handleSend();
-  }, [continueAssistantResponse, currentSnapshot, draft, handleRetryAssistantResponse, handleSend, props.sessionId, renderedMessages, sending]);
+  }, [continueAssistantResponse, currentSnapshot, draft, handleRetryAssistantResponse, handleSend, props.sessionId, props.workspaceId, renderedMessages, sending, snapshotQuery.refetch]);
 
   const handleSaveAssistantResponse = useCallback(async (messageId: string, content: string): Promise<OpenTarget> => {
     if (!content.trim()) throw new Error("This response has no content to save.");
@@ -3403,7 +3496,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
   return (
     <DevProfiler id="SessionSurface">
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="matterhorn-chat-surface flex h-full min-h-0 min-w-0 flex-col">
       {model.transitionState === "switching" && showDelayedLoading ? (
         <div className="flex justify-center px-6 pt-4">
           <div className="rounded-full border border-dls-border bg-dls-hover/80 px-3 py-1 text-xs text-dls-secondary">
@@ -3412,7 +3505,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
         </div>
       ) : null}
 
-      <div className="relative min-h-0 flex-1">
+      <div className="matterhorn-chat-transcript relative min-h-0 min-w-0 flex-1">
         <div
           ref={scrollRef}
           onWheel={(event) => {
@@ -3614,9 +3707,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
             )}
           </div>
         </div>
-        {renderedMessages.length > 0 && hasTranscriptJumpTarget && (!sessionScroll.isAtBottom || (!chatStreaming && sessionScroll.topClippedMessageId)) ? (
-          <div className="pointer-events-none absolute bottom-4 left-1/2 z-40 flex -translate-x-1/2 justify-center sm:bottom-5">
-            <div className="pointer-events-auto flex items-center gap-0.5 rounded-md bg-dls-surface-muted/70 p-0.5 shadow-[0_1px_4px_rgba(0,0,0,0.2)]">
+      </div>
+        {/* Reserve a separate row: navigation must never cover a response or its receipt. */}
+        {renderedMessages.length > 0 && hasTranscriptJumpTarget ? (
+          <nav aria-label="Conversation navigation" className="matterhorn-chat-jumps flex min-h-10 shrink-0 justify-end px-3 py-1 sm:px-5">
+            <div className="flex items-center gap-1">
               {!chatStreaming && sessionScroll.topClippedMessageId ? (
                 <button
                   type="button"
@@ -3636,6 +3731,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   type="button"
                   className="inline-flex h-7 items-center gap-1 rounded bg-dls-hover/65 px-2 text-[11px] font-medium text-dls-text transition-colors hover:bg-dls-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.32)]"
                   onClick={() => {
+                    // The whole surface can scroll at keyboard/zoom heights.
+                    // Reveal the transcript as well as scrolling its contents.
+                    scrollRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
                     sessionScroll.jumpToLatest("smooth");
                   }}
                   title="Jump to the latest message"
@@ -3646,14 +3744,15 @@ export function SessionSurface(props: SessionSurfaceProps) {
                 </button>
               ) : null}
             </div>
-          </div>
+          </nav>
         ) : null}
-      </div>
 
-      <div ref={composerShellRef} className="shrink-0 bg-dls-surface px-0 pb-3 pt-3">
+      <div ref={composerShellRef} className="matterhorn-chat-composer shrink-0 bg-dls-surface px-0 pb-3 pt-3">
+        <div className="mx-auto max-w-[984px] px-4 md:px-8">
         <JevChatControl enabled={jevChat.enabled} available={Boolean(jevChat.availability?.available)}
           loading={!jevChat.availability && !jevChat.notice} privateMode={Boolean(props.privateModeEnabled)}
           notice={jevChat.notice} onChange={jevChat.change} />
+        </div>
         <PrivateModePrivacyNotice
           modelUnavailable={props.modelUnavailable}
           providerPrivacyPolicy={props.providerPrivacyPolicy}

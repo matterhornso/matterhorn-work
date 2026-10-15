@@ -40,13 +40,17 @@ export const MATTERHORN_CRYPTO_ACTION_REGISTRY = [
   {
     name: "matterhorn_bittensor_chat",
     title: "Bittensor desk read",
-    description: "Read public Bittensor data using readOperation and netuid/ss58Address. Never executes actions.",
+    description: "Public Bittensor reads only; never acts.",
     inputSchema: objectSchema({
-      message: { type: "string", description: "Discovery text." },
-      readOperation: { type: "string", enum: ["subnet", "wallet", "validators", "discovery"] },
-      ss58Address: { type: "string", description: "Optional public SS58 address." },
-      netuid: { type: "number" },
-      limit: { type: "number" },
+      message: { type: "string" },
+      readOperation: {
+        type: "string",
+        enum: ["discovery", "subnet", "validators", "wallet"],
+        description: "discovery lists/searches; subnet|validators need netuid; wallet needs ss58Address.",
+      },
+      ss58Address: { type: "string" },
+      netuid: { type: "number", minimum: 0 },
+      limit: { type: "number", minimum: 1, maximum: 20 },
       strategy: { type: "string", enum: ["balanced", "yield", "safety"] },
     }, ["message"]),
     deskIds: ["bittensor"],

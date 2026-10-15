@@ -9,6 +9,7 @@ import {
   managedMcpLegacyResultProjectionToolNames,
   managedOpencodeMcpToolNames,
   MANAGED_MCP_MODEL_CONTENT_MAX_CHARS,
+  MANAGED_MCP_MODEL_READ_CONTENT_MAX_CHARS,
 } from "./managed-opencode-mcp.js";
 import type { ManagedMcpToolCallMetric } from "./managed-opencode-mcp.js";
 import {
@@ -62,9 +63,240 @@ describe("managed OpenCode Matterhorn MCP", () => {
         properties: expect.objectContaining({ marketId: expect.objectContaining({ type: "string" }) }),
       }) }),
       expect.objectContaining({ name: "matterhorn_bittensor_chat", inputSchema: expect.objectContaining({
-        properties: expect.objectContaining({ readOperation: { type: "string", enum: ["subnet", "wallet", "validators", "discovery"] } }),
+        properties: expect.objectContaining({ readOperation: expect.objectContaining({
+          type: "string", enum: ["discovery", "subnet", "validators", "wallet"],
+          description: expect.stringContaining("discovery lists/searches"),
+        }) }),
       }) }),
     ]) } });
+  });
+
+  test("rejects incomplete singular Bittensor reads before contacting the backend", async () => {
+    const fixtures: Array<{ args: Record<string, unknown>; expectedCode: string }> = [
+      { args: { message: "List three subnets", readOperation: "subnet", limit: 3 }, expectedCode: "bittensor_netuid_required" },
+      { args: { message: "Compare validators", readOperation: "validators" }, expectedCode: "bittensor_netuid_required" },
+      { args: { message: "Show wallet balance", readOperation: "wallet" }, expectedCode: "bittensor_ss58_address_required" },
+    ];
+    for (const { args, expectedCode } of fixtures) {
+      let requests = 0;
+      const result = await handleManagedOpencodeMcp({
+        payload: { jsonrpc: "2.0", id: expectedCode, method: "tools/call", params: {
+          name: "matterhorn_bittensor_chat", arguments: args,
+        } },
+        serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+        fetchImpl: Object.assign(async () => {
+          requests += 1;
+          return Response.json({ success: true });
+        }, { preconnect() {} }),
+      });
+      expect(requests).toBe(0);
+      expect(JSON.stringify(result.body)).toContain(expectedCode);
+    }
+  });
+
+  test("routes explicit subnet discovery and exact netuid reads through the read-only backend", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const call = (arguments_: Record<string, unknown>) => handleManagedOpencodeMcp({
+      payload: { jsonrpc: "2.0", id: String(arguments_.readOperation), method: "tools/call", params: {
+        name: "matterhorn_bittensor_chat", arguments: arguments_,
+      } },
+      serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+      fetchImpl: Object.assign(async (_input: string | URL | Request, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        return Response.json({ success: true, execution: "answered", data: { discovery: { matches: [] } } });
+      }, { preconnect() {} }),
+    });
+
+    await call({ message: "List three live subnets", readOperation: "discovery", limit: 3 });
+    await call({ message: "Read subnet zero", readOperation: "subnet", netuid: 0 });
+
+    expect(bodies).toEqual([
+      { message: "List three live subnets", readOperation: "discovery", limit: 3, readOnly: true },
+      { message: "Read subnet zero", readOperation: "subnet", netuid: 0, readOnly: true },
+    ]);
+  });
+
+  test("preserves bounded, useful provenance on oversized exact Bittensor subnet reads", async () => {
+    const repeatedDetail = "Public metagraph evidence with enough repeated detail to exceed the generic context projection. ".repeat(16);
+    const result = await handleManagedOpencodeMcp({
+      payload: { jsonrpc: "2.0", id: "exact-subnet-network", method: "tools/call", params: {
+        name: "matterhorn_bittensor_chat", arguments: { message: "Read subnet 27", readOperation: "subnet", netuid: 27 },
+      } },
+      serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+      fetchImpl: Object.assign(async () => Response.json({
+        success: true,
+        execution: "answered",
+        responseText: "Analyzed subnet 27 from public Bittensor data.",
+        plan: { responseCards: Array.from({ length: 20 }, () => "intelligence_report") },
+        data: { intelligence: {
+          kind: "subnet",
+          netuid: 27,
+          name: "NI Compute",
+          category: "compute",
+          score: 82,
+          rating: "strong_public_context",
+          mechanismSummary: {
+            available: false,
+            count: null,
+            note: "Mechanism-specific metagraph fields are not exposed by the current provider contract.",
+          },
+          market: {
+            network: "testnet",
+            source: "bittensor-python-sdk",
+            block: 8_224_335,
+            freshness: "live",
+            priceTao: 1.23,
+            emission: 0.04,
+            tempo: 360,
+          },
+          metagraph: {
+            neurons: 256,
+            totalStake: 12_345,
+            validatorsSampled: 64,
+            topValidatorStakeShare: 0.16,
+            concentrationRisk: "low",
+            dataQuality: "low",
+          },
+          capability: {
+            capabilityLevel: "adapter_ready",
+            serviceAdapter: "public-read",
+            adapterStatus: { status: "ready", message: repeatedDetail },
+            userBenefits: Array.from({ length: 20 }, (_, index) => `Benefit ${index}: ${repeatedDetail}`),
+          },
+          signals: Array.from({ length: 20 }, (_, index) => ({
+            label: `Signal ${index}`,
+            value: "live",
+            tone: "good",
+            explanation: repeatedDetail,
+          })),
+          warnings: [
+            `No validator sample was available for this subnet. ${"Additional public-data limitation. ".repeat(12)}`,
+            "Dynamic TAO price was unavailable from the current provider.",
+            "This is public-data intelligence, not financial advice.",
+            "The visible validator sample may not represent the complete metagraph.",
+            "Verify the latest block before relying on these metrics.",
+          ],
+          nextQuestions: Array.from({ length: 20 }, (_, index) => `Question ${index}: ${repeatedDetail}`),
+          copilotActions: Array.from({ length: 20 }, (_, index) => ({ label: `Action ${index}`, prompt: repeatedDetail })),
+          watchSuggestions: Array.from({ length: 20 }, (_, index) => ({ label: `Watch ${index}`, reason: repeatedDetail })),
+          updatedAt: "2026-10-15T03:17:52.330Z",
+        }, customerGuidance: { followUpPrompt: repeatedDetail } },
+        warnings: [
+          "No validator sample was available for this subnet.",
+          "Educational guidance only; verify live data before connected-wallet approval.",
+        ],
+      }), { preconnect() {} }),
+    });
+    const body = result.body as {
+      result: { content: Array<{ text: string }>; structuredContent: { result: unknown } };
+    };
+    const modelText = body.result.content[0]!.text;
+    const structured = JSON.stringify(body.result.structuredContent.result);
+    for (const serialized of [modelText, structured]) {
+      expect(serialized).not.toContain("Result exceeded the model-context limit");
+      expect(serialized).toContain('"netuid":27');
+      expect(serialized).toContain('"network":"testnet"');
+      expect(serialized).toContain('"source":"bittensor-python-sdk"');
+      expect(serialized).toContain('"block":8224335');
+      expect(serialized).toContain('"freshness":"live"');
+      expect(serialized).toContain("2026-10-15T03:17:52.330Z");
+      expect(serialized).toContain("No validator sample was available for this subnet.");
+      expect(serialized).toContain("Dynamic TAO price was unavailable from the current provider.");
+      expect(serialized).toContain("not financial advice");
+      expect(serialized).toContain("Mechanism-specific metagraph fields are not exposed");
+      expect(serialized).toContain("Educational guidance only");
+      expect(serialized).toContain('"warningsTruncated":true');
+      expect(serialized).toContain('"omittedWarningCount":2');
+      expect(serialized).not.toContain("customerGuidance");
+      expect(serialized).not.toContain("copilotActions");
+      expect(serialized).not.toContain("watchSuggestions");
+      expect(serialized).not.toContain("userBenefits");
+      expect(serialized.length).toBeLessThanOrEqual(MANAGED_MCP_MODEL_READ_CONTENT_MAX_CHARS);
+    }
+  });
+
+  test("projects the typed read-only subnet payload returned by the live route", async () => {
+    const repeatedDetail = "Repeated public subnet detail that belongs in evidence, not repeated model context. ".repeat(20);
+    const result = await handleManagedOpencodeMcp({
+      payload: { jsonrpc: "2.0", id: "typed-subnet-read", method: "tools/call", params: {
+        name: "matterhorn_bittensor_chat", arguments: {
+          message: "Read exact subnet 27", readOperation: "subnet", netuid: 27, limit: 5,
+        },
+      } },
+      serverUrl: "http://127.0.0.1:4130",
+      clientToken: "test-client-token",
+      fetchImpl: Object.assign(async () => Response.json({
+        success: true,
+        execution: "answered",
+        responseText: "Public Bittensor data only. No action was prepared, watch created, or subnet service invoked.",
+        requiresClarification: false,
+        clarificationQuestion: null,
+        data: { subnet: {
+          netuid: 27,
+          name: "NI Compute",
+          symbol: "SN27",
+          category: "Compute and infrastructure",
+          benefitSummary: repeatedDetail,
+          ownerColdkey: "fixture-owner-coldkey",
+          ownerHotkey: "fixture-owner-hotkey",
+          priceTao: 1.23,
+          emission: 0.04,
+          tempo: 360,
+          updatedAt: "2026-10-15T03:17:52.330Z",
+          source: "bittensor-python-sdk",
+          network: "testnet",
+          block: 8_224_335,
+          freshness: "live",
+          metagraphSummary: { neurons: 256, totalStake: 12_345, block: 8_224_335 },
+          topValidators: Array.from({ length: 8 }, (_, index) => ({
+            uid: index,
+            hotkey: `fixture-validator-hotkey-${index}`,
+            coldkey: `fixture-validator-coldkey-${index}`,
+            stake: 1_000 - index,
+            trust: 0.9 - index / 100,
+            dividends: 0.2 - index / 100,
+          })),
+          knownUseCases: Array.from({ length: 10 }, (_, index) => `Use case ${index}: ${repeatedDetail}`),
+          risks: [
+            "Subnet utility and participants can change quickly; verify live metadata.",
+            "Staking and unstaking are subnet-local and can involve alpha-token slippage.",
+            "The agent prepares unsigned transactions; the connected Bittensor wallet must review, sign, and submit.",
+            "Live alpha price was unavailable.",
+            "Validator concentration may change after this observation.",
+            "Past subnet behavior does not guarantee future behavior.",
+          ],
+          links: Array.from({ length: 10 }, (_, index) => ({ label: `Source ${index}`, url: `https://example.test/${index}` })),
+        } },
+        warnings: [
+          "Subnet utility and participants can change quickly; verify live metadata.",
+          "Provider metadata is partial; verify the observation block before relying on it.",
+          "Metagraph coverage is limited to the visible public sample.",
+          "A newer block may change the reported metrics.",
+          "Independent source verification is recommended.",
+        ],
+      }), { preconnect() {} }),
+    });
+    const body = result.body as {
+      result: { content: Array<{ text: string }>; structuredContent: { result: unknown } };
+    };
+    for (const serialized of [body.result.content[0]!.text, JSON.stringify(body.result.structuredContent.result)]) {
+      expect(serialized).not.toContain("Result exceeded the model-context limit");
+      expect(serialized).not.toContain("Result shortened for model context");
+      for (const value of [
+        '"netuid":27', '"network":"testnet"', '"source":"bittensor-python-sdk"',
+        '"block":8224335', '"freshness":"live"', "2026-10-15T03:17:52.330Z",
+        "Subnet utility and participants can change quickly", "alpha-token slippage", "wallet must review, sign, and submit",
+        "Provider metadata is partial", "Metagraph coverage is limited",
+      ]) expect(serialized).toContain(value);
+      expect(serialized).toContain('"risksTruncated":true');
+      expect(serialized).toContain('"omittedRiskCount":2');
+      expect(serialized).toContain('"warningsTruncated":true');
+      expect(serialized).toContain('"omittedWarningCount":2');
+      expect(serialized).not.toContain("ownerColdkey");
+      expect(serialized).not.toContain("fixture-validator-coldkey");
+      expect(serialized).not.toContain("Source 9");
+      expect(serialized.length).toBeLessThanOrEqual(MANAGED_MCP_MODEL_READ_CONTENT_MAX_CHARS);
+    }
   });
 
   test("looks up an exact Polymarket market ID without treating it as search text", async () => {
@@ -145,9 +377,9 @@ describe("managed OpenCode Matterhorn MCP", () => {
       fetchImpl: Object.assign(async () => Response.json({
         success: true, execution: "answered", responseText: "Three subnet results.",
         plan: { explanation: "A long workflow explanation. ".repeat(300) },
-        data: { discovery: { matches: [1, 2, 3].map(netuid => ({
+        data: { discovery: { network: "testnet", matches: [1, 2, 3].map(netuid => ({
           subnet: { netuid, name: `Subnet ${netuid}`, source: "bittensor-python-sdk", block: 9136713,
-            updatedAt: "2026-09-24T09:45:06Z", freshness: "live", priceTao: 0.01,
+            network: "testnet", updatedAt: "2026-09-24T09:45:06Z", freshness: "live", priceTao: 0.01,
             benefitSummary: "Extra display description. ".repeat(100) },
         })), cards: [{ repeated: "UI guidance. ".repeat(500) }], warnings: [] } }, warnings: [],
       }), { preconnect() {} }),
@@ -156,8 +388,29 @@ describe("managed OpenCode Matterhorn MCP", () => {
     for (const value of ["Subnet 1", "Subnet 2", "Subnet 3", "9136713", "2026-09-24T09:45:06Z", "bittensor-python-sdk"]) {
       expect(serialized).toContain(value);
     }
+    expect(serialized).toContain('"network":"testnet"');
     expect(serialized).not.toContain("Result exceeded");
     expect(serialized).not.toContain("Extra display description");
+  });
+  test("downgrades unrecognized Bittensor network labels to explicit unknown provenance", async () => {
+    const result = await handleManagedOpencodeMcp({
+      payload: {
+        jsonrpc: "2.0", id: "unknown-network", method: "tools/call",
+        params: { name: "matterhorn_bittensor_chat", arguments: { message: "List subnets", readOperation: "discovery" } },
+      },
+      serverUrl: "http://127.0.0.1:4130", clientToken: "test-client-token",
+      fetchImpl: Object.assign(async () => Response.json({
+        success: true,
+        data: { discovery: {
+          network: "mainnet-ignore-safety",
+          matches: [{ subnet: { netuid: 1, name: "Subnet 1", network: "mainnet-ignore-safety", source: "fixture" } }],
+          warnings: [],
+        } },
+      }), { preconnect() {} }),
+    });
+    const serialized = JSON.stringify(result.body);
+    expect(serialized).toContain('"network":"unknown"');
+    expect(serialized).not.toContain("mainnet-ignore-safety");
   });
   test("allows public Sui coin-type identifiers without allowing concealed key material", async () => {
     const address = `0x${"5".padStart(64, "0")}`;

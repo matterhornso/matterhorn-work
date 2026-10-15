@@ -740,11 +740,11 @@ export function LexicalPromptEditor(props: EditorProps) {
         - max-h caps the composer — long pastes / multi-paragraph drafts scroll
           inside the editor instead of pushing the transcript out of view.
       */}
-      <div className="relative" onClickCapture={handlePastedTextExpandPointer} onMouseDownCapture={handlePastedTextExpandMouseDown}>
+      <div className="relative grid min-w-0" onClickCapture={handlePastedTextExpandPointer} onMouseDownCapture={handlePastedTextExpandMouseDown}>
         <PlainTextPlugin
           contentEditable={
             <ContentEditable
-              className="min-h-[72px] max-h-[240px] w-full resize-none overflow-y-auto bg-transparent text-base sm:text-[15px] leading-6 text-dls-text outline-none placeholder:text-dls-secondary [&_p]:min-h-[1.5rem] [&_p]:m-0"
+              className="matterhorn-prompt-editor col-start-1 row-start-1 min-h-[72px] max-h-[240px] min-w-0 w-full resize-none overflow-y-auto bg-transparent text-base sm:text-[15px] leading-6 text-dls-text outline-none placeholder:text-dls-secondary [&_p]:min-h-[1.5rem] [&_p]:m-0"
               aria-label={props.placeholder}
               aria-placeholder={props.placeholder}
               placeholder={<span />}
@@ -755,7 +755,7 @@ export function LexicalPromptEditor(props: EditorProps) {
             />
           }
           placeholder={
-            <div className="pointer-events-none absolute left-0 top-0 text-base sm:text-[15px] leading-6 text-dls-secondary">
+            <div aria-hidden="true" className="pointer-events-none col-start-1 row-start-1 min-w-0 break-words text-base sm:text-[15px] leading-6 text-dls-secondary">
               {props.placeholder}
             </div>
           }

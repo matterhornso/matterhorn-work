@@ -31,8 +31,8 @@ export function PrivateModePrivacyNotice(props: PrivateModePrivacyNoticeProps) {
   } else if (providerPolicy?.allowed === false) {
     message = (
       <>
-        Sending blocked · {providerPolicy.providerName}&apos;s training and
-        retention terms are not verified.
+        Provider privacy unverified · {providerPolicy.providerName}&apos;s training
+        and retention terms are not verified. Requests are checked before sending.
       </>
     );
   } else if (props.privateModeUnavailableReason) {

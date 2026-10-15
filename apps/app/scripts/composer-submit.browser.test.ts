@@ -76,6 +76,101 @@ async function fixturePage() {
   return page;
 }
 
+test("short-height menus keep first/last actions reachable and return focus", async () => {
+  for (const height of [390, 540]) {
+    const page = await fixturePage();
+    try {
+      await page.setViewportSize({ width: 640, height });
+      await page.goto(`${server.url}?compactMenus`);
+      const editor = page.getByRole("textbox");
+      await editor.fill("Synthetic draft preserved while inspecting menus.");
+      for (const [triggerName, dialogName] of [["Chat options", "Chat options"], ["Private AI", "Agent"], ["Commands, skills, and MCPs", "Commands, skills, and MCPs"]]) {
+        const trigger = page.getByRole("button", { name: triggerName, exact: true });
+        await trigger.click();
+        const menu = page.getByRole("dialog", { name: dialogName, exact: true });
+        await menu.waitFor();
+        const bounds = await menu.boundingBox();
+        expect(bounds).not.toBeNull();
+        if (!bounds) throw new Error("Menu bounds missing");
+        expect(bounds.y).toBeGreaterThanOrEqual(0);
+        expect(bounds.y + bounds.height).toBeLessThanOrEqual(height);
+        if (dialogName === "Commands, skills, and MCPs") await menu.getByRole("tab", { name: "Skills", exact: true }).click();
+        const actions = dialogName === "Chat options" ? menu.getByRole("radio")
+          : dialogName === "Agent" ? menu.locator("[data-composer-menu-body] button")
+          : menu.locator(".matterhorn-tool-menu-list button");
+        await actions.first().waitFor();
+        if (dialogName !== "Chat options") expect(await actions.count()).toBeGreaterThanOrEqual(12);
+        for (const action of [actions.first(), actions.last()]) {
+          await action.scrollIntoViewIfNeeded();
+          expect(await action.evaluate(el => {
+            const box = el.getBoundingClientRect();
+            const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+            return Boolean(hit && (el === hit || el.contains(hit)));
+          })).toBe(true);
+        }
+        await page.keyboard.press("Escape");
+        await menu.waitFor({ state: "hidden" });
+        expect(await trigger.evaluate(el => el === document.activeElement)).toBe(true);
+        await trigger.click();
+        await menu.waitFor();
+        await page.mouse.click(2, 2);
+        await menu.waitFor({ state: "hidden" });
+        expect(await editor.innerText()).toBe("Synthetic draft preserved while inspecting menus.");
+        for (const edge of ["last", "first"]) {
+          await trigger.click();
+          await menu.waitFor();
+          if (dialogName === "Commands, skills, and MCPs") await menu.getByRole("tab", { name: "Skills", exact: true }).click();
+          const action = edge === "first" ? actions.first() : actions.last();
+          await action.scrollIntoViewIfNeeded();
+          await action.click();
+          if (dialogName === "Chat options") {
+            expect(await page.getByTestId("result").innerText()).toBe(`perspective:${edge === "first" ? "cautious" : "optimistic"}`);
+            await page.keyboard.press("Escape");
+          } else if (dialogName === "Agent") {
+            expect(await page.getByTestId("result").innerText()).toBe(`agent:${edge === "first" ? "default" : "fixture-agent-12"}`);
+          } else {
+            expect(await editor.innerText()).toContain(`/fixture-skill-${edge === "first" ? "1" : "12"}`);
+          }
+          await menu.waitFor({ state: "hidden" });
+        }
+        await editor.fill("Synthetic draft preserved while inspecting menus.");
+      }
+    } finally { await page.close(); }
+  }
+}, 30_000);
+
+test("short-height Agent dialog supports Tab traversal and native Space selection", async () => {
+  const page = await fixturePage();
+  try {
+    await page.setViewportSize({ width: 640, height: 390 });
+    await page.goto(`${server.url}?compactMenus`);
+    const trigger = page.getByRole("button", { name: "Private AI", exact: true });
+    await trigger.click();
+    const menu = page.getByRole("dialog", { name: "Agent", exact: true });
+    const actions = menu.locator("[data-composer-menu-body] button");
+    await actions.first().focus();
+    await page.keyboard.press("Tab");
+    expect(await menu.isVisible()).toBe(true);
+    expect(await actions.nth(1).evaluate(el => el === document.activeElement)).toBe(true);
+    await page.keyboard.press("Shift+Tab");
+    expect(await menu.isVisible()).toBe(true);
+    expect(await actions.first().evaluate(el => el === document.activeElement)).toBe(true);
+    await page.keyboard.press("Escape");
+    await menu.waitFor({ state: "hidden" });
+    expect(await trigger.evaluate(el => el === document.activeElement)).toBe(true);
+    await trigger.click();
+    await actions.last().focus();
+    await page.keyboard.press("Space");
+    await menu.waitFor({ state: "hidden" });
+    expect(await page.getByTestId("result").innerText()).toBe("agent:fixture-agent-12");
+    await trigger.click();
+    await actions.first().focus();
+    await page.keyboard.press("Space");
+    await menu.waitFor({ state: "hidden" });
+    expect(await page.getByTestId("result").innerText()).toBe("agent:default");
+  } finally { await page.close(); }
+}, 15_000);
+
 test("header picker labels search and selection while retaining the unsent draft", async () => {
   const page = await fixturePage();
   try {

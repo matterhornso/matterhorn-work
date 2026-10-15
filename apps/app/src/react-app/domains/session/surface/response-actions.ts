@@ -32,6 +32,12 @@ export type AssistantResponseRetryTransaction<T> = {
   restore: () => Promise<unknown>;
 };
 
+export function isUnknownMessageOutcome(error: unknown): boolean {
+  return (typeof error === "object" && error !== null
+    && "code" in error && error.code === "message_outcome_unknown")
+    || (error instanceof Error && /\bmessage_outcome_unknown\b/.test(error.message));
+}
+
 export async function runAssistantResponseRetry<T>(
   transaction: AssistantResponseRetryTransaction<T>,
 ): Promise<void> {
@@ -49,6 +55,11 @@ export async function runAssistantResponseRetry<T>(
     await transaction.dispatch(prepared);
   } catch (dispatchError) {
     requireCurrentAccount();
+    // A lost acknowledgement may hide an accepted replacement. Preserve that
+    // history until the gateway reconciles it; restoring would mutate a live run.
+    if (isUnknownMessageOutcome(dispatchError)) {
+      throw dispatchError;
+    }
     try {
       await transaction.restore();
     } catch {

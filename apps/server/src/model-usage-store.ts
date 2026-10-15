@@ -229,20 +229,24 @@ export function modelUsageAssistantMessages(value: unknown): ModelUsageAssistant
     const id = typeof info.id === "string" ? info.id.trim() : "";
     const createdAt = finiteInteger(time?.created);
     const completedAt = finiteInteger(time?.completed);
-    if (!id || !createdAt || !completedAt || !tokens) continue;
-    const inputTokens = finiteInteger(tokens.input);
-    const outputTokens = finiteInteger(tokens.output);
-    const reasoningTokens = finiteInteger(tokens.reasoning);
+    if (!id || !createdAt || !completedAt) continue;
+    const inputTokens = finiteInteger(tokens?.input);
+    const outputTokens = finiteInteger(tokens?.output);
+    const reasoningTokens = finiteInteger(tokens?.reasoning);
     const cacheReadTokens = finiteInteger(cache?.read);
     const cacheWriteTokens = finiteInteger(cache?.write);
-    const reportedTotal = finiteInteger(tokens.total);
+    const reportedTotal = finiteInteger(tokens?.total);
+    // Without a total, input/output must both be reported. A partial positive
+    // breakdown is no more complete than the all-zero counters left on Stop.
+    const completeBreakdown = [tokens?.input, tokens?.output, tokens?.reasoning === undefined ? 0 : tokens.reasoning]
+      .every((value) => typeof value === "number" && Number.isFinite(value) && value >= 0);
     messages.push({
       id,
       sessionId: typeof info.sessionID === "string" ? info.sessionID : undefined,
       parentId: typeof info.parentID === "string" ? info.parentID : undefined,
       // A terminal error/cancellation may retain the previous tool-step finish
-      // marker and parts. Its completed timestamp and recorded usage still
-      // settle this request; do not leave its full reservation held forever.
+      // marker and parts. It can settle only once every step has reported
+      // usage; completion alone is not evidence of a zero-cost request.
       terminal: typeof recordValue(info.error)?.name === "string" || (info.finish !== "tool-calls" && info.finish !== "unknown"
         && !(Array.isArray(message?.parts) && message.parts.some((entry) => {
           const part = recordValue(entry);
@@ -259,7 +263,7 @@ export function modelUsageAssistantMessages(value: unknown): ModelUsageAssistant
       reasoningTokens,
       cacheReadTokens,
       cacheWriteTokens,
-      rawTokens: reportedTotal || inputTokens + outputTokens + reasoningTokens,
+      rawTokens: reportedTotal || (completeBreakdown ? inputTokens + outputTokens + reasoningTokens : 0),
       providerCostUsd: finiteNumber(info.cost),
     });
   }
@@ -278,7 +282,11 @@ function modelUsageRequestMessages(value: unknown, sessionId: string): ModelUsag
   const requests: ModelUsageAssistantMessage[] = [];
   for (const group of groups.values()) {
     const last = group.at(-1);
-    if (!last?.terminal) continue;
+    // OpenCode initializes counters to zero; some providers leave them that
+    // way on Stop even after visible output. Keep the full reservation pending
+    // until every step has usage, including missing-token steps retained above.
+    // Do not substitute an earlier tool step's usage for an unknown final step.
+    if (!last?.terminal || group.some((message) => message.rawTokens === 0)) continue;
     const total = { ...last, createdAt: group[0]!.createdAt };
     for (const field of ["inputTokens", "outputTokens", "reasoningTokens", "cacheReadTokens", "cacheWriteTokens", "rawTokens", "providerCostUsd"] as const) {
       total[field] = group.reduce((sum, message) => sum + message[field], 0);
