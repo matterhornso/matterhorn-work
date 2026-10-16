@@ -10,6 +10,7 @@ import {
 import {
   Cloud,
   Edit2,
+  Eye,
   FolderOpen,
   Loader2,
   Package,
@@ -621,7 +622,7 @@ export function SkillsView(props: SkillsViewProps) {
 
   const openShareLink = useCallback(
     (skill: SkillCard) => {
-      if (props.busy) return;
+      if (props.busy || skill.builtin) return;
       dispatchLocal({ type: "openShare", skill });
     },
     [props.busy],
@@ -685,7 +686,7 @@ export function SkillsView(props: SkillsViewProps) {
   );
 
   const saveSelectedSkill = useCallback(async () => {
-    if (!selectedSkill || !selectedDirty) return;
+    if (!selectedSkill || selectedSkill.builtin || !selectedDirty) return;
     setSelectedError(null);
     try {
       await Promise.resolve(
@@ -841,7 +842,7 @@ export function SkillsView(props: SkillsViewProps) {
       ) : null}
       {!props.accessHint && !props.canInstallSkillCreator && !props.canUseDesktopTools ? (
         <div className="rounded-lg border border-dls-border bg-dls-hover px-5 py-4 text-[13px] text-dls-secondary">
-          {t("skills.host_mode_only")}
+          {t(skills.some((skill) => skill.builtin) ? "skills.builtin_available" : "skills.host_mode_only")}
         </div>
       ) : null}
 
@@ -893,9 +894,9 @@ export function SkillsView(props: SkillsViewProps) {
                     </div>
 
                     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-dls-border pt-4">
-                      <span className={tagClass}>{t("skills.installed_status")}</span>
+                      <span className={tagClass}>{t(skill.builtin ? "skills.builtin_status" : "skills.installed_status")}</span>
                       <div className="flex flex-wrap gap-2">
-                        <button
+                        {!skill.builtin ? <button
                           type="button"
                           className={pillGhostClass}
                           onClick={(event) => {
@@ -908,7 +909,7 @@ export function SkillsView(props: SkillsViewProps) {
                         >
                           <Users size={14} />
                           {t("skills.share_option_team_title")}
-                        </button>
+                        </button> : null}
                         <button
                           type="button"
                           className={pillSecondaryClass}
@@ -918,12 +919,12 @@ export function SkillsView(props: SkillsViewProps) {
                             void openSkill(skill);
                           }}
                           disabled={props.busy}
-                          title={t("common.edit")}
+                          title={t(skill.builtin ? "skills.view_guidance" : "common.edit")}
                         >
-                          <Edit2 size={14} />
-                          {t("common.edit")}
+                          {skill.builtin ? <Eye size={14} /> : <Edit2 size={14} />}
+                          {t(skill.builtin ? "skills.view_guidance" : "common.edit")}
                         </button>
-                        <button
+                        {!skill.builtin ? <button
                           type="button"
                           className={pillGhostClass}
                           onClick={(event) => {
@@ -940,7 +941,7 @@ export function SkillsView(props: SkillsViewProps) {
                         >
                           <Trash2 size={14} />
                           {t("common.remove")}
-                        </button>
+                        </button> : null}
                       </div>
                     </div>
                   </div>
@@ -1218,7 +1219,7 @@ export function SkillsView(props: SkillsViewProps) {
             <DialogHeader>
               <div className="flex min-w-0 items-center gap-3">
                 <DialogTitle className="min-w-0 flex-1 truncate">{selectedSkill?.name}</DialogTitle>
-                <div className="flex items-center gap-2">
+                {!selectedSkill?.builtin ? <div className="flex items-center gap-2">
                   <Button
                     type="button"
                     disabled={!selectedDirty || props.busy}
@@ -1226,8 +1227,11 @@ export function SkillsView(props: SkillsViewProps) {
                   >
                     {t("common.save")}
                   </Button>
-                </div>
+                </div> : null}
               </div>
+              {selectedSkill?.builtin ? <DialogDescription>
+                {t("skills.builtin_readonly")} {t("skills.builtin_description")}
+              </DialogDescription> : null}
             </DialogHeader>
 
             <div className="min-h-0 flex-1 overflow-y-auto">
@@ -1236,8 +1240,11 @@ export function SkillsView(props: SkillsViewProps) {
                 <div className="text-xs text-dls-secondary">{t("skills.loading")}</div>
               ) : (
                 <textarea
+                  aria-label={t("skills.content_label")}
+                  readOnly={selectedSkill?.builtin === true}
                   value={selectedContent}
                   onChange={(event) => {
+                    if (selectedSkill?.builtin) return;
                     setSelectedContent(event.currentTarget.value);
                     setSelectedDirty(true);
                   }}
@@ -1260,7 +1267,7 @@ export function SkillsView(props: SkillsViewProps) {
         onConfirm={() => {
           const target = uninstallTarget;
           setUninstallTarget(null);
-          if (!target) return;
+          if (!target || target.builtin) return;
           void extensions.uninstallSkill(target.name);
         }}
       />

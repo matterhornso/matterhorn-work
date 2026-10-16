@@ -1,4 +1,4 @@
-import { readdir, readFile, writeFile, mkdir, rm } from "node:fs/promises";
+import { readdir, readFile, writeFile, mkdir, rm, lstat } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import { join, resolve } from "node:path";
 import { homedir } from "node:os";
@@ -8,6 +8,7 @@ import { exists } from "./utils.js";
 import { validateDescription, validateSkillName } from "./validators.js";
 import { ApiError } from "./errors.js";
 import { projectSkillsDir } from "./workspace-files.js";
+import { listBuiltinWorkspaceSkills, MATTERHORN_BUILTIN_SKILL_PREFIX, readBuiltinWorkspaceSkill } from "./builtin-skill-catalog.js";
 
 async function findWorkspaceRoots(workspaceRoot: string): Promise<string[]> {
   const roots: string[] = [];
@@ -144,12 +145,64 @@ export async function listSkills(workspaceRoot: string, includeGlobal: boolean):
     items.push(...(await listSkillsInDir(globalAgentLegacy, "global")));
   }
 
+  // Built-ins are immutable release documents, never written into user-owned
+  // workspace paths. Existing workspace/global copies retain precedence.
+  items.push(...listBuiltinWorkspaceSkills());
   const seen = new Set<string>();
   return items.filter((item) => {
     if (seen.has(item.name)) return false;
     seen.add(item.name);
     return true;
   });
+}
+
+export async function readSkillContent(item: SkillItem): Promise<string> {
+  if (item.builtin === true || item.path.startsWith(MATTERHORN_BUILTIN_SKILL_PREFIX)) {
+    const content = readBuiltinWorkspaceSkill(item);
+    if (content === null) throw new ApiError(404, "skill_not_found", "Built-in skill not found");
+    return content;
+  }
+  return readFile(item.path, "utf8");
+}
+
+/** A virtual document is not a new writable workspace file. Existing user
+ * copies retain their prior edit/delete lifecycle and never change policy. */
+async function assertMutableSkillCopy(
+  workspaceRoot: string,
+  name: string,
+  options: { allowDiscoveredCopy?: boolean } = {},
+): Promise<void> {
+  if (!listBuiltinWorkspaceSkills().some((item) => item.name === name)) return;
+  let localCopyAbsent = false;
+  try {
+    const path = join(projectSkillsDir(workspaceRoot), name, "SKILL.md");
+    const stat = await lstat(path);
+    if (stat.isFile() && !stat.isSymbolicLink()) return;
+  } catch (error) {
+    // An absent or unreadable file cannot turn immutable guidance into a
+    // writable workspace entry.
+    localCopyAbsent = error instanceof Error && "code" in error && error.code === "ENOENT";
+  }
+  if (options.allowDiscoveredCopy && localCopyAbsent) {
+    // Editing a discovered custom skill has always saved a workspace-local
+    // copy. Never write back to its legacy, ancestor or global source path.
+    let localDestination = true;
+    for (const path of [
+      join(workspaceRoot, ".opencode"),
+      projectSkillsDir(workspaceRoot),
+      join(projectSkillsDir(workspaceRoot), name),
+    ]) {
+      try {
+        const stat = await lstat(path);
+        if (!stat.isDirectory() || stat.isSymbolicLink()) localDestination = false;
+      } catch (error) {
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) localDestination = false;
+      }
+      if (!localDestination) break;
+    }
+    if (localDestination && (await listSkills(workspaceRoot, true)).some((item) => item.name === name && !item.builtin)) return;
+  }
+  throw new ApiError(409, "builtin_skill_read_only", "Built-in guidance is read-only. Create a separately named workspace skill to customize your workflow.");
 }
 
 export type UpsertSkillPayload = {
@@ -198,7 +251,24 @@ export async function upsertSkill(
   payload: UpsertSkillPayload,
 ): Promise<{ path: string; action: "added" | "updated" }> {
   const skill = buildSkillContent(payload);
+  await assertMutableSkillCopy(workspaceRoot, skill.name, { allowDiscoveredCopy: true });
+  return writeWorkspaceSkill(workspaceRoot, skill);
+}
 
+/** Only the authenticated, approved, fingerprint-checked workspace import
+ * flow may restore a user-owned copy under a built-in name. This file remains
+ * untrusted workspace content; it never replaces canonical desk guidance. */
+export async function importWorkspaceSkill(
+  workspaceRoot: string,
+  payload: UpsertSkillPayload,
+): Promise<{ path: string; action: "added" | "updated" }> {
+  return writeWorkspaceSkill(workspaceRoot, buildSkillContent(payload));
+}
+
+async function writeWorkspaceSkill(
+  workspaceRoot: string,
+  skill: { name: string; content: string },
+): Promise<{ path: string; action: "added" | "updated" }> {
   const baseDir = projectSkillsDir(workspaceRoot);
   const skillDir = join(baseDir, skill.name);
   await mkdir(skillDir, { recursive: true });
@@ -211,6 +281,7 @@ export async function upsertSkill(
 export async function deleteSkill(workspaceRoot: string, name: string): Promise<{ path: string }> {
   const trimmed = name.trim();
   validateSkillName(trimmed);
+  await assertMutableSkillCopy(workspaceRoot, trimmed);
   const baseDir = projectSkillsDir(workspaceRoot);
   const skillDir = join(baseDir, trimmed);
   const skillPath = join(skillDir, "SKILL.md");

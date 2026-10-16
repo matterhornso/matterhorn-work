@@ -118,6 +118,55 @@ function renderReceipt(receipt: MatterhornAgentRunReceipt): string {
 }
 
 describe("plain-language response details", () => {
+  test.each(["cancelled", "error", "partial", "pending", "success"] satisfies MatterhornAgentRunReceipt["status"][])(
+    "does not present ambiguous zero counters as free usage in a %s receipt", (status) => {
+      const html = renderReceipt({
+        ...completedReceipt,
+        status,
+        usage: { ...completedReceipt.usage, inputTokens: 0, outputTokens: 0, reasoningTokens: 0,
+          cacheReadTokens: 0, cacheWriteTokens: 0, estimatedCostUsd: 0 },
+      });
+      expect(html).toContain("Tokens unavailable");
+      expect(html).toContain("Token usage is unavailable for this response.");
+      expect(html).toContain("Cost unavailable");
+      expect(html).toContain("Cache usage unavailable");
+      expect(html).not.toContain("0 tokens");
+      expect(html).not.toContain("0 input tokens");
+      expect(html).not.toContain("0 answer tokens");
+      expect(html).not.toContain("Estimated cost $0.0000");
+      expect(html).not.toContain("reservation");
+    },
+  );
+
+  test("preserves reported nonzero usage on cancelled receipts", () => {
+    const html = renderReceipt({ ...completedReceipt, status: "cancelled" });
+    expect(html).toContain("Cancelled");
+    expect(html).toContain("205 tokens");
+    expect(html).toContain("120 input tokens · 30 answer tokens");
+    expect(html).toContain("Estimated cost $0.0025");
+    expect(html).not.toContain("Tokens unavailable");
+  });
+
+  test("reported tokens do not establish that a zero cost was reported", () => {
+    const html = renderReceipt({
+      ...completedReceipt, usage: { ...completedReceipt.usage, estimatedCostUsd: 0 },
+    });
+    expect(html).toContain("205 tokens");
+    expect(html).toContain("Cost unavailable");
+    expect(html).not.toContain("Estimated cost $0.0000");
+  });
+
+  test("keeps a reported positive cost even when token counters are unavailable", () => {
+    const html = renderReceipt({
+      ...completedReceipt,
+      usage: { ...completedReceipt.usage, inputTokens: 0, outputTokens: 0, reasoningTokens: 0,
+        cacheReadTokens: 0, cacheWriteTokens: 0 },
+    });
+    expect(html).toContain("Tokens unavailable");
+    expect(html).toContain("Estimated cost $0.0025");
+    expect(html).not.toContain("Cost unavailable");
+  });
+
   test("includes cache reads and writes in the same total as provider usage", () => {
     const html = renderReceipt({ ...completedReceipt, usage: {
       ...completedReceipt.usage, inputTokens: 100, outputTokens: 20, reasoningTokens: 5,

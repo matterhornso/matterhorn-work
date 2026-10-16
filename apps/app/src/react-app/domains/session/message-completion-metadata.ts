@@ -40,15 +40,18 @@ function tokenCount(tokens: RecordValue | null) {
   const explicitTotal = finiteNonNegativeNumber(tokens.total);
   if (explicitTotal !== null) return explicitTotal;
 
-  const values = [tokens.input, tokens.output, tokens.reasoning]
-    .map(finiteNonNegativeNumber)
-    .filter((value): value is number => value !== null);
-  if (!values.length) return null;
-  return values.reduce((total, value) => total + value, 0);
+  const input = finiteNonNegativeNumber(tokens.input);
+  const output = finiteNonNegativeNumber(tokens.output);
+  const reasoning = tokens.reasoning === undefined ? 0 : finiteNonNegativeNumber(tokens.reasoning);
+  if (input === null || output === null || reasoning === null) return null;
+  const total = input + output + reasoning;
+  // OpenCode initializes these counters to zero, including when Stop leaves
+  // a partial answer without provider usage. They are not a reported zero.
+  return total > 0 ? total : null;
 }
 
 function tokenBreakdown(tokens: RecordValue | null) {
-  if (!tokens) return "Token usage was not reported by the selected model provider.";
+  if (!tokens) return "Token usage is unavailable for this response.";
   const input = finiteNonNegativeNumber(tokens.input);
   const output = finiteNonNegativeNumber(tokens.output);
   const reasoning = finiteNonNegativeNumber(tokens.reasoning);
@@ -61,9 +64,11 @@ function tokenBreakdown(tokens: RecordValue | null) {
   if (reasoning !== null && reasoning > 0) parts.push(`${reasoning.toLocaleString()} reasoning`);
   if (cacheRead !== null && cacheRead > 0) parts.push(`${cacheRead.toLocaleString()} cache read`);
   if (cacheWrite !== null && cacheWrite > 0) parts.push(`${cacheWrite.toLocaleString()} cache write`);
+  const total = finiteNonNegativeNumber(tokens.total);
+  if (!parts.length && total !== null) parts.push(`${total.toLocaleString()} total tokens`);
   return parts.length
     ? `Provider-reported usage: ${parts.join(", ")}.`
-    : "Token usage was not reported by the selected model provider.";
+    : "Token usage is unavailable for this response.";
 }
 
 function formatDuration(milliseconds: number) {
@@ -171,7 +176,7 @@ export function buildOpenCodeMessageMetadata(info: unknown): UIMessage["metadata
   const completed = finiteNonNegativeNumber(time?.completed);
   const sourceTokens = isRecord(info.tokens) ? info.tokens : null;
   const cache = sourceTokens && isRecord(sourceTokens.cache) ? sourceTokens.cache : null;
-  const tokens = sourceTokens
+  const tokens = sourceTokens && tokenCount(sourceTokens) !== null
     ? {
         ...(finiteNonNegativeNumber(sourceTokens.total) !== null ? { total: finiteNonNegativeNumber(sourceTokens.total) } : {}),
         ...(finiteNonNegativeNumber(sourceTokens.input) !== null ? { input: finiteNonNegativeNumber(sourceTokens.input) } : {}),
@@ -200,8 +205,13 @@ export function buildOpenCodeMessageMetadata(info: unknown): UIMessage["metadata
 
 export function responseCompletionSummary(message: UIMessage): ResponseCompletionSummary {
   const metadata = opencodeMetadata(message);
-  const tokens = metadata && isRecord(metadata.tokens) ? metadata.tokens : null;
-  const totalTokens = tokenCount(tokens);
+  const sourceTokens = metadata && isRecord(metadata.tokens) ? metadata.tokens : null;
+  const reportedTokens = tokenCount(sourceTokens);
+  // Even an explicit zero can be a placeholder on an interrupted request.
+  // A verified, non-error finish is needed before presenting zero as usage.
+  const verifiedFinish = ["stop", "length", "tool-calls", "content-filter"].includes(String(metadata?.finish));
+  const totalTokens = reportedTokens === 0 && (metadata?.errorName || !verifiedFinish) ? null : reportedTokens;
+  const tokens = totalTokens === null ? null : sourceTokens;
   const created = finiteNonNegativeNumber(metadata?.created);
   const completed = finiteNonNegativeNumber(metadata?.completed);
   const duration = created !== null && completed !== null && completed >= created

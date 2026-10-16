@@ -15,6 +15,16 @@ const PUBLIC_BETA_PROTOCOL_DESKS: CustomerProtocolDeskId[] = [
 ];
 
 describe("public Beta desk surfaces", () => {
+  test("Sui chat advertises only its supported public balance workflow", () => {
+    const visual = getCustomerProtocolDeskVisualForLaunch("sui", false);
+    expect(visual?.shortDescription).toContain("balance");
+    expect(visual?.primaryActions.map((action) => action.actionId)).toEqual(["read_account_context"]);
+    expect(visual?.primaryActions[0]?.intent).toContain("supplied public Sui address");
+    expect(visual?.secondaryActions.map((action) => action.actionId)).toEqual(["save_public_evidence"]);
+    expect(visual?.safetySummary).toContain("not available in this chat");
+    expect(visual?.capabilityBullets.join(" ")).not.toMatch(/object|checkpoint|history|transaction/i);
+  });
+
   test("uses wallet-reviewed capability copy when the transactional launch flag is enabled", () => {
     const expectedStatus = new Map<CustomerProtocolDeskId, string>([
       ["bittensor", "Review in wallet"],

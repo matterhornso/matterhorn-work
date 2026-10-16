@@ -129,6 +129,12 @@ function walletSummary(receipt: MatterhornAgentRunReceipt): string {
 export function AgentRunReceiptDisclosure({ receipt }: { receipt: MatterhornAgentRunReceipt }) {
   const totalTokens = receipt.usage.inputTokens + receipt.usage.outputTokens + receipt.usage.reasoningTokens
     + receipt.usage.cacheReadTokens + receipt.usage.cacheWriteTokens;
+  // Legacy receipts initialize all counters to zero and do not record whether
+  // the provider reported usage. Zero alone cannot establish a free request.
+  const hasTokenUsage = totalTokens > 0;
+  const costLabel = receipt.usage.estimatedCostUsd > 0
+    ? `Estimated cost $${receipt.usage.estimatedCostUsd.toFixed(4)}`
+    : "Cost unavailable";
   const capabilityDenials = receipt.capabilities.filter((decision) => decision.decision === "denied").length;
   const contextLabel = selectedContextLabel(receipt);
   const focusedContext = focusedContextLabel(receipt);
@@ -149,7 +155,7 @@ export function AgentRunReceiptDisclosure({ receipt }: { receipt: MatterhornAgen
         <span className="flex min-w-0 flex-wrap gap-x-3 gap-y-1 tabular-nums">
           <span>{receiptStatusLabel(receipt.status)}</span>
           <span>{receiptDuration(receipt)}</span>
-          <span>{plural(totalTokens, "token")}</span>
+          <span>{hasTokenUsage ? plural(totalTokens, "token") : "Tokens unavailable"}</span>
         </span>
       </summary>
 
@@ -194,9 +200,11 @@ export function AgentRunReceiptDisclosure({ receipt }: { receipt: MatterhornAgen
         <section aria-labelledby={`receipt-${receipt.id}-usage`}>
           <h3 id={`receipt-${receipt.id}-usage`} className="font-medium text-dls-text">Time and usage</h3>
           <div className="mt-1 space-y-1 leading-5 tabular-nums">
-            <p>{plural(receipt.usage.inputTokens, "input token")} · {plural(receipt.usage.outputTokens, "answer token")}</p>
+            <p>{hasTokenUsage
+              ? `${plural(receipt.usage.inputTokens, "input token")} · ${plural(receipt.usage.outputTokens, "answer token")}`
+              : "Token usage is unavailable for this response."}</p>
             {receipt.usage.reasoningTokens > 0 ? <p>{plural(receipt.usage.reasoningTokens, "reasoning token")}</p> : null}
-            <p>Response time: {receiptDuration(receipt)} · Estimated cost ${receipt.usage.estimatedCostUsd.toFixed(4)}</p>
+            <p>Response time: {receiptDuration(receipt)} · {costLabel}</p>
             <p>
               Run limit: up to {plural(receipt.usage.toolCallBudget.reads, "app lookup")} and {plural(receipt.usage.toolCallBudget.preparesPerFamily, "wallet draft")} per action type. Sending transactions was disabled.
             </p>
@@ -237,7 +245,9 @@ export function AgentRunReceiptDisclosure({ receipt }: { receipt: MatterhornAgen
             <p className="font-medium text-dls-text">Request and storage</p>
             <p className="mt-1 break-all">Request proof: {receipt.privacy.requestHash ?? "Unavailable for this older response"}</p>
             <p className="break-all">Receipt proof: {receipt.integrity.recordHash}</p>
-            <p>Cache: {plural(receipt.usage.cacheReadTokens, "token")} read · {plural(receipt.usage.cacheWriteTokens, "token")} written</p>
+            <p>{hasTokenUsage
+              ? `Cache: ${plural(receipt.usage.cacheReadTokens, "token")} read · ${plural(receipt.usage.cacheWriteTokens, "token")} written`
+              : "Cache usage unavailable"}</p>
             {receipt.contextOptimization ? (
               <p>
                 Context compiler: {receipt.contextOptimization.compilerVersion} · {receipt.contextOptimization.systemChars.toLocaleString()} characters · {receipt.contextOptimization.activeToolSchemaChars.toLocaleString()} of {receipt.contextOptimization.availableToolSchemaChars.toLocaleString()} crypto-tool schema characters
