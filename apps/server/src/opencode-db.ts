@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomInt } from "node:crypto";
 import { createRequire } from "node:module";
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
@@ -347,12 +347,11 @@ function findOpencodeSessionDbPath(sessionId: string, inputPath?: string): strin
   return null;
 }
 
-function randomBase62(length: number): string {
+export function randomBase62(length: number, randomIndex: (max: number) => number = randomInt): string {
   const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-  const bytes = randomBytes(length);
   let output = "";
   for (let index = 0; index < length; index += 1) {
-    output += chars[bytes[index]! % 62];
+    output += chars[randomIndex(chars.length)];
   }
   return output;
 }

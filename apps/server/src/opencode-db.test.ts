@@ -5,7 +5,24 @@ import { join } from "node:path";
 
 import { Database } from "bun:sqlite";
 
-import { resolveOpencodeDbPath, seedOpencodeSessionMessages } from "./opencode-db.js";
+import { randomBase62, resolveOpencodeDbPath, seedOpencodeSessionMessages } from "./opencode-db.js";
+
+describe("randomBase62", () => {
+  test("samples each character directly from the full 62-symbol range", () => {
+    let index = 0;
+    const result = randomBase62(62, (max) => {
+      expect(max).toBe(62);
+      return index++;
+    });
+    expect(result).toBe("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz");
+    expect(index).toBe(62);
+  });
+
+  test("retains the message and part ID suffix shape with the crypto sampler", () => {
+    expect(randomBase62(14)).toMatch(/^[0-9A-Za-z]{14}$/);
+    expect(randomBase62(0)).toBe("");
+  });
+});
 
 async function createDb(): Promise<{ path: string; dispose: () => void }> {
   const dir = await mkdtemp(join(tmpdir(), "openwork-opencode-db-"));
@@ -69,6 +86,7 @@ describe("seedOpencodeSessionMessages", () => {
     db.close();
 
     const decoded = rows.map((row) => JSON.parse(row.data) as Record<string, unknown>);
+    expect(rows.every((row) => /^msg_[0-9a-f]{12}[0-9A-Za-z]{14}$/.test(row.id))).toBe(true);
     expect(decoded[0]?.role).toBe("assistant");
     expect(decoded[0]?.parentID).toBe(rows[0]?.id);
     expect(decoded[0]?.modelID).toBe("gpt-5.4");

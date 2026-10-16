@@ -1,15 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { TokenService } from "./tokens.js";
 import type { ServerConfig } from "./types.js";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-function createTestConfig(): ServerConfig {
-  const tempDir = join(
-    tmpdir(),
-    `openwork-token-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-  );
+function createTestConfig(tempDir: string): ServerConfig {
   return {
     host: "127.0.0.1",
     port: 8787,
@@ -32,14 +28,23 @@ function createTestConfig(): ServerConfig {
 describe("TokenService", () => {
   let service: TokenService;
   let config: ServerConfig;
+  let tempRoot: string | undefined;
 
-  beforeEach(() => {
-    config = createTestConfig();
+  beforeEach(async () => {
+    tempRoot = await mkdtemp(join(tmpdir(), "openwork-token-test-"));
+    config = createTestConfig(join(tempRoot, "store"));
     service = new TokenService(config);
   });
 
   afterEach(async () => {
-    await rm(dirname(config.configPath ?? ""), { recursive: true, force: true });
+    if (tempRoot) await rm(tempRoot, { recursive: true, force: true });
+    tempRoot = undefined;
+  });
+
+  test("keeps token fixtures and failure paths inside a private temporary directory", async () => {
+    if (!tempRoot || !config.configPath) throw new Error("Token fixture was not initialized");
+    expect(dirname(dirname(config.configPath))).toBe(tempRoot);
+    if (process.platform !== "win32") expect((await stat(tempRoot)).mode & 0o777).toBe(0o700);
   });
 
   test("starts with empty token list", async () => {

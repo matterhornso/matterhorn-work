@@ -18,6 +18,7 @@ import {
   type TelegramIdentity,
 } from "./config.js";
 import { BridgeStore } from "./db.js";
+import { setConfigPathValue } from "./config-path.js";
 import { createLogger } from "./logger.js";
 import { createClient } from "./opencode.js";
 import { parseSlackPeerId } from "./slack.js";
@@ -319,18 +320,7 @@ configCmd
       }
     })();
 
-    const updated = updateConfig(config.configPath, (cfg) => {
-      const next: any = { ...cfg };
-      const keys = key.split(".");
-      let cur: any = next;
-      for (let i = 0; i < keys.length - 1; i++) {
-        const k = keys[i];
-        if (cur[k] === undefined || cur[k] === null || typeof cur[k] !== "object") cur[k] = {};
-        cur = cur[k];
-      }
-      cur[keys[keys.length - 1]] = parsed;
-      return next as OpenCodeRouterConfigFile;
-    });
+    const updated = updateConfig(config.configPath, (cfg) => setConfigPathValue(cfg, key, parsed));
 
     if (useJson) outputJson({ success: true, key, value: parsed, config: updated });
     else console.log(`Set ${key} = ${JSON.stringify(parsed)}`);

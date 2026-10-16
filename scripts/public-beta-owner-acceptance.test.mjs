@@ -7,6 +7,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -392,6 +393,14 @@ try {
   };
 
   const passing = run(baseInput);
+  const linkedReport = join(reportsDir, "linked-candidate.json");
+  symlinkSync(baseInput.reports.candidate, linkedReport);
+  const symbolicReport = run({ ...baseInput, reports: { ...baseInput.reports, candidate: linkedReport } });
+  assert.equal(symbolicReport.status, 1);
+  assert.match(symbolicReport.stderr, /ELOOP|symbolic link/i);
+  const directoryReport = run({ ...baseInput, reports: { ...baseInput.reports, candidate: reportsDir } });
+  assert.equal(directoryReport.status, 1);
+  assert.match(directoryReport.stderr, /regular file/i);
   assert.equal(passing.status, 0, passing.stderr || passing.stdout);
   const passingReport = JSON.parse(passing.stdout);
   assert.equal(passingReport.decision, "GO");

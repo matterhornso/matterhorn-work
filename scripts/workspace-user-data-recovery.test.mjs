@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, createCipheriv, scryptSync } from "node:crypto";
-import { existsSync, readFileSync, rmSync, writeFileSync, mkdirSync, mkdtempSync, symlinkSync, truncateSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync, mkdirSync, mkdtempSync, symlinkSync, truncateSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
@@ -20,6 +20,8 @@ const backupReport = join(root, "backup-report.json");
 const restoreReport = join(root, "restore-report.json");
 const tenantArchive = join(root, "matterhorn-workspace-ws_test.json.gz");
 const passphrase = "test-only-recovery-passphrase-32-characters";
+const privateTemp = join(root, "temporary");
+mkdirSync(privateTemp, { mode: 0o700 });
 
 function write(relativePath, content) {
   const target = join(workspace, relativePath);
@@ -31,7 +33,7 @@ function run(args, envPassphrase = passphrase) {
   return new Promise((resolve) => {
     const child = spawn("node", [script, ...args], {
       cwd: process.cwd(),
-      env: { ...process.env, MATTERHORN_BACKUP_PASSPHRASE: envPassphrase },
+      env: { ...process.env, TMPDIR: privateTemp, MATTERHORN_BACKUP_PASSPHRASE: envPassphrase },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -279,6 +281,8 @@ try {
   assert.match(unsafeCliSecret.stderr, /environment variable/i);
   assert.doesNotMatch(readFileSync(backupReport, "utf8"), new RegExp(passphrase));
   assert.doesNotMatch(readFileSync(restoreReport, "utf8"), new RegExp(passphrase));
+  assert.deepEqual(readdirSync(privateTemp), [], "successful and failed operations remove their private temporary directories");
+  assert.ok(readdirSync(root).every(name => !name.includes(".backup-") && !name.includes(".restore-")));
 } finally {
   rmSync(root, { recursive: true, force: true });
 }

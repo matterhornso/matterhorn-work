@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const FORBIDDEN_ROUTE_RE = /\/api\/(?:hyperliquid|polymarket)\/orders\/(?:submit|sign)|\/orders\/submit|\/orders\/sign|\/exchange\/submit/i;
@@ -20,7 +21,7 @@ const CONTROLLED_BETA_FAILED_STAGE_IDS = new Set([
 
 function parseArgs(argv) {
   const args = {
-    outputDir: "/tmp/matterhorn-monday-beta-rc",
+    outputDir: "",
     artifactDir: "",
     serverUrl: process.env.MATTERHORN_WORK_SERVER_URL || "",
     token: process.env.MATTERHORN_WORK_TOKEN || "",
@@ -132,6 +133,7 @@ function help() {
     "  pnpm --silent beta:monday-rc -- --output-dir /tmp/matterhorn-launch-rc --server-url <backend-url> --token <client-token> --workspace-id <workspace-id> --app-url <deployed-app-url> --bittensor-beta-gate <json> --customer-ready-smoke <json> --bittensor-evidence-verify <json> --bittensor-browser-qa <md> --strict --json",
     "",
     "The pack is evidence-oriented. It never signs, submits, custodies, broadcasts, accepts keys, or touches real funds.",
+    "Without --output-dir, outputs are retained in a new private temporary directory shown in the report.",
     "",
   ].join("\n");
 }
@@ -519,7 +521,7 @@ if (config.help) {
   process.exit(0);
 }
 
-const outputDir = resolve(config.outputDir);
+const outputDir = config.outputDir ? resolve(config.outputDir) : mkdtempSync(join(tmpdir(), "matterhorn-monday-beta-rc-"));
 const { artifactDir, desktopDoctorMarkdown, stages } = buildStages({ ...config, outputDir });
 mkdirSync(outputDir, { recursive: true });
 

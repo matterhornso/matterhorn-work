@@ -463,13 +463,18 @@ async function googleWorkspaceCreateDraft(config: ServerConfig, args: Record<str
   });
 }
 
+export function googleDriveSearchQuery(query: string): string {
+  const literal = query.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  return `name contains '${literal}' and trashed = false`;
+}
+
 async function googleWorkspaceSearchFiles(config: ServerConfig, args: Record<string, unknown>) {
   const query = readStringField(args, "query");
   if (!query) throw new ApiError(400, "invalid_payload", "query is required");
   const maxResults = Math.min(Math.max(Number(args.maxResults ?? 10), 1), 50);
   const { accessToken } = await googleWorkspaceAccessToken(config);
   const url = new URL("https://www.googleapis.com/drive/v3/files");
-  url.searchParams.set("q", `name contains '${query.replace(/'/g, "\\'")}' and trashed = false`);
+  url.searchParams.set("q", googleDriveSearchQuery(query));
   url.searchParams.set("pageSize", String(maxResults));
   url.searchParams.set("fields", "files(id,name,mimeType,webViewLink,modifiedTime,size)");
   return fetchGoogleJson(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });

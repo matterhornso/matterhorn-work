@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
 import { createServer } from "node:http";
 import net from "node:net";
-import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import {
   cp,
   mkdir,
@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 
 import { app, BrowserWindow, Menu, WebContentsView, clipboard, dialog, ipcMain, nativeImage, nativeTheme, session, shell } from "electron";
 import { registerMigrationIpc } from "./migration.mjs";
+import { writeMigrationFile, writeMigrationFileSync } from "./migration-write.mjs";
 import { createRuntimeManager } from "./runtime.mjs";
 import { registerUpdaterIpc } from "./updater.mjs";
 import { exportWorkspaceConfig, importWorkspaceConfig } from "./workspace-archive.mjs";
@@ -257,7 +258,7 @@ function migrateLegacyUserDataIdentityIfNeeded() {
       }
     }
 
-    writeFileSync(
+    const markerWritten = writeMigrationFileSync(
       migrationMarker,
       `${JSON.stringify({
         version: 1,
@@ -266,8 +267,8 @@ function migrateLegacyUserDataIdentityIfNeeded() {
         copiedEntries,
         migratedAt: new Date().toISOString(),
       }, null, 2)}\n`,
-      { encoding: "utf8", mode: 0o600 },
     );
+    if (!markerWritten) return;
     if (status === "copied") {
       console.info(`[migration] copied local Matterhorn state from ${sourceIdentifier}`);
     }
@@ -1584,7 +1585,7 @@ async function migrateLegacyElectronWorkspaceStateIfNeeded() {
     if (!existsSync(legacy)) return false;
     await mkdir(path.dirname(current), { recursive: true });
     const raw = await readFile(legacy, "utf8");
-    await writeFile(current, raw, "utf8");
+    if (!await writeMigrationFile(current, raw)) return false;
     console.info(
       "[migration] copied workspace-state.json → openwork-workspaces.json",
     );

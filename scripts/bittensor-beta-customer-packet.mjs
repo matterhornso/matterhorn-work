@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { execFileSync } from "node:child_process";
 
@@ -40,7 +41,7 @@ function flag(name) {
 }
 
 const config = {
-  outputDir: arg("--output-dir", "/tmp/matterhorn-bittensor-beta-rc"),
+  outputDir: arg("--output-dir"),
   betaGate: arg("--beta-gate"),
   customerReadySmoke: arg("--customer-ready-smoke"),
   bittensorEvidenceVerify: arg("--bittensor-evidence-verify"),
@@ -55,6 +56,7 @@ const config = {
 function usage() {
   return [
     "Matterhorn Desks Bittensor beta customer packet",
+    "Without --output-dir, outputs are retained in a new private temporary directory shown in the report.",
     "",
     "Usage:",
     "  node scripts/bittensor-beta-customer-packet.mjs --output-dir /tmp/matterhorn-bittensor-beta-rc --fixture --json",
@@ -329,6 +331,7 @@ async function main() {
     throw new Error("--beta-gate is required unless --fixture is set.");
   }
 
+  if (!config.outputDir) config.outputDir = await mkdtemp(join(tmpdir(), "matterhorn-bittensor-beta-rc-"));
   await mkdir(config.outputDir, { recursive: true });
   const betaGateRaw = config.fixture && !config.betaGate ? fixtureBetaGate() : await readJson(config.betaGate, "Bittensor beta gate");
   const customerSmokeRaw = await readJson(config.customerReadySmoke, "Customer-ready crypto smoke");

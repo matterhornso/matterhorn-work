@@ -4,13 +4,12 @@ import { execFileSync, spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
-  readFileSync,
-  statSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
+import { readReleaseFileSnapshot } from "./lib/release-file-snapshot.mjs";
 
 const INPUT_VERSION = "matterhorn.public-beta-owner-acceptance-input.v1";
 const REPORT_VERSION = "matterhorn.public-beta-owner-acceptance.v1";
@@ -154,8 +153,8 @@ function evidenceReference(reference, bases) {
   const value = String(reference).trim();
   if (safeHttpsUrl(value)) return { ok: true, display: value };
   const path = resolveLocalPath(value, bases);
-  const ok = existsSync(path) && statSync(path).isFile() && statSync(path).size > 0;
-  return { ok, display: value };
+  try { return { ok: readReleaseFileSnapshot(path).buffer.length > 0, display: value }; }
+  catch { return { ok: false, display: value }; }
 }
 
 function evidenceDigestMatches(reference, digest, bases) {
@@ -164,7 +163,7 @@ function evidenceDigestMatches(reference, digest, bases) {
   if (safeHttpsUrl(value)) return false;
   const path = resolveLocalPath(value, bases);
   try {
-    const source = readFileSync(path);
+    const source = readReleaseFileSnapshot(path).buffer;
     return source.length > 0 && sha256(source) === digest.toLowerCase();
   } catch {
     return false;
@@ -174,10 +173,7 @@ function evidenceDigestMatches(reference, digest, bases) {
 function readJsonReference(label, reference, bases) {
   if (!present(reference)) throw new Error(`${label} report path is required.`);
   const path = resolveLocalPath(String(reference).trim(), bases);
-  if (!existsSync(path) || !statSync(path).isFile()) {
-    throw new Error(`${label} report does not exist: ${reference}`);
-  }
-  const source = readFileSync(path, "utf8");
+  const source = readReleaseFileSnapshot(path).buffer.toString("utf8");
   const value = JSON.parse(source);
   rejectSecrets(value, label);
   return { path, source, value };
@@ -272,7 +268,7 @@ function evaluate(config) {
   const repoRoot = resolve(config.repoRoot);
   const inputPath = resolve(config.input);
   const inputDir = dirname(inputPath);
-  const input = JSON.parse(readFileSync(inputPath, "utf8"));
+  const input = JSON.parse(readReleaseFileSnapshot(inputPath).buffer.toString("utf8"));
   rejectSecrets(input);
   if (input.version !== INPUT_VERSION) {
     throw new Error(`Input version must be ${INPUT_VERSION}.`);

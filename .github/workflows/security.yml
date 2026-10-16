@@ -113,3 +113,19 @@ jobs:
         run: pnpm test:release-dependency-patches
       - name: Exercise auth, tenancy, and shared rate-limit controls
         run: bun test apps/server/src/auth.e2e.test.ts apps/server/src/backend-security.e2e.test.ts apps/server/src/request-rate-limit-store.test.ts --timeout 15000
+      - name: Exercise executable download and runtime security regressions
+        run: |
+          pnpm --dir apps/orchestrator test:sidecars
+          pnpm --dir apps/opencode-router build
+          bun --no-env-file test apps/app/tests/message-element.test.ts apps/app/tests/tool-text.test.ts apps/app/tests/desk-task-inputs.test.ts apps/server/src/google-workspace-query.test.ts apps/server/src/opencode-db.test.ts apps/server/src/tokens.test.ts
+          node --test apps/desktop/electron/migration-write.test.mjs apps/opencode-router/test/config-path.test.js apps/opencode-router/test/slack.test.js qa-reports/jev/2026-09-30/local-qa-network.test.mjs scripts/lib/release-file-snapshot.test.mjs scripts/release/version-command.test.mjs scripts/workspace-user-data-recovery-files.test.mjs packages/stm-credentials/test/adapter.test.mjs
+      - name: Exercise release evidence and recovery security regressions
+        run: |
+          node scripts/release-secret-scan.test.mjs
+          node scripts/release-candidate-manifest.test.mjs
+          node scripts/public-beta-owner-acceptance.test.mjs
+          node scripts/workspace-user-data-recovery.test.mjs
+          node scripts/desktop-beta-first-run.test.mjs
+          node scripts/bittensor-beta-customer-packet.test.mjs
+          node scripts/market-official-sdk-operator-loop.test.mjs
+          node scripts/monday-beta-rc-pack.test.mjs

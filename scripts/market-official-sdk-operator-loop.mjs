@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { buildMarketCustomerEvidenceBundle } from "./market-customer-evidence-bundle.mjs";
 import { buildCapturedEvidence } from "./market-official-sdk-validation-capture.mjs";
@@ -30,7 +31,7 @@ function parseArgs(argv) {
     json: args.includes("--json"),
     fixture: args.includes("--fixture"),
     requireOfficialSdkValidated: args.includes("--require-official-sdk-validated"),
-    outputDir: value("--output-dir") || "/tmp/matterhorn-market-sdk-operator-loop",
+    outputDir: value("--output-dir"),
     customerReadySmoke: value("--customer-ready-smoke"),
     hyperliquidOfficialPublic: value("--hyperliquid-official-public"),
     polymarketOfficialPublic: value("--polymarket-official-public"),
@@ -55,6 +56,7 @@ function usage() {
     "",
     "This command chains doctor -> normalize -> capture evidence -> optional customer bundle.",
     "Inputs must be public/redacted official-client JSON. It does not run SDKs, sign, submit, or call exchanges.",
+    "Without --output-dir, outputs are retained in a new private temporary directory shown in the report.",
   ].join("\n");
 }
 
@@ -188,7 +190,7 @@ function buildRunManifest({ outputDir, doctor, captured, customerBundle, files, 
 }
 
 export async function runMarketOfficialSdkOperatorLoop(config) {
-  const outputDir = resolve(config.outputDir || "/tmp/matterhorn-market-sdk-operator-loop");
+  const outputDir = config.outputDir ? resolve(config.outputDir) : mkdtempSync(join(tmpdir(), "matterhorn-market-sdk-operator-loop-"));
   mkdirSync(outputDir, { recursive: true });
 
   const env = operatorEnv(config);

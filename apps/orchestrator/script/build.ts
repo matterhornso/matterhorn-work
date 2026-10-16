@@ -106,6 +106,16 @@ async function buildOnce(entrypoint: string, outdir: string, filename: string, t
   } catch {
     // ignore
   }
+  for (const [directory, key] of [
+    ["server", "__OPENWORK_PINNED_SERVER_VERSION__"],
+    ["opencode-router", "__OPENWORK_PINNED_ROUTER_VERSION__"],
+  ]) {
+    const dependency = JSON.parse(readFileSync(resolve("..", directory, "package.json"), "utf8"));
+    if (typeof dependency.version !== "string" || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(dependency.version)) {
+      throw new Error(`Missing pinned ${directory} version for the compiled orchestrator`);
+    }
+    define[key] = JSON.stringify(dependency.version);
+  }
   try {
     const constants = JSON.parse(
       readFileSync(resolve("..", "..", "constants.json"), "utf8"),

@@ -30,6 +30,27 @@ binary from the `openwork-orchestrator-v<version>` GitHub release. Override the 
 first run using a SHA-256 manifest. Use `--sidecar-dir` or `OPENWORK_SIDECAR_DIR` to control the
 cache location, and `--sidecar-base-url` / `--sidecar-manifest` to point at a custom host.
 
+Download hosts are an explicit operator trust choice, not a signature verification service.
+Use HTTPS; HTTP is accepted only for loopback development mirrors. A manifest can select
+assets only below the configured download base, so set `--sidecar-base-url` explicitly for
+a separate CDN. Redirects must stay on the configured origin; official Matterhorn GitHub
+release downloads may also use GitHub's release-assets CDN. URL credentials are not supported.
+Downloaded versions must match the locally pinned dependency versions. Invalid manifests,
+digest mismatches, unsafe cache entries and unapproved redirects stop resolution rather than
+falling back to another executable. An absent optional manifest entry may still use the
+separately verified OpenCode release fallback. That fallback requires the pinned official
+GitHub release metadata, an exact release asset URL and its SHA-256 digest on every resolution,
+including when an archive is cached. If that metadata or digest is unavailable, resolution
+stops; there is no offline legacy-cache bypass. `OPENWORK_OPENCODE_ASSET` / `OPENCODE_ASSET`
+may select only a flat archive name from that same official release. Archives are bounded and
+only the selected regular executable is streamed out; archive trees are not unpacked.
+Verified downloads use a new `verified-v1` cache namespace with locally determined filenames;
+existing legacy caches are left untouched and are not used for fallback version probes.
+On Unix, use a cache owned by the running user with no group/other write permissions; unsafe
+cache directories, symlinks, hardlinks and writable-by-others files are rejected. The operator
+must also trust the cache's parent directories. These checks do not isolate mutually untrusted
+processes running as the same user.
+
 Use `--sidecar-source` to control where `matterhorn-work-server`/`openwork-server` and `opencode-router` are resolved
 (`auto` | `bundled` | `downloaded` | `external`), and `--opencode-source` to control
 `opencode` resolution. Set `OPENWORK_SIDECAR_SOURCE` / `OPENWORK_OPENCODE_SOURCE` to

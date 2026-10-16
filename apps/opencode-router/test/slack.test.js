@@ -45,7 +45,7 @@ test("stripSlackMention removes bot mention and punctuation", () => {
   assert.equal(stripSlackMention("hello", "UBOT"), "hello");
 });
 
-test("createSlackAdapter routes DM + app mentions", async () => {
+test("createSlackAdapter routes DM + app mentions", async (t) => {
   const logger = createLoggerStub();
   const inbound = [];
   let socketInstance;
@@ -153,8 +153,11 @@ test("createSlackAdapter routes DM + app mentions", async () => {
   await adapter.sendText("D123", "ok");
   await adapter.sendText("C123|1700000000.000100", "ok-thread");
 
-  const mediaFile = path.join(os.tmpdir(), `opencode-router-slack-${Date.now()}.txt`);
-  fs.writeFileSync(mediaFile, "hello from file");
+  const mediaDir = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-router-slack-"));
+  t.after(() => fs.rmSync(mediaDir, { recursive: true, force: true }));
+  if (process.platform !== "win32") assert.equal(fs.statSync(mediaDir).mode & 0o777, 0o700);
+  const mediaFile = path.join(mediaDir, "attachment.txt");
+  fs.writeFileSync(mediaFile, "hello from file", { flag: "wx", mode: 0o600 });
   const mediaResult = await adapter.sendMessage("D123", {
     parts: [{ type: "file", filePath: mediaFile }],
   });

@@ -42,6 +42,17 @@ describe("desk task required inputs", () => {
     expect(getDeskTaskInputRequirement("Find useful Bittensor subnets for image generation.")).toBeNull();
   });
 
+  test("digest inputs must be one complete base58 or hexadecimal value, not a mixed alphabet", () => {
+    const requirement = getDeskTaskInputRequirement("Import receipt <paste transaction digest>")!;
+    for (const digest of ["5GrwvaEF".repeat(6), "aBcD0129".repeat(8)]) {
+      expect(validateDeskTaskInput(requirement, digest)).toBeNull();
+    }
+    for (const digest of ["Z0".repeat(32), "g0".repeat(32), "O".repeat(48), "l".repeat(48),
+      "I".repeat(48), "[".repeat(48), "a".repeat(31), "a".repeat(97)]) {
+      expect(validateDeskTaskInput(requirement, digest)).toBe(requirement.invalidMessage);
+    }
+  });
+
   test("starts placeholder tasks and asks for missing context in the main chat", () => {
     const prompt = "Find Polymarket markets about <paste research topic>.";
     const requirement = getDeskTaskInputRequirement(prompt)!;

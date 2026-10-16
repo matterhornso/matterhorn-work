@@ -59,6 +59,7 @@ import { ProtocolDeskMark } from "../workflows/protocol-brand-logo";
 import { resultCardDeskId } from "./result-card-memory";
 import { responseCompletionSummary } from "../message-completion-metadata";
 import { PublicReadLimitations } from "./public-read-limitations";
+import { findMessageElement } from "./message-element";
 
 type TranscriptPart = Part;
 
@@ -2414,8 +2415,7 @@ function SessionTranscriptInner(props: SessionTranscriptProps) {
 
       const container = props.scrollElement?.();
       if (!container) return false;
-      const escapedId = messageId.replace(/"/g, '\\"');
-      const target = container.querySelector(`[data-message-id="${escapedId}"]`) as HTMLElement | null;
+      const target = findMessageElement(container.querySelectorAll<HTMLElement>("[data-message-id]"), messageId);
       if (!target) return false;
       target.scrollIntoView({ behavior, block: "center" });
       return true;
