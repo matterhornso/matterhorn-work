@@ -4,6 +4,7 @@ The five core desks completed real responses through the authenticated local app
 
 ## Scope and source
 
+- Candidate: [PR #1037](https://github.com/matterhornso/matterhorn-work/pull/1037). Tested implementation commit `392a426ebbadbed499c473f637578e3e8dd7c4da`; final PR head additionally includes handoff documentation. [Exact-head checks](https://github.com/matterhornso/matterhorn-work/pull/1037/checks) are the authoritative CI record; local counts below do not substitute for it.
 - Branch: `codex/post1036-five-desk-qa-2026-10-15`, based on merged #1036 `c5f326b2a38ecc49817adcce5922ba5ad95991eb`.
 - Final preview source digest: `b4a9a8b70bcb393c90f15f04e7acf7adca7d3ee247683baa5239b9c991debb72`, hashing tracked and nonignored untracked app/server source paths and bytes. The local display marker appends `-candidate-b4a9a8b70bcb` to the baseline; it is not a Git commit SHA.
 - Local live requests used source digest `9d15bc0075e34979a447354e1c2d71c4a4a91b6b23c1bbbbf2491f582d6af2f7`, containing the final managed-agent guidance and chat/tool execution changes. Subsequent changes corrected custom skill editing, Sui capability copy and numbered-list gutters, plus regressions/CI. No agent prompt, provider dispatch or accounting code changed after these live requests. Final browser reload and regression checks cover those subsequent changes; the requests were not rerun merely to relabel evidence.

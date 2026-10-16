@@ -36,4 +36,4 @@ At 12:38 UTC the canonical site responded and launch health/config flags reporte
 
 ## Publication and handoff
 
-Local implementation and acceptance complete for the scoped read-only beta candidate. Publish the reviewed branch as a PR, verify exact-head CI including real API/web container jobs, then record the PR/check results. Do not merge or deploy. Operator-only hosted identity, policy, email/reset, isolation, approval handling and encrypted application restore gates are in `docs/handoffs/public-beta-release-2026-10-16.md`.
+Local implementation and acceptance complete for the scoped read-only beta candidate. Published implementation `392a426ebbadbed499c473f637578e3e8dd7c4da` as [PR #1037](https://github.com/matterhornso/matterhorn-work/pull/1037); the handoff-only follow-up records these identities. [Final-head checks](https://github.com/matterhornso/matterhorn-work/pull/1037/checks), including real API/web image jobs, must pass before review/merge. No merge/deployment performed. Operator-only hosted identity, policy, email/reset, isolation, approval handling and encrypted application restore gates are in `docs/handoffs/public-beta-release-2026-10-16.md`.

@@ -8,13 +8,16 @@ For the team operating `https://desks.matterhorn.so`. The local candidate combin
 | --- | --- |
 | Repository | `matterhornso/matterhorn-work` |
 | Merged baseline | `c5f326b2a38ecc49817adcce5922ba5ad95991eb`, [PR #1036](https://github.com/matterhornso/matterhorn-work/pull/1036) |
-| Candidate PR and exact reviewed head | **PENDING: record PR URL and full head SHA** |
-| Exact head CI | **PENDING: record check links and results for that head** |
+| Candidate | [PR #1037](https://github.com/matterhornso/matterhorn-work/pull/1037), branch `codex/post1036-five-desk-qa-2026-10-15` into `dev` |
+| Tested implementation commit | `392a426ebbadbed499c473f637578e3e8dd7c4da`; subsequent handoff-only commit does not change application code |
+| Exact head CI | Use [PR #1037 checks](https://github.com/matterhornso/matterhorn-work/pull/1037/checks); resolve the final `headRefOid` and require all applicable checks on that head, not an earlier green run |
 | Approved merged release SHA and merge CI | **PENDING: record the actual full release SHA and its checks after separate merge approval** |
 | Production approval and operator | **PENDING: explicit deployment approval and named operator** |
 | Canonical service IDs, artifact digests and rollback owner | **PENDING: record from the hosting control plane before cutover** |
 
 Do not release while an applicable identity or approval remains pending. Do not use the baseline SHA to label artifacts containing additional local changes. Candidate CI must include both `public-beta-container-build` and `public-beta-web-container-build`, alongside the existing security, test and safety gates. Local Docker is unavailable: a source build or contract test is not a target-image build. The web-container smoke deliberately verifies a `503 control_plane_unavailable` health response without an upstream; it proves the configuration boundary, not working hosted backend connectivity.
+
+Before review/merge, run `gh pr view 1037 --repo matterhornso/matterhorn-work --json state,isDraft,baseRefName,headRefOid,statusCheckRollup` and `gh pr checks 1037 --repo matterhornso/matterhorn-work`. Require base `dev`, the reviewed head, no unresolved security findings, and all applicable checks passing. A merge is a separate owner action. The active **Alpha Channel (macOS arm64)** workflow publishes on `dev` pushes; if merge approval excludes publishing, obtain approval to pause only that publishing workflow around the merge and restore it afterward. Do not disable test/security workflows. No workflow was paused or merge performed for this PR.
 
 The latest recorded hosted web marker is `ff0fee42b375e3dc58cbc73918d0093fa2eded40`; API is `0d209fb4d3ab0d4beb62610b801f455aed09e398`. GitHub ancestry places them 28 and 30 commits behind #1036 respectively; neither contains #1036. Reinspect at cutover. Healthy launch flags or open signup do not establish the candidate's deployment.
 
