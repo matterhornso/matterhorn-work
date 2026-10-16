@@ -4,7 +4,7 @@
 
 This handoff is for Matterhorn engineering. The local implementation supplies seven release-owned guidance documents and a catalog of thirteen connector recommendations across the five desks. It does not install third-party packages, connect external accounts or add executable tools. Existing permissions, provider consent, usage accounting, wallet review and desk readiness remain authoritative.
 
-The scope is preloaded guidance and accurate discovery: five built-in guarded adapters, seven optional connections and one group of future adapters. A recommendation is not a connected integration; an available SDK is not proof that the chat agent can call it. The existing user preview, chats and data remain untouched, and nothing is deployed. Browser acceptance and live acceptance of this candidate are not yet certified.
+The scope is preloaded guidance and accurate discovery: five built-in guarded adapters, seven optional connections and one group of future adapters. A recommendation is not a connected integration; an available SDK is not proof that the chat agent can call it. The subsequent authorized local refresh preserved existing chats/data and completed five-desk real-response checks; see the [combined candidate verification](../../qa-reports/launch-candidate/2026-10-16/RESULTS.md). Nothing is deployed and hosted acceptance remains separate.
 
 ## Five desk coverage
 
@@ -80,9 +80,9 @@ Taostats announces retirement of its legacy `/api/...` surface on **9 November 2
 
 ## Validation and rollout
 
-The current local candidate has passed 263 backend tests, the 1,382-test frontend suite, frontend/server typechecks and production build. The targeted `money.path.security` and `desk.depth` safety stages passed; this is not a claim that the entire safety gate was rerun. The [QA results](../../qa-reports/desk-skills/2026-10-16/RESULTS.md) record the authenticated export/import round trips, desktop/mobile synthetic browser checks, commands, evidence and remaining limits. These are local test results, not real-provider or hosted acceptance.
+The original feature-only [QA results](../../qa-reports/desk-skills/2026-10-16/RESULTS.md) retain authenticated export/import and synthetic browser evidence. The subsequent [combined candidate verification](../../qa-reports/launch-candidate/2026-10-16/RESULTS.md) supersedes its earlier counts and pending live checks: 1,384 frontend tests, 377 combined backend tests, the full 11-stage safety gate, both typechecks and production-format frontend build passed. It separately records all five real local responses and the remaining hosted gates.
 
-Before including this candidate in a release:
+Maintain these release regressions and repeat affected checks after any further changes:
 
 1. Run catalog tests covering the exact seven names, thirteen recommendations, deterministic rendering, malformed/traversal identifiers, immutable built-in reads, no workspace writes and preservation of same-name custom files.
 2. Run workspace-init and canonical-prompt regressions for all five desks. Confirm mutable custom text cannot enter canonical guidance and that tool permissions, privacy preflight and dispatch remain aligned.
