@@ -1772,6 +1772,8 @@ export function createExtensionsStore(options: {
               description: entry.description,
               path: entry.path,
               trigger: entry.trigger,
+              userInvocable: entry.userInvocable,
+              builtin: entry.builtin,
             }))
           : [];
         mutateState((current) => ({
@@ -2396,6 +2398,10 @@ export function createExtensionsStore(options: {
   }
 
   async function uninstallSkill(name: string) {
+    if (snapshot.skills.some((skill) => skill.name === name.trim() && skill.builtin)) {
+      setStateField("skillsStatus", t("skills.builtin_readonly"));
+      return;
+    }
     const root = options.selectedWorkspaceRoot().trim();
     if (!root) {
       setStateField("skillsStatus", t("skills.pick_workspace_first"));
@@ -2478,6 +2484,9 @@ export function createExtensionsStore(options: {
   async function saveSkill(input: { name: string; content: string; description?: string }) {
     const trimmed = input.name.trim();
     if (!trimmed) return;
+    if (snapshot.skills.some((skill) => skill.name === trimmed && skill.builtin)) {
+      throw new Error(t("skills.builtin_readonly"));
+    }
     const root = options.selectedWorkspaceRoot().trim();
     if (!root) {
       setStateField("skillsStatus", t("skills.pick_workspace_first"));

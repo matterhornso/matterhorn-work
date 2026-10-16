@@ -146,6 +146,23 @@ describe("Polymarket read/preview safety", () => {
 });
 
 describe("Polymarket provider reads", () => {
+  test("small current-market searches filter closed events before upstream pagination", async () => {
+    const urls: string[] = [];
+    const p = new PolymarketInfoProvider({ gammaBaseUrl: "https://gamma.test", fetcher: async (url) => {
+      urls.push(url);
+      const params = new URL(url).searchParams;
+      const filtered = params.get("events_status") === "active" && params.get("keep_closed_markets") === "0";
+      return jsonResponse({ events: [{ markets: filtered
+        ? [AI_MARKET, { ...SPORTS_MARKET, closed: true }]
+        : [{ ...AI_MARKET, closed: true }] }] });
+    } });
+    const markets = await p.searchMarkets("AI", 1);
+    expect(markets.map((market) => market.id)).toEqual([AI_MARKET.id]);
+    expect(urls).toHaveLength(1);
+    expect(new URL(urls[0]!).searchParams.get("limit_per_type")).toBe("2");
+    expect(new URL(urls[0]!).searchParams.get("q")).toBe("ai");
+  });
+
   test("searches markets by keyword", async () => {
     const markets = await provider().searchMarkets("AI", 10);
     expect(markets).toHaveLength(1);

@@ -1,0 +1,61 @@
+# Post-merge five-desk end-to-end QA — 15 October 2026
+
+Historical worklog. Continue from the [16 October combined candidate record](../../launch-candidate/2026-10-16/WORKLOG.md), which closes the formerly budget-blocked local checks; its RESULTS.md is the current coverage/limits record.
+
+## Scope and safeguards
+
+User requested normal-browser end-to-end tests on the updated local preview, covering all five desk chats, model selection, Stop and Retry; fix reproducible issues, preserve existing chats/data, no deployment. Source baseline: merged PR #1036 `c5f326b2a38ecc49817adcce5922ba5ad95991eb`. Work branch: `codex/post1036-five-desk-qa-2026-10-15`.
+
+Existing preview: `http://cudos-restored.localhost:58334`. Keep its original historical chat tab untouched; use a separate browser tab and newly created, clearly named QA chats. Public/synthetic prompts and read-only chain data only; no private files/memory, signing, transfers, new integrations, production changes, pushes or merges. Jev/STM remain off. Provider policy remains labelled unverified; user-approved local public-prompt disclosure testing, per-request privacy checks, hard allowance enforcement and user-approved local host auto-approval remain in place. This is not approval of production provider privacy claims.
+
+User approved increasing only this local preview's limits to 300,000 monthly and 150,000 daily for the new test block. This does not reset prior usage: initial monthly 126,670, daily 42,002, pending/reserved zero. Before restart, all 8 existing chats were idle; all 35 application-table hashes and 37 saved-file hashes still matched the previous protected baseline. Existing stopped-state recovery snapshot remains available, owner-restricted, not encrypted-backup certification.
+
+## Plan
+
+1. Confirm exact web/API revision, identity, safeguards, preserved data and available test allowance. Restore the missing loopback Bittensor service using existing pinned testnet configuration.
+2. Through ordinary UI, verify model search, selection and workspace-default persistence; switching models must retain an unsent draft. Restore the original ASI1 default afterward.
+3. Create five fresh QA chats. For each desk: complete an actual provider response; crypto desks must show a successful real read receipt with source/network/time/limitations. Check streaming, correct model/agent selection, history persistence and clear completion state.
+4. Test Stop and Retry using the new QA conversations only. Cover preparing and visible streaming, no duplicate dispatch, recovered composer/history, authoritative accounting or retained unknown-usage hold, and a successful subsequent retry. Never erase an unresolved hold.
+5. Verify browser controls and draft retention at the actual preview width and representative mobile/desktop sizes. Run deterministic frontend/server and safety regressions. Distinguish synthetic failure-path tests from real-provider evidence.
+6. Fix bounded reproducible failures with regressions, update only this preview if needed, repeat affected checks, and record honest coverage/limits and exact source identity. Leave original conversations intact and no production deployment.
+
+## Initial findings
+
+- Exact merged source is present. Existing authenticated chat is accessible; no pending requests.
+- Bittensor sidecar port 59285 has no listener. Investigating/restarting the existing local read service before its acceptance flow.
+- Browser and runtime test results will be added as verified; prior real-provider results do not count as this run.
+
+## Verified progress — 18:16 UTC
+
+- Model search correctly handles no matches, filters GPT OSS 20B, and excludes embedding models from the chat picker. Selecting GPT OSS 20B and saving the workspace default survived reload. Switching between ASI1 and GPT OSS 20B preserved an unsent draft. Restored the saved default to ASI1.
+- Private AI: actual GPT OSS 20B response (4,731 tokens), completed Retry (4,756), genuine streaming Stop, then successful Retry after Stop (9,536). The in-flight retry stayed on GPT OSS 20B while the workspace default changed back to ASI1. Only fresh QA conversations were used.
+- Bittensor: restarted the intact pinned Python sidecar on loopback 59285, configured testnet, submission disabled. A real app tool call completed and returned subnet 27, testnet block 8,228,812, SDK source and observation time 18:13:18Z. Answer disclosed truncated validator coverage. Total request usage 7,350.
+- Stop during early preparation completed on Bittensor, Hyperliquid, Polymarket and Sui; each API session became idle with a terminal MessageAbortedError. Crypto read completion / Retry after these early stops remains pending fixes below.
+- Accounting correctly retains five 10,000-token unknown-usage reservations. At 18:15:41 UTC: daily 68,375 used + 50,000 reserved / 150,000; monthly 153,043 used + 50,000 reserved / 300,000. Do not release holds without reconciliation.
+- Found two reproducible UI defects: (1) stopped unknown usage displayed misleading “0 tokens”; (2) an empty aborted assistant was filtered out, hiding all Retry controls. Bounded frontend fixes and regression tests in progress; no server/accounting relaxation.
+- Baseline deterministic checks: 1,575 Bun tests / 9,853 assertions and four Node contract scripts passed. Initial sandbox-only ephemeral bind failures disappeared on the clean loopback-enabled rerun. These are fixture/regression results, not hosted or live-provider acceptance.
+
+Private raw evidence: `/private/tmp/matterhorn-cudos-restored-4ZgYPr/post1036-evidence/` (owner-only). New-session allowlist and pre-test original-row hashes are stored separately in the same harness. Never publish private account, runtime secret or auth-cookie files.
+
+## Fixed preview and further findings — 18:26 UTC
+
+- Two UI fixes built and loaded locally: unknown token/cost/cache placeholders now read unavailable; empty stopped/failed rows retain a permanently visible labelled Retry control. Existing retry transaction, approvals and accounting were unchanged. Independent reviews found no remaining blockers in these UI diffs.
+- Fixed frontend source identity: base `c5f326b2a38ecc49817adcce5922ba5ad95991eb` + UI patch SHA256 `2f50618ad4a61dd032f5bba7bfb411da06a5e9aa2129ed55e869cdac29e68f7d`. All 13 chats were idle before restart; 35 table hashes and 43 saved-file hashes matched afterward, including all five usage holds.
+- Full stopped-state recovery archive (including SQLite WAL/SHM): `/private/tmp/matterhorn-cudos-restored-4ZgYPr/backup-pre-post1036-qa-fixes/stopped-state-complete.tar.gz`, SHA256 `b0dd0d922feb1b71975efb88014a22ee8a3c34dfc1c092476b189cf90868edc7`. Owner-only local recovery material, not encryption/production backup proof. An earlier incomplete archive omitted optional absent paths; only the `-complete` archive is the authoritative snapshot.
+- Sui Retry after early Stop completed on ASI1 (2,729 tokens), preserved its unsent draft and correctly disclosed that checkpoint/network overview is not in the desk's tool allowlist. This is a successful response/recovery test, **not** a successful live-chain read. The supported public-address balance read still needs real app verification.
+- Hyperliquid Retry completed on ASI1 with real public orderbook and funding tool receipts, `hyperliquid.info` source at 18:21:40 UTC. Total 8,254 tokens. One replacement user turn; no duplicate dispatch.
+- Polymarket Retry completed but failed the intended discovery acceptance: first broad result was dropped by context-size limit, subsequent queries returned no markets. Three lookup calls, 16,533 tokens. Direct public-API diagnosis confirmed missing active-event filtering plus excessive result descriptions; bounded fixes with regression tests are underway. Do not count this as successful market discovery.
+- Remaining daily allowance: 4,109 after 95,891 used + 50,000 held / 150,000. Asked user whether only daily QA cap may rise to 180,000; **not applied without approval**. Monthly remains 300,000. No further provider requests while cap prevents a full reservation.
+- Full clean platform safety gate: **11/11 stages**, 52 offline crypto sub-gates, exit 0. Final combined-UI frontend suite: **1,379 tests / 192 files / 8,382 assertions**, zero failures. App typecheck and production build pass; existing >500kB chunk warning remains. These results precede pending Polymarket backend changes, which require reruns.
+- Browser: fixed Retry and unavailable usage visible after authenticated reload; ordinary keyboard replacement works; Sui draft survives retry/navigation/reload. No horizontal page overflow at 390×844, 768×1024, 1280×720. Mobile menu exposes all five desks, Profile/account, Wallet, Memory, Notes and Tools. Light theme checked then original System preference restored; viewport override reset. No captured console errors/warnings. Safari/Firefox and actual device keyboard/zoom remain unverified this run.
+
+## Final candidate verification — 18:35 UTC
+
+- Polymarket search now requests active events and excludes closed markets upstream. Its bounded search/exact-lookup projection preserves complete probabilities, token identifiers and provenance for fewer markets instead of dropping every oversized result. Omissions are explicitly disclosed; the 2,000-character context bound, secret rejection, quarantine and permissions are unchanged. Official API parameter reference: https://docs.polymarket.com/api-reference/search/search-markets-events-and-profiles.
+- Direct public-API/projection verification retained two useful candidates from five in 1,574 characters, explicitly omitting three. This is API-level evidence, **not** a completed post-fix model/browser request. Focused backend tests: 116 passing / 664 assertions; server typecheck passed. Independent review found no blocking defects in the combined changes.
+- Final full safety rerun after the backend changes: **11/11 stages**, all 52 offline desk sub-gates, exit 0; visible 696 Bun tests, 38 Node tests and 5,500 Bun assertions. Separate final Stop/accounting run: **147 tests / 1,205 assertions**, all passing. Source hashes stayed unchanged during the gate. Log directory: `/private/tmp/matterhorn-final-backend-regressions.vGrMGg/`.
+- Final combined source was built and restarted locally at 18:29–18:31 UTC. Source identity: `c5f326b2a38ecc49817adcce5922ba5ad95991eb-local-f40ff2e81e01`; full patch SHA256 `f40ff2e81e014b6f109e97bcdb1b1d8ebe80656f0619fa0a3099737de70743aa`. Candidate build: `/private/tmp/matterhorn-cudos-restored-4ZgYPr/dist-post1036-f40ff2e81e01`. Changes remain uncommitted on the local QA branch, not a new merge commit.
+- Before restart all 13 sessions were idle. Complete stopped-state recovery archive: `/private/tmp/matterhorn-cudos-restored-4ZgYPr/backup-pre-post1036-polymarket-fix/stopped-state-complete.tar.gz`, SHA256 `5da52bb93d770cadfe19e591546f9cb91f7eefd5568250c690ba02340cc32284`. Includes SQLite WAL/SHM and existing private runtime configuration; keep local and owner-only. This does not prove encrypted production backups.
+- At 18:33 UTC post-restart comparison: **35 tables / 43 saved files unchanged**, original-row baseline preserved. Only the documented engine project access timestamp is normalized in the comparison. Authenticated browser reload succeeded; fixed stopped row, Retry, unavailable usage and original drafts remained visible. Hyperliquid's completed live response is displayed in the separate QA tab. Original user tab remains untouched.
+- Daily allowance is still **95,891 used + 50,000 held / 150,000**, leaving **4,109**. Monthly is **180,559 used + 50,000 held / 300,000**. Five pending ledger entries are unknown-usage holds, not active executions. The request for a local daily increase to 180,000 remains unanswered; no increase or hold reset applied.
+- Next authorized live work after budget approval/reset: Bittensor stopped-row Retry to completion; supported Sui testnet public-address balance read; Polymarket Retry to confirm post-fix discovery in the normal app. Keep all existing histories, drafts and holds. No claim of five-desk release acceptance until these succeed. See `RESULTS.md` for the coverage matrix and handoff.

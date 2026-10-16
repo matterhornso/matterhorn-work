@@ -14,6 +14,7 @@ import { OPEN_CODE_1_18_27_COMPACTION_AGENT_PROMPT } from "./opencode-compaction
 import { openworkConfigPath, opencodeConfigPath } from "./workspace-files.js";
 import { readJsoncFile, updateJsoncPath, updateJsoncTopLevel, writeJsoncFile } from "./jsonc.js";
 import type { ReloadReason } from "./types.js";
+import { getMatterhornBuiltinDeskGuidance } from "./builtin-workspace-skills.js";
 
 const BROWSER_PLUGIN = "opencode-chrome-devtools";
 const LEGACY_BROWSER_MCP_KEYS = ["openwork-browser", "chrome", "chrome-devtools", "control-chrome"];
@@ -122,9 +123,13 @@ async function ensureOpencodeConfig(workspaceRoot: string): Promise<boolean> {
   return true;
 }
 
-function resolveAgentTemplate(): string {
+function resolveBaseAgentTemplate(): string {
   const cdpPort = process.env.OPENWORK_ELECTRON_REMOTE_DEBUG_PORT?.trim() || "9222";
   return MATTERHORN_AGENT.replace("{{BROWSER_CDP_PORT}}", cdpPort);
+}
+
+function resolveAgentTemplate(): string {
+  return `${resolveBaseAgentTemplate()}\n${getMatterhornBuiltinDeskGuidance("matterhorn")}\n`;
 }
 
 function renderDeskAgentRuntimePermissions(
@@ -164,6 +169,8 @@ MATTERHORN_MANAGED_DESK_AGENT_END -->
 ${buildMatterhornDeskAgentSystemPrompt(agent)}
 
 ${MATTERHORN_ARTIFACT_GUIDANCE}
+
+${getMatterhornBuiltinDeskGuidance(agent.agentId)}
 `;
 }
 
@@ -244,6 +251,12 @@ async function ensureMatterhornAgent(workspaceRoot: string): Promise<boolean> {
     }
   }
 
+  // Migrate only the exact previous release-owned default. User-authored
+  // additions are private context and must never be replaced or legitimized.
+  if (current.trim() === resolveBaseAgentTemplate().trim()) {
+    current = agentContent;
+    changed = true;
+  }
   if (changed) {
     await writeFile(agentPath, current, "utf8");
     return true;

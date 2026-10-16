@@ -16,6 +16,62 @@ function assistantMessage(parts: UIMessage["parts"], metadata?: UIMessage["metad
 }
 
 describe("completed response metadata", () => {
+  test("stopping a streamed answer leaves token usage unavailable, not zero", () => {
+    const metadata = buildOpenCodeMessageMetadata({
+      error: { name: "MessageAbortedError", data: { message: "Aborted" } },
+      time: { created: 1_000, completed: 22_000 },
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    });
+    const summary = responseCompletionSummary(assistantMessage([
+      { type: "text", text: "A partial streamed answer. ".repeat(500) },
+    ], metadata));
+    expect(summary).toMatchObject({
+      state: "stopped", label: "Stopped", durationLabel: "21 s",
+      tokenLabel: "Tokens unavailable", tokenDetail: "Token usage is unavailable for this response.",
+    });
+    expect(summary.tokenDetail).not.toContain("Provider-reported");
+  });
+
+  for (const tokens of [undefined, {}, { input: 120 }, { output: 36 },
+    { input: 120, output: Number.NaN }, { input: -1, output: 36 },
+    { input: 120, output: 36, reasoning: Number.NaN }]) {
+    test(`does not present incomplete counters as total usage: ${JSON.stringify(tokens)}`, () => {
+      const metadata = buildOpenCodeMessageMetadata({ finish: "stop", tokens });
+      expect(responseCompletionSummary(assistantMessage([], metadata))).toMatchObject({
+        tokenLabel: "Tokens unavailable", tokenDetail: "Token usage is unavailable for this response.",
+      });
+    });
+  }
+
+  test.each(["stop", "tool-calls", "length", "content-filter"])("preserves known usage and explicit zero for %s", (finish) => {
+    for (const tokens of [{ total: 473 }, { input: 350, output: 123 }]) {
+      const metadata = buildOpenCodeMessageMetadata({ finish, tokens });
+      expect(responseCompletionSummary(assistantMessage([], metadata)).tokenLabel).toBe("473 tokens");
+    }
+    const zero = buildOpenCodeMessageMetadata({ finish, tokens: { total: 0 } });
+    expect(responseCompletionSummary(assistantMessage([], zero))).toMatchObject({
+      tokenLabel: "0 tokens", tokenDetail: "Provider-reported usage: 0 total tokens.",
+    });
+    const placeholder = buildOpenCodeMessageMetadata({ finish, tokens: { input: 0, output: 0, reasoning: 0 } });
+    expect(responseCompletionSummary(assistantMessage([], placeholder)).tokenLabel).toBe("Tokens unavailable");
+  });
+
+  test.each(["MessageAbortedError", "APIError"])("does not trust zero or a stale finish after %s", (name) => {
+    for (const finish of [undefined, "unknown", "stop", "tool-calls"]) {
+      const metadata = buildOpenCodeMessageMetadata({ finish, error: { name }, tokens: { total: 0 } });
+      expect(responseCompletionSummary(assistantMessage([], metadata)).tokenLabel).toBe("Tokens unavailable");
+      const known = buildOpenCodeMessageMetadata({ finish, error: { name }, tokens: { input: 350, output: 123 } });
+      expect(responseCompletionSummary(assistantMessage([], known)).tokenLabel).toBe("473 tokens");
+    }
+  });
+
+  test("does not infer reported zero from an unverified completion timestamp", () => {
+    const metadata = buildOpenCodeMessageMetadata({ time: { created: 1000, completed: 2000 }, tokens: { total: 0 } });
+    expect(responseCompletionSummary(assistantMessage([], metadata))).toMatchObject({
+      state: "unknown", tokenLabel: "Tokens unavailable",
+    });
+  });
+
   test.each([
     ["stop", "completed", "Completed"],
     ["length", "incomplete", "Incomplete"],

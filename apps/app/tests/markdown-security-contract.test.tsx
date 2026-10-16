@@ -17,6 +17,22 @@ function readShikiHighlighterSource() {
 }
 
 describe("Markdown security and dark-code rendering", () => {
+  test("ordered list gutters accommodate long lists and non-one starting numbers", () => {
+    for (const { text, width } of [
+      { text: Array.from({ length: 300 }, (_, index) => `${index + 1}. Public item`).join("\n"), width: 5 },
+      { text: "999. First\n1000. Second", width: 6 },
+    ]) {
+      const html = renderToStaticMarkup(React.createElement(MarkdownBlock, { text }));
+      expect(html).toContain(`padding-inline-start: max(1.5rem, ${width}ch)`);
+    }
+    const html = renderToStaticMarkup(React.createElement(MarkdownBlock, { text: "999. First\n1000. Second" }));
+    expect(html).toContain('start="999"');
+    expect(html).toContain("<li");
+    const bullets = renderToStaticMarkup(React.createElement(MarkdownBlock, { text: "- First\n- Second" }));
+    expect(bullets).toContain("list-disc pl-6");
+    expect(bullets).not.toContain("padding-inline-start");
+  });
+
   test("chain timestamps and numeric data are not converted into emoji aliases", () => {
     const timestamp = "2026-09-29T07:12:05.783137Z";
     const html = renderToStaticMarkup(React.createElement(MarkdownBlock, {

@@ -51,6 +51,20 @@ function renderTranscript(isStreaming: boolean) {
 }
 
 describe("assistant response actions", () => {
+  test("a stopped response exposes unavailable usage in its visible and accessible footer", () => {
+    const html = renderToStaticMarkup(React.createElement(SessionTranscript, {
+      messages: [{ id: "stopped", role: "assistant", parts: [{ type: "text", text: "Partial answer" }],
+        metadata: { opencode: { errorName: "MessageAbortedError", created: 1000, completed: 22000,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } } } }],
+      isStreaming: false, developerMode: false,
+    }));
+    expect(html).toContain('data-response-state="stopped"');
+    expect(html).toContain('aria-label="Stopped. Generation stopped. Any partial answer is preserved. Tokens unavailable. 21 s.');
+    expect(html).toContain('title="Token usage is unavailable for this response."');
+    expect(html).not.toContain("0 tokens");
+    expect(html).not.toContain("Provider-reported usage: 0");
+  });
+
   for (const boundary of ["prepare", "abort", "revert", "dispatch"]) {
     test(`account switch during ${boundary} prevents subsequent retry mutations`, async () => {
       const calls: string[] = [];

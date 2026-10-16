@@ -121,7 +121,12 @@ const baseMarkedOptions: MarkedCompatibleOptions = {
       const start = token.ordered && typeof token.start === "number" && token.start !== 1
         ? ` start="${token.start}"`
         : "";
-      return `<${tag}${start} class="${className}">${token.items.map((item) => this.listitem(item)).join("")}</${tag}>`;
+      const firstItem = typeof token.start === "number" ? token.start : 1;
+      const lastItem = firstItem + Math.max(0, token.items.length - 1);
+      const markerDigits = Math.max(String(firstItem).length, String(lastItem).length);
+      // Reserve the full marker width, including its dot/gap, before narrow scroll containers clip it.
+      const padding = token.ordered ? ` style="padding-inline-start: max(1.5rem, ${markerDigits + 2}ch)"` : "";
+      return `<${tag}${start} class="${className}"${padding}>${token.items.map((item) => this.listitem(item)).join("")}</${tag}>`;
     },
     listitem(this: MarkedRendererThis, item: Tokens.ListItem) {
       const checkbox = item.task
