@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { MatterhornEntitlementKey } from "@matterhorn-work/types/billing";
 import type {
@@ -41,7 +41,7 @@ import {
   buildGeneratedMediaReadinessMarkdown,
   generatedMediaReadinessReportFilename,
 } from "./generated-media-diagnostics.js";
-import { MatterhornGeneratedImageStore, imageFilePath } from "./generated-image-store.js";
+import { MatterhornGeneratedImageStore, readGeneratedImageFile } from "./generated-image-store.js";
 import { MatterhornImageNftDraftStore } from "./image-nft-draft-store.js";
 import { MatterhornBillingAccountStore } from "./billing-account-store.js";
 import { resolveNftEnvironmentConfig, type NftEnvironmentConfig } from "./image-nft-capabilities.js";
@@ -242,9 +242,8 @@ export function addGeneratedMediaRoutes(
     const store = new MatterhornGeneratedImageStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const image = await store.get(ctx.params.imageId);
     if (!image) throw new ApiError(404, "image_not_found", "Generated image not found.");
-    const filePath = imageFilePath(workspace.path, image.fileName);
     try {
-      const bytes = await readFile(filePath);
+      const bytes = await readGeneratedImageFile(workspace.path, image);
       return new Response(bytes, {
         headers: {
           "Content-Type": image.contentType,
@@ -478,7 +477,7 @@ export function addGeneratedMediaRoutes(
 
     let bytes: Uint8Array;
     try {
-      bytes = await readFile(imageFilePath(workspace.path, image.fileName));
+      bytes = await readGeneratedImageFile(workspace.path, image);
     } catch {
       throw new ApiError(404, "image_file_not_found", "Image file not found on disk.");
     }

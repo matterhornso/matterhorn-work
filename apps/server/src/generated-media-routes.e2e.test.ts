@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { MatterhornGeneratedImage } from "@matterhorn-work/types/generated-media";
 import { auditLogPath } from "./audit.js";
@@ -518,6 +518,53 @@ describe("Generated media routes", () => {
     const list = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images`);
     expect(list.response.status).toBe(200);
     expect(list.payload.images.length).toBe(1);
+  });
+
+  test("approved workspace metadata writes cannot redirect image reads or deletion outside outputs", async () => {
+    const { base, dir } = await boot();
+    const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+      method: "POST", body: JSON.stringify({ prompt: "synthetic image boundary fixture" }),
+    });
+    expect(generated.response.status).toBe(200);
+    const image = generated.payload.image;
+    const outside = mkdtempSync(join(tmpdir(), "image-outside-sentinel-"));
+    dirs.push(outside);
+    const sentinel = join(outside, "synthetic-owner.txt");
+    writeFileSync(sentinel, "synthetic owner bytes must remain private and intact");
+    const forged = { ...image, fileName: relative(join(dir, ".matterhorn-work", "outputs", "images"), sentinel) };
+    const written = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/files/content`, {
+      method: "POST", body: JSON.stringify({ path: `.matterhorn-work/outputs/images/${image.id}.metadata.json`, content: JSON.stringify(forged) }),
+    });
+    expect(written.response.status).toBe(200);
+    const file = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/${image.id}/file`);
+    expect(file.response.status).toBe(404);
+    expect(file.payload.code).toBe("image_not_found");
+    const deleted = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/${image.id}`, { method: "DELETE" });
+    expect(deleted.response.status).toBe(404);
+    expect(readFileSync(sentinel, "utf8")).toBe("synthetic owner bytes must remain private and intact");
+    const listed = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images`);
+    expect(listed.payload.images).toEqual([]);
+  });
+
+  test("approved metadata writes cannot serve active MIME or mismatched image identity", async () => {
+    const { base } = await boot();
+    const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+      method: "POST", body: JSON.stringify({ prompt: "synthetic MIME fixture" }),
+    });
+    expect(generated.response.status).toBe(200);
+    const image = generated.payload.image;
+    const patches = [{ contentType: "text/html" }, { contentType: "image/svg+xml" }, { contentType: "application/javascript" }, { contentType: "image/jpeg" }, { id: "img_other" }, { workspaceId: "ws_other" }, { relativePath: "outside.png" }];
+    for (const patch of patches) {
+      const written = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/files/content`, {
+        method: "POST", body: JSON.stringify({ path: `.matterhorn-work/outputs/images/${image.id}.metadata.json`, content: JSON.stringify({ ...image, ...patch }) }),
+      });
+      expect(written.response.status).toBe(200);
+      const file = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/${image.id}/file`);
+      expect(file.response.status).toBe(404);
+      expect(file.payload.code).toBe("image_not_found");
+    }
+    const unauthenticated = await fetch(`${base}/workspace/${WORKSPACE_ID}/images/${image.id}/file`);
+    expect(unauthenticated.status).toBe(401);
   });
 
   test("DELETE /workspace/:id/images/:imageId removes a local generated image", async () => {

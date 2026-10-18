@@ -31,6 +31,7 @@ for (const required of [
   "apps/app/tests/desk-task-inputs.test.ts",
   "apps/server/src/google-workspace-query.test.ts",
   "apps/server/src/image-generation-provider.test.ts",
+  "apps/server/src/generated-image-store.test.ts",
   "apps/server/src/generated-media-routes.e2e.test.ts",
   "apps/server/src/opencode-db.test.ts",
   "apps/desktop/electron/migration-write.test.mjs",
