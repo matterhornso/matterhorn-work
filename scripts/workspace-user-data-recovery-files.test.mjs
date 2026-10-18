@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { renameSync, symlinkSync } from "node:fs";
+import { constants, renameSync, symlinkSync } from "node:fs";
 import fs from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
@@ -43,8 +43,11 @@ test("concurrent symlink targets are preserved and force replaces only the link"
   await writeEncryptedArchive(archive, { fixture: true }, [], secret, true);
   assert.equal((await fs.lstat(archive)).isFile(), true);
   assert.equal((await fs.stat(archive)).mode & 0o777, 0o600);
-  assert.equal((await fs.stat(other)).mode & 0o777, 0o640);
-  assert.equal(await fs.readFile(other, "utf8"), "owner content");
+  const owner = await fs.open(other, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    assert.equal((await owner.stat()).mode & 0o777, 0o640);
+    assert.equal(await owner.readFile("utf8"), "owner content");
+  } finally { await owner.close(); }
 });
 
 test("decryption reads the opened archive inode, not a pathname replacement", async t => {

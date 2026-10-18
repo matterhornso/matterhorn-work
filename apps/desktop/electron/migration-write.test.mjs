@@ -21,8 +21,7 @@ for (const [name, writeMigration] of [
     if (process.platform !== "win32") assert.equal((await stat(destination)).mode & 0o777, 0o600);
 
     const racedDestination = join(root, "raced-state.json");
-    assert.equal(existsSync(racedDestination), false);
-    await writeFile(racedDestination, "newer state");
+    await writeFile(racedDestination, "newer state", { flag: "wx", mode: 0o600 });
     assert.equal(await writeMigration(racedDestination, "legacy state"), false);
     assert.equal(await readFile(racedDestination, "utf8"), "newer state");
   });

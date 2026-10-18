@@ -41,6 +41,8 @@ import { once } from "node:events";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { downloadVerifiedSidecar, type SidecarConfig, type SidecarName, type SidecarTarget } from "./sidecar-download.js";
 import { downloadVerifiedOpencode } from "./opencode-download.js";
+import { failRuntimeUpgrade, runtimeUpgradeFailureDiagnostic, startRuntimeUpgrade,
+  type RuntimeServiceName, type RuntimeUpgradePhase, type RuntimeUpgradeState } from "./runtime-upgrade-state.js";
 import type { TuiHandle } from "./tui/app.js";
 
 type ApprovalMode = "manual" | "auto";
@@ -220,8 +222,6 @@ type BinaryDiagnostics = {
   actualVersion?: string;
 };
 
-type RuntimeServiceName = "openwork-server" | "opencode" | "opencode-router";
-
 type RuntimeServiceSnapshot = {
   name: RuntimeServiceName;
   enabled: boolean;
@@ -231,15 +231,6 @@ type RuntimeServiceSnapshot = {
   targetVersion?: string;
   actualVersion?: string;
   upgradeAvailable: boolean;
-};
-
-type RuntimeUpgradeState = {
-  status: "idle" | "running" | "failed";
-  startedAt: number | null;
-  finishedAt: number | null;
-  error: string | null;
-  operationId: string | null;
-  services: RuntimeServiceName[];
 };
 
 type SidecarDiagnostics = {
@@ -10784,13 +10775,7 @@ async function runStart(args: ParsedArgs) {
     );
   };
   const performRuntimeUpgrade = async (services: RuntimeServiceName[]) => {
-    const opId = randomUUID();
-    runtimeUpgradeState.status = "running";
-    runtimeUpgradeState.startedAt = Date.now();
-    runtimeUpgradeState.finishedAt = null;
-    runtimeUpgradeState.error = null;
-    runtimeUpgradeState.operationId = opId;
-    runtimeUpgradeState.services = services;
+    let phase: RuntimeUpgradePhase = "validate";
     try {
       if (sandboxMode !== "none") {
         throw new Error(
@@ -10802,6 +10787,7 @@ async function runStart(args: ParsedArgs) {
         openworkServerBinary.source === "external" &&
         openworkServerBinary.expectedVersion
       ) {
+        phase = "install-openwork-server";
         await installGlobalPackages([
           `openwork-server@${openworkServerBinary.expectedVersion}`,
         ]);
@@ -10811,11 +10797,13 @@ async function runStart(args: ParsedArgs) {
         opencodeRouterBinary?.source === "external" &&
         opencodeRouterBinary.expectedVersion
       ) {
+        phase = "install-opencode-router";
         await installGlobalPackages([
           `opencode-router@${opencodeRouterBinary.expectedVersion}`,
         ]);
       }
       if (services.includes("openwork-server")) {
+        phase = "resolve-openwork-server";
         openworkServerBinary = await resolveOpenworkServerBin({
           explicit: explicitOpenworkServerBin,
           manifest,
@@ -10825,6 +10813,7 @@ async function runStart(args: ParsedArgs) {
         });
       }
       if (services.includes("opencode")) {
+        phase = "resolve-opencode";
         opencodeBinary = await resolveOpencodeBin({
           explicit: explicitOpencodeBin,
           manifest,
@@ -10834,6 +10823,7 @@ async function runStart(args: ParsedArgs) {
         });
       }
       if (services.includes("opencode-router") && opencodeRouterEnabled) {
+        phase = "resolve-opencode-router";
         opencodeRouterBinary = await resolveOpenCodeRouterBin({
           explicit: explicitOpenCodeRouterBin,
           manifest,
@@ -10843,27 +10833,27 @@ async function runStart(args: ParsedArgs) {
         });
       }
       if (services.includes("opencode")) {
+        phase = "restart-opencode";
         await restartOpencode();
       }
       if (services.includes("opencode-router")) {
+        phase = "restart-opencode-router";
         await restartOpenCodeRouter();
       }
       if (
         services.includes("openwork-server") ||
         services.includes("opencode")
       ) {
+        phase = "restart-openwork-server";
         await restartOpenworkServer();
       }
       runtimeUpgradeState.status = "idle";
       runtimeUpgradeState.finishedAt = Date.now();
     } catch (error) {
-      runtimeUpgradeState.status = "failed";
-      runtimeUpgradeState.finishedAt = Date.now();
-      runtimeUpgradeState.error =
-        error instanceof Error ? error.message : String(error);
+      Object.assign(runtimeUpgradeState, failRuntimeUpgrade(runtimeUpgradeState, Date.now()));
       logger.error(
         "Runtime upgrade failed",
-        { error: runtimeUpgradeState.error, services },
+        { ...runtimeUpgradeFailureDiagnostic(error), phase, operationId: runtimeUpgradeState.operationId, services },
         "openwork-orchestrator",
       );
     }
@@ -11252,13 +11242,14 @@ async function runStart(args: ParsedArgs) {
           );
           return;
         }
+        Object.assign(runtimeUpgradeState, startRuntimeUpgrade(services, randomUUID(), Date.now()));
         res.statusCode = 202;
         res.end(
           JSON.stringify({
             ok: true,
             started: true,
             services,
-            upgrade: { ...runtimeUpgradeState, status: "running" },
+            upgrade: { ...runtimeUpgradeState },
           }),
         );
         void performRuntimeUpgrade(services);

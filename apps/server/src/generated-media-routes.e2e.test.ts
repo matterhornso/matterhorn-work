@@ -436,6 +436,49 @@ describe("Generated media routes", () => {
     expect(result.payload.message).toBe("Generated media request payload is too large.");
   });
 
+  test("POST /workspace/:id/images/generate rejects unsupported formats before provider calls or output writes", async () => {
+    process.env.MATTERHORN_IMAGE_PROVIDER = "openai";
+    process.env.OPENAI_API_KEY = "synthetic-test-key";
+    const { base, dir } = await boot();
+    const priorFetch = globalThis.fetch;
+    let providerRequests = 0;
+    globalThis.fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (!url.startsWith(`${base}/`)) {
+        providerRequests += 1;
+        throw new Error("Unexpected provider request in isolated format validation test");
+      }
+      return priorFetch(input, init);
+    }, { preconnect() {} });
+    try {
+      for (const format of ["gif", "jpg", "PNG", " png", "", "../outside", "png/../../outside", "png\\..\\outside", "/absolute", "png%2f..%2foutside", "png\0suffix", null, 7, {}, ["png"]]) {
+        const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+          method: "POST", body: JSON.stringify({ prompt: "a tiny robot", format }),
+        });
+        expect(result.response.status).toBe(400);
+        expect(result.payload.code).toBe("invalid_image_format");
+        expect(result.payload.message).toBe("Image format must be png, jpeg, or webp.");
+      }
+      expect(providerRequests).toBe(0);
+      expect(existsSync(join(dir, ".matterhorn-work", "outputs", "images"))).toBe(false);
+      expect(readAuditActions()).not.toContain("workspace.image.generated");
+    } finally { globalThis.fetch = priorFetch; }
+  });
+
+  test("POST /workspace/:id/images/generate preserves all supported formats and omitted default", async () => {
+    for (const format of [undefined, "png", "jpeg", "webp"]) {
+      const { base, dir } = await boot();
+      const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+        method: "POST", body: JSON.stringify({ prompt: "a tiny robot", format }),
+      });
+      expect(result.response.status).toBe(200);
+      expect(result.payload.image.format).toBe(format ?? "png");
+      const extension = format === "jpeg" ? "jpg" : format ?? "png";
+      expect(result.payload.image.relativePath).toBe(`.matterhorn-work/outputs/images/${result.payload.image.id}.${extension}`);
+      expect(existsSync(join(dir, result.payload.image.relativePath))).toBe(true);
+    }
+  });
+
   test("POST /workspace/:id/images/generate reports invalid provider setup as setup failure", async () => {
     process.env.MATTERHORN_IMAGE_PROVIDER = "not-a-provider";
     const { base } = await boot();

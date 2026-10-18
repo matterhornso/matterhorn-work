@@ -63,6 +63,10 @@ const SECRET_PATTERNS = [
 
 const OPENAI_IMAGE_GENERATION_TIMEOUT_MS = 60_000;
 
+export function isImageGenerationFormat(value: unknown): value is MatterhornImageFormat {
+  return MATTERHORN_IMAGE_FORMATS.some((format) => format === value);
+}
+
 export function detectSecretShapedInput(value: string): boolean {
   return SECRET_PATTERNS.some((pattern) => pattern.test(value));
 }
@@ -91,7 +95,12 @@ function formatMimeType(format: MatterhornImageFormat): string {
 }
 
 function fileExtension(format: MatterhornImageFormat): string {
-  return format === "jpeg" ? "jpg" : format;
+  switch (format) {
+    case "png": return "png";
+    case "jpeg": return "jpg";
+    case "webp": return "webp";
+    default: throw new Error("Unsupported image format.");
+  }
 }
 
 function imageSizeDimensions(size: MatterhornImageSize): { width: number; height: number } {
@@ -381,6 +390,13 @@ export function createImageGenerationProvider(config: ImageGenerationProviderCon
       };
     },
     async generate(input: ImageGenerationProviderInput): Promise<MatterhornImageGenerationResponse> {
+      if (input.format !== undefined && !isImageGenerationFormat(input.format)) {
+        return {
+          success: false,
+          code: "invalid_image_format",
+          message: "Image format must be png, jpeg, or webp.",
+        };
+      }
       if (config.configError) {
         return {
           success: false,

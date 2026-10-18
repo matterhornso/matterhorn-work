@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { link, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { link, mkdir, mkdtemp, open, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { downloadVerifiedSidecar, type SidecarConfig, type SidecarName, type SidecarTarget } from "../src/sidecar-download.js";
@@ -43,15 +44,27 @@ test("verified bytes use locally pinned paths for all sidecars, and cached bytes
     const f = await fixture(name);
     const result = await downloadVerifiedSidecar(f.options);
     expect(result).toEqual({ bin: f.bin, source: "downloaded", expectedVersion: "1.2.3" });
-    expect(await readFile(f.bin)).toEqual(bytes);
+    const downloaded = await open(f.bin, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      expect((await downloaded.stat()).mode & 0o777).toBe(0o700);
+      expect(await downloaded.readFile()).toEqual(bytes);
+    } finally { await downloaded.close(); }
     expect(f.calls).toEqual([f.sidecar.manifestUrl, `${f.sidecar.baseUrl}/custom-name`]);
-    expect((await lstat(f.bin)).mode & 0o777).toBe(0o700);
     await downloadVerifiedSidecar(f.options);
     expect(f.calls.length).toBe(3);
-    await writeFile(f.bin, "damaged cache");
+    const cached = await open(f.bin, constants.O_RDWR | constants.O_NOFOLLOW);
+    try {
+      expect((await cached.stat()).isFile()).toBe(true);
+      await cached.truncate(0);
+      await cached.writeFile("damaged cache");
+    } finally { await cached.close(); }
     await downloadVerifiedSidecar(f.options);
     expect(f.calls.length).toBe(5);
-    expect(await readFile(f.bin)).toEqual(bytes);
+    const recovered = await open(f.bin, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      expect((await recovered.stat()).isFile()).toBe(true);
+      expect(await recovered.readFile()).toEqual(bytes);
+    } finally { await recovered.close(); }
   }
 });
 

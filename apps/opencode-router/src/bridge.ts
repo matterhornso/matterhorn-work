@@ -1,7 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 
 import { createHash } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import type { Logger } from "pino";
@@ -14,6 +13,7 @@ import { normalizeEvent } from "./events.js";
 import { startHealthServer, type HealthSnapshot } from "./health.js";
 import { type InboundMessagePart, type MessageDeliveryResult, type OutboundMessagePart, normalizeOutboundParts, summarizeInboundPartsForPrompt, summarizeInboundPartsForReporter, textFromInboundParts } from "./media.js";
 import { MediaStore } from "./media-store.js";
+import { readMessagingAgentFile } from "./messaging-agent-file.js";
 import { buildPermissionRules, createClient } from "./opencode.js";
 import { isWithinWorkspaceRootPath, normalizeScopedDirectoryPath } from "./path-scope.js";
 import { chunkText, formatInputSummary, truncateText } from "./text.js";
@@ -253,7 +253,7 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
   const mediaStore = new MediaStore(join(workspaceRoot, ".opencode-router", "media"));
   await mediaStore.ensureReady();
   const workspaceAgentFilePath = join(workspaceRoot, OPENCODE_ROUTER_AGENT_FILE_RELATIVE_PATH);
-  const agentPromptCache = new Map<string, { mtimeMs: number; config: MessagingAgentConfig }>();
+  const agentPromptCache = new Map<string, { cacheKey: string; config: MessagingAgentConfig }>();
   let latestAgentConfig: MessagingAgentConfig = {
     filePath: workspaceAgentFilePath,
     loaded: false,
@@ -284,23 +284,17 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
   const loadMessagingAgentConfig = async (): Promise<MessagingAgentConfig> => {
     const filePath = workspaceAgentFilePath;
     try {
-      const info = await stat(filePath);
-      if (!info.isFile()) {
-        agentPromptCache.delete(filePath);
-        latestAgentConfig = { filePath, loaded: false, instructions: "" };
-        return latestAgentConfig;
-      }
-
+      const snapshot = await readMessagingAgentFile(filePath);
       const cached = agentPromptCache.get(filePath);
-      if (cached && cached.mtimeMs === info.mtimeMs) {
+      if (cached && cached.cacheKey === snapshot.cacheKey) {
         latestAgentConfig = cached.config;
         return latestAgentConfig;
       }
 
-      const raw = (await readFile(filePath, "utf8")).trim();
+      const raw = snapshot.text.trim();
       if (!raw) {
         const next: MessagingAgentConfig = { filePath, loaded: false, instructions: "" };
-        agentPromptCache.set(filePath, { mtimeMs: info.mtimeMs, config: next });
+        agentPromptCache.set(filePath, { cacheKey: snapshot.cacheKey, config: next });
         latestAgentConfig = next;
         return next;
       }
@@ -313,13 +307,13 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
         ...(parsed.selectedAgent ? { selectedAgent: parsed.selectedAgent } : {}),
         instructions: parsed.instructions,
       };
-      agentPromptCache.set(filePath, { mtimeMs: info.mtimeMs, config: next });
+      agentPromptCache.set(filePath, { cacheKey: snapshot.cacheKey, config: next });
       latestAgentConfig = next;
       return next;
     } catch (error) {
+      agentPromptCache.delete(filePath);
       const code = (error as NodeJS.ErrnoException)?.code;
       if (code === "ENOENT") {
-        agentPromptCache.delete(filePath);
         latestAgentConfig = { filePath, loaded: false, instructions: "" };
         return latestAgentConfig;
       }
