@@ -170,7 +170,7 @@ function buildMockPng(width: number, height: number): Buffer {
   return Buffer.concat([signature, chunk("IHDR", ihdr), chunk("IDAT", idat), chunk("IEND", Buffer.alloc(0))]);
 }
 
-async function writeGeneratedImageFile(
+export async function writeGeneratedImageFile(
   storageDir: string,
   imageId: string,
   format: MatterhornImageFormat,
@@ -180,9 +180,11 @@ async function writeGeneratedImageFile(
   const fileName = `${imageId}.${ext}`;
   const relativePath = `.matterhorn-work/outputs/images/${fileName}`;
   const dir = join(storageDir, ".matterhorn-work", "outputs", "images");
-  await mkdir(dir, { recursive: true });
+  // The storage root and ancestors remain trusted. Restrict newly created
+  // directories without changing existing directory permissions.
+  await mkdir(dir, { recursive: true, mode: 0o700 });
   const filePath = join(dir, fileName);
-  await writeFile(filePath, bytes);
+  await writeFile(filePath, bytes, { flag: "wx", mode: 0o600 });
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   return { relativePath, fileName, sha256, byteLength: bytes.length };
 }
