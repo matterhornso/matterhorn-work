@@ -90,7 +90,7 @@ test("bounds file size before reading and closes rejected descriptors", async (t
   assert.equal(opened.fd, -1);
 });
 
-test("bounds growth after fstat and rejects content mutation during the read", async (t) => {
+test("bounds growth after fstat and rejects metadata-visible mutation during the read", async (t) => {
   const { path } = await fixture(t);
   for (const [replacement, expected] of [["longer fixture", /size limit/], ["other", /changed while being read/]]) {
     await writeFile(path, "first");
@@ -104,7 +104,11 @@ test("bounds growth after fstat and rejects content mutation during the read", a
         opened.read = async (...args) => {
           if (!changed) {
             changed = true;
+            const beforeWrite = await opened.stat();
             await writeFile(path, replacement);
+            // Same-size writes can share a filesystem timestamp tick. Make this
+            // fixture's metadata change observable without sleeps or retries.
+            await opened.utimes(beforeWrite.atime, new Date(beforeWrite.mtimeMs + 1000));
           }
           return read(...args);
         };

@@ -39,6 +39,8 @@ export async function readMessagingAgentFile(
     }
 
     const after = await handle.stat();
+    // Detect observable size/timestamp changes, not an atomic filesystem snapshot:
+    // same-size concurrent writes can share a filesystem timestamp tick.
     if (size !== before.size || before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) {
       throw new Error("Messaging agent file changed while being read");
     }
