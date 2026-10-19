@@ -113,3 +113,30 @@ jobs:
         run: pnpm test:release-dependency-patches
       - name: Exercise auth, tenancy, and shared rate-limit controls
         run: bun test apps/server/src/auth.e2e.test.ts apps/server/src/backend-security.e2e.test.ts apps/server/src/request-rate-limit-store.test.ts --timeout 15000
+      - name: Exercise executable download and runtime security regressions
+        run: |
+          pnpm --dir apps/orchestrator test:sidecars
+          bun --no-env-file test apps/orchestrator/test/runtime-upgrade-state.test.ts apps/orchestrator/test/router-workspace-request.test.ts apps/orchestrator/test/router-daemon-error.test.ts apps/desktop/scripts/verified-opencode.test.ts
+          pnpm --dir apps/opencode-router build
+          node --test apps/opencode-router/test/media-store-races.test.mjs
+          bun --no-env-file test apps/app/tests/message-element.test.ts apps/app/tests/tool-text.test.ts apps/app/tests/desk-task-inputs.test.ts apps/server/src/google-workspace-query.test.ts apps/server/src/google-workspace-access.test.ts apps/server/src/google-workspace-access.e2e.test.ts apps/server/src/google-workspace-launch-gate.test.ts apps/server/src/skill-hub.test.ts apps/server/src/opencode-db.test.ts apps/server/src/tokens.test.ts apps/server/src/image-generation-provider.test.ts apps/server/src/generated-image-store.test.ts apps/server/src/generated-media-routes.e2e.test.ts
+          node --test apps/desktop/electron/migration-write.test.mjs apps/desktop/electron/ui-control-handler.test.mjs apps/desktop/electron/ui-control-discovery.test.mjs apps/orchestrator/test/package-install.test.mjs apps/opencode-router/test/config-path.test.js apps/opencode-router/test/slack.test.js apps/opencode-router/test/telegram.test.js apps/opencode-router/test/media-store.test.js apps/opencode-router/test/public-control-error.test.js apps/opencode-router/test/health-errors.test.js apps/opencode-router/test/messaging-agent-file.test.js qa-reports/jev/2026-09-30/local-qa-network.test.mjs scripts/lib/release-file-snapshot.test.mjs scripts/release/version-command.test.mjs scripts/workspace-user-data-recovery-files.test.mjs packages/stm-credentials/test/adapter.test.mjs
+      - name: Exercise release evidence and recovery security regressions
+        run: |
+          node scripts/release-secret-scan.test.mjs
+          node scripts/release-candidate-manifest.test.mjs
+          node scripts/public-beta-owner-acceptance.test.mjs
+          node scripts/workspace-user-data-recovery.test.mjs
+          node scripts/workspace-backup-restore-drill.test.mjs
+          node scripts/bittensor-customer-evidence-bundle.test.mjs
+          node scripts/bittensor-receipt-check.test.mjs
+          node scripts/generated-media-production-readiness.test.mjs
+          node --test scripts/migration/02-validate-migration.test.mjs
+          node scripts/billing-browser-smoke.test.mjs
+          node --test scripts/lib/browser-smoke-privacy.test.mjs
+          node scripts/outputs-browser-smoke.test.mjs
+          node --test scripts/outputs-browser-smoke-safety.test.mjs
+          node scripts/desktop-beta-first-run.test.mjs
+          node scripts/bittensor-beta-customer-packet.test.mjs
+          node scripts/market-official-sdk-operator-loop.test.mjs
+          node scripts/monday-beta-rc-pack.test.mjs

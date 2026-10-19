@@ -91,11 +91,11 @@ function receiptEnvelope(input) {
 }
 
 function statusOf(receipt) {
-  return String(receipt.status || receipt.result || receipt.state || "").toLowerCase();
+  return String(receipt.status || receipt.result || receipt.state || "").trim().toLowerCase();
 }
 
 function receiptSucceeded(status) {
-  return /finalized|success|submitted|in_block|included|broadcast/.test(status);
+  return ["finalized", "success", "submitted", "in_block", "in block", "included", "broadcast"].includes(status);
 }
 
 function escapeCell(value) {
@@ -167,7 +167,7 @@ if (blockHash) {
 }
 
 if (receiptSucceeded(status)) addFinding(findings, "pass", "Status", `Receipt status is ${status}.`);
-else addFinding(findings, "warn", "Status", `Receipt status needs review: ${status || "missing"}.`, "P2");
+else addFinding(findings, "fail", "Status", `Receipt status needs review: ${status || "missing"}.`, "P1");
 
 if (expectedPayloadSha) {
   if (!isSha256(expectedPayloadSha)) addFinding(findings, "fail", "Expected payload hash", "--expected-payload-sha is not a valid SHA-256.", "P1");

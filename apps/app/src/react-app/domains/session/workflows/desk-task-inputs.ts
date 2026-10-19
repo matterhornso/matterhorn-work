@@ -18,7 +18,7 @@ const SECRET_INPUT_PATTERN =
   /\b(seed phrase|private key|mnemonic|raw signature|signed payload|wallet export|api secret|exchange secret)\b/i;
 const SS58_PUBLIC_ADDRESS_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{32,64}$/;
 const SUI_PUBLIC_ADDRESS_PATTERN = /^0x[a-fA-F0-9]{32,64}$/;
-const PUBLIC_DIGEST_PATTERN = /^[1-9A-HJ-NP-Za-km-zA-F0-9]{32,96}$/;
+const PUBLIC_DIGEST_PATTERN = /^(?:[1-9A-HJ-NP-Za-km-z]{32,96}|[a-fA-F0-9]{32,96})$/;
 
 function normalizePlaceholderLabel(text: string) {
   return text

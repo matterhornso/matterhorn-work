@@ -1,29 +1,33 @@
 // Disposable local-account browser probe. Credentials stay in memory and outside reports.
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { chromium } from "playwright";
+import { createLocalQaBackend, requireLoopbackOrigin, signInLocalQaBrowser } from "./local-qa-network.mjs";
 const data = process.env.MATTERHORN_JEV_QA_ACCOUNT_DIR;
 if (!data || !/^\/private\/tmp\/matterhorn-account-demo-[a-zA-Z0-9]+$/.test(data)) throw new Error("Exact disposable QA account directory required");
 const login = JSON.parse(readFileSync(`${data}/test-login.json`, "utf8"));
 const diagnostics = JSON.parse(readFileSync(`${data}/local-diagnostics.json`, "utf8"));
-if (!["[::1]", "localhost", "127.0.0.1"].includes(new URL(login.url).hostname)) throw new Error("Loopback account only");
+const webOrigin = requireLoopbackOrigin(login.url, "QA browser origin");
+// Pin this separately from the diagnostics file; never infer it from that file.
+const backend = createLocalQaBackend(diagnostics.backend, process.env.MATTERHORN_JEV_QA_BACKEND_ORIGIN);
 const browser = await chromium.launch();
 try {
   const context = await browser.newContext();
-  const signed = await context.request.post(`${login.url}/api/auth/sign-in/email`, { data: { email: login.email, password: login.password } });
+  const signed = await signInLocalQaBrowser(context.request, webOrigin, login);
   if (!signed.ok()) throw new Error(`Normal QA sign-in failed: ${signed.status()}`);
-  const apiLogin = await fetch(`${diagnostics.backend}/api/auth/sign-in/email`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: login.email, password: login.password }) });
+  const apiLogin = await backend("/api/auth/sign-in/email", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: login.email, password: login.password }) });
   const cookie = apiLogin.headers.get("set-cookie")?.split(";")[0];
   if (!apiLogin.ok || !cookie) throw new Error("QA evidence login failed");
   const evidence = [];
   const captureDir = new URL("./real-chat-captures/", import.meta.url).pathname;
   mkdirSync(captureDir, { recursive: true });
   const page = await context.newPage();
-  await page.goto(login.url);
+  await page.goto(webOrigin);
+  if (new URL(page.url()).origin !== webOrigin) throw new Error("QA page left the validated browser origin");
   await page.waitForTimeout(1500);
   for (const desk of ["Private AI", "Bittensor", "Hyperliquid", "Polymarket", "Sui"]) {
     const previousUrl = page.url();
     await page.getByRole("navigation", { name: "Desks" }).getByRole("button", { name: `${desk} logo ${desk}`, exact: true }).click();
-    await page.waitForURL(url => url.href !== previousUrl && /\/session\/ses_/.test(url.pathname));
+    await page.waitForURL(url => url.origin === webOrigin && url.href !== previousUrl && /\/session\/ses_/.test(url.pathname));
     // Test persisted desk deep links, not an editor retained during route hydration.
     await page.reload();
     const composer = page.locator('[contenteditable="true"][role="textbox"]');
@@ -52,7 +56,7 @@ try {
     if (!match) throw new Error("Expected real session URL");
     let answer;
     for (let attempt = 0; attempt < 90; attempt++) {
-      const snapshot = await fetch(`${diagnostics.backend}/workspace/${match[1]}/sessions/${match[2]}/messages`, { headers: { cookie } });
+      const snapshot = await backend(`/workspace/${encodeURIComponent(match[1])}/sessions/${encodeURIComponent(match[2])}/messages`, { headers: { cookie } });
       if (!snapshot.ok) throw new Error(`Readback failed: ${snapshot.status}`);
       const history = await snapshot.json();
       answer = history.items?.filter(item => item.info?.role === "assistant").at(-1);
@@ -70,9 +74,9 @@ try {
     await page.screenshot({ path: `${captureDir}/${desk.toLowerCase().replaceAll(" ", "-")}.png`, fullPage: true });
     if (response.status() !== 202 || answer?.info?.error || !text || answer?.info?.finish !== "stop") break;
   }
-  const w = await fetch(`${diagnostics.backend}/workspaces`, { headers: { cookie } });
+  const w = await backend("/workspaces", { headers: { cookie } });
   const workspaceId = (await w.json()).items[0].id;
-  const usage = await fetch(`${diagnostics.backend}/workspace/${workspaceId}/model-usage/status`, { headers: { cookie } });
+  const usage = await backend(`/workspace/${encodeURIComponent(workspaceId)}/model-usage/status`, { headers: { cookie } });
   const status = (await usage.json()).status;
   const totals = { used: status?.monthly?.usedTokens, charged: status?.monthly?.chargedTokens, pending: status?.pendingRequests };
   console.log(JSON.stringify({ totals }));

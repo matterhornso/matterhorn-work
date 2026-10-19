@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -135,6 +136,16 @@ const second = spawnSync(
 assert.equal(second.status, 0, second.stderr);
 const secondReport = JSON.parse(second.stdout);
 assert.notEqual(secondReport.candidateSourceDigest, firstReport.candidateSourceDigest);
+
+const linked = join(repoRoot, "scripts/linked.mjs");
+symlinkSync("missing-destination.mjs", linked);
+const symbolic = spawnSync(process.execPath,
+  [script, "--repo-root", repoRoot, "--output-dir", firstDir, "--strict", "--json"], { encoding: "utf8" });
+assert.equal(symbolic.status, 0, symbolic.stderr);
+const symbolicEntry = JSON.parse(symbolic.stdout).candidateReview?.find(entry => entry.path === "scripts/linked.mjs");
+assert.equal(symbolicEntry?.kind, "symlink");
+assert.equal(symbolicEntry?.size, Buffer.byteLength("missing-destination.mjs"));
+rmSync(linked);
 
 runGit(["add", "qa-reports/private.json"]);
 const protectedDir = join(repoRoot, "qa-reports/protected-output");

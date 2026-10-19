@@ -296,6 +296,7 @@ export type SkillCard = {
   description?: string;
   trigger?: string;
   userInvocable?: boolean;
+  builtin?: true;
 };
 
 export type HubSkillRepo = {

@@ -11,7 +11,6 @@ import {
   copyFile,
   cp,
   mkdir,
-  mkdtemp,
   readFile,
   readdir,
   rename,
@@ -40,6 +39,12 @@ import { createRequire } from "node:module";
 import { once } from "node:events";
 
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
+import { downloadVerifiedSidecar, type SidecarConfig, type SidecarName, type SidecarTarget } from "./sidecar-download.js";
+import { downloadVerifiedOpencode } from "./opencode-download.js";
+import { routerWorkspaceRequestOptions } from "./router-workspace-request.js";
+import { RouterDaemonRequestError, routerDaemonErrorResponse } from "./router-daemon-error.js";
+import { failRuntimeUpgrade, runtimeUpgradeFailureDiagnostic, startRuntimeUpgrade,
+  type RuntimeServiceName, type RuntimeUpgradePhase, type RuntimeUpgradeState } from "./runtime-upgrade-state.js";
 import type { TuiHandle } from "./tui/app.js";
 
 type ApprovalMode = "manual" | "auto";
@@ -128,6 +133,8 @@ type OpenCodeRouterHealthSnapshot = {
 const FALLBACK_VERSION = "0.1.0";
 
 declare const __OPENWORK_ORCHESTRATOR_VERSION__: string | undefined;
+declare const __OPENWORK_PINNED_SERVER_VERSION__: string | undefined;
+declare const __OPENWORK_PINNED_ROUTER_VERSION__: string | undefined;
 declare const __OPENWORK_PINNED_OPENCODE_VERSION__: string | undefined;
 const DEFAULT_OPENWORK_PORT = 8787;
 const DEFAULT_APPROVAL_TIMEOUT = 30000;
@@ -195,44 +202,9 @@ type VersionInfo = {
   sha256: string;
 };
 
-type SidecarName = "openwork-server" | "opencode-router" | "opencode";
-
-type SidecarTarget =
-  | "darwin-arm64"
-  | "darwin-x64"
-  | "linux-x64"
-  | "linux-arm64"
-  | "windows-x64"
-  | "windows-arm64";
-
 type VersionManifest = {
   dir: string;
   entries: Record<string, VersionInfo>;
-};
-
-type RemoteSidecarAsset = {
-  asset?: string;
-  url?: string;
-  sha256?: string;
-  size?: number;
-};
-
-type RemoteSidecarEntry = {
-  version: string;
-  targets: Record<string, RemoteSidecarAsset>;
-};
-
-type RemoteSidecarManifest = {
-  version: string;
-  generatedAt?: string;
-  entries: Record<string, RemoteSidecarEntry>;
-};
-
-type SidecarConfig = {
-  dir: string;
-  baseUrl: string;
-  manifestUrl: string;
-  target: SidecarTarget | null;
 };
 
 type BinarySource = "bundled" | "external" | "downloaded";
@@ -252,8 +224,6 @@ type BinaryDiagnostics = {
   actualVersion?: string;
 };
 
-type RuntimeServiceName = "openwork-server" | "opencode" | "opencode-router";
-
 type RuntimeServiceSnapshot = {
   name: RuntimeServiceName;
   enabled: boolean;
@@ -263,15 +233,6 @@ type RuntimeServiceSnapshot = {
   targetVersion?: string;
   actualVersion?: string;
   upgradeAvailable: boolean;
-};
-
-type RuntimeUpgradeState = {
-  status: "idle" | "running" | "failed";
-  startedAt: number | null;
-  finishedAt: number | null;
-  error: string | null;
-  operationId: string | null;
-  services: RuntimeServiceName[];
 };
 
 type SidecarDiagnostics = {
@@ -1644,11 +1605,6 @@ async function readVersionManifest(): Promise<VersionManifest | null> {
   return null;
 }
 
-const remoteManifestCache = new Map<
-  string,
-  Promise<RemoteSidecarManifest | null>
->();
-
 let cachedExtraPathEntries: string[] | null = null;
 
 function isDirectory(path: string): boolean {
@@ -1862,6 +1818,7 @@ function resolveSidecarConfigForTarget(
     dir: resolveSidecarDir(flags),
     baseUrl,
     manifestUrl: resolveSidecarManifestUrl(flags, baseUrl),
+    releaseVersion: cliVersion,
     target: targetOverride,
   };
 }
@@ -1993,69 +1950,9 @@ function resolveSidecarConfig(
     dir: resolveSidecarDir(flags),
     baseUrl,
     manifestUrl: resolveSidecarManifestUrl(flags, baseUrl),
+    releaseVersion: cliVersion,
     target: resolveSidecarTarget(),
   };
-}
-
-async function fetchRemoteManifest(
-  url: string,
-): Promise<RemoteSidecarManifest | null> {
-  const cached = remoteManifestCache.get(url);
-  if (cached) return cached;
-  const task = (async () => {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) return null;
-      return (await response.json()) as RemoteSidecarManifest;
-    } catch {
-      return null;
-    }
-  })();
-  remoteManifestCache.set(url, task);
-  return task;
-}
-
-function resolveAssetUrl(
-  baseUrl: string,
-  asset?: string,
-  url?: string,
-): string | null {
-  if (url && url.trim()) return url.trim();
-  if (asset && asset.trim())
-    return `${baseUrl.replace(/\/$/, "")}/${asset.trim()}`;
-  return null;
-}
-
-function resolveAssetName(asset?: string, url?: string): string | null {
-  if (asset && asset.trim()) return asset.trim();
-  if (url && url.trim()) {
-    try {
-      return basename(new URL(url).pathname);
-    } catch {
-      const parts = url.split("/").filter(Boolean);
-      return parts.length ? parts[parts.length - 1] : null;
-    }
-  }
-  return null;
-}
-
-async function downloadToPath(url: string, dest: string): Promise<void> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    let downloadLabel = "remote asset";
-    try {
-      const parsed = new URL(url);
-      downloadLabel = `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
-    } catch {
-      // Keep malformed URLs out of error logs because they may contain credentials.
-    }
-    throw new Error(`Failed to download ${downloadLabel} (HTTP ${response.status})`);
-  }
-  const buffer = Buffer.from(await response.arrayBuffer());
-  await mkdir(dirname(dest), { recursive: true });
-  const tmpPath = `${dest}.tmp-${randomUUID()}`;
-  await writeFile(tmpPath, buffer);
-  await rename(tmpPath, dest);
 }
 
 async function ensureExecutable(path: string): Promise<void> {
@@ -2072,308 +1969,19 @@ async function downloadSidecarBinary(options: {
   sidecar: SidecarConfig;
   expectedVersion?: string;
 }): Promise<ResolvedBinary | null> {
-  if (!options.sidecar.target) return null;
-  const manifest = await fetchRemoteManifest(options.sidecar.manifestUrl);
-  if (!manifest) return null;
-  const entry = manifest.entries[options.name];
-  if (!entry) return null;
-  if (options.expectedVersion && entry.version !== options.expectedVersion) {
-    return null;
-  }
-  const targetInfo = entry.targets[options.sidecar.target];
-  if (!targetInfo) return null;
-  const expectedSha256 = targetInfo.sha256?.trim().toLowerCase();
-  if (!expectedSha256 || !/^[a-f0-9]{64}$/.test(expectedSha256)) {
-    throw new Error(
-      `Refusing checksum-less ${options.name} sidecar for ${options.sidecar.target}`,
-    );
-  }
-
-  const assetName = resolveAssetName(targetInfo.asset, targetInfo.url);
-  const assetUrl = resolveAssetUrl(
-    options.sidecar.baseUrl,
-    targetInfo.asset,
-    targetInfo.url,
-  );
-  if (!assetName || !assetUrl) return null;
-
-  const targetDir = join(
-    options.sidecar.dir,
-    entry.version,
-    options.sidecar.target,
-  );
-  const targetPath = join(targetDir, assetName);
-  if (await fileExists(targetPath)) {
-    try {
-      await verifyBinary(targetPath, {
-        version: entry.version,
-        sha256: expectedSha256,
-      });
-      await ensureExecutable(targetPath);
-      return {
-        bin: targetPath,
-        source: "downloaded",
-        expectedVersion: entry.version,
-      };
-    } catch {
-      await rm(targetPath, { force: true });
-    }
-  }
-
-  await downloadToPath(assetUrl, targetPath);
-  try {
-    await verifyBinary(targetPath, {
-      version: entry.version,
-      sha256: expectedSha256,
-    });
-  } catch (error) {
-    await rm(targetPath, { force: true });
-    throw error;
-  }
-  await ensureExecutable(targetPath);
-  return {
-    bin: targetPath,
-    source: "downloaded",
-    expectedVersion: entry.version,
-  };
-}
-
-function resolveOpencodeAsset(target: SidecarTarget): string | null {
-  const assets: Record<SidecarTarget, string> = {
-    "darwin-arm64": "opencode-darwin-arm64.zip",
-    "darwin-x64": "opencode-darwin-x64-baseline.zip",
-    "linux-x64": "opencode-linux-x64-baseline.tar.gz",
-    "linux-arm64": "opencode-linux-arm64.tar.gz",
-    "windows-x64": "opencode-windows-x64-baseline.zip",
-    "windows-arm64": "opencode-windows-arm64.zip",
-  };
-  return assets[target] ?? null;
-}
-
-async function runCommand(
-  command: string,
-  args: string[],
-  cwd?: string,
-): Promise<void> {
-  const child = spawnProcess(command, args, { cwd, stdio: "inherit" });
-  const result = await Promise.race([
-    once(child, "exit").then(([code]) => ({ type: "exit" as const, code })),
-    once(child, "error").then(([error]) => ({ type: "error" as const, error })),
-  ]);
-  if (result.type === "error") {
-    throw new Error(
-      `Command failed: ${command} ${args.join(" ")}: ${String(result.error)}`,
-    );
-  }
-  if (result.code !== 0) {
-    throw new Error(`Command failed: ${command} ${args.join(" ")}`);
-  }
-}
-
-async function captureCommand(
-  command: string,
-  args: string[],
-  cwd?: string,
-): Promise<string> {
-  const child = spawnProcess(command, args, {
-    cwd,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  const chunks: Buffer[] = [];
-  let totalBytes = 0;
-  let outputExceeded = false;
-  const collectOutput = (chunk: Buffer | string, retain: boolean) => {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    totalBytes += buffer.length;
-    if (totalBytes > 8 * 1024 * 1024) {
-      outputExceeded = true;
-      child.kill("SIGKILL");
-      return;
-    }
-    if (retain) chunks.push(buffer);
-  };
-  child.stdout?.on("data", (chunk: Buffer | string) => {
-    collectOutput(chunk, true);
-  });
-  child.stderr?.on("data", (chunk: Buffer | string) => {
-    collectOutput(chunk, false);
-  });
-  const result = await Promise.race([
-    once(child, "exit").then(([code]) => ({ type: "exit" as const, code })),
-    once(child, "error").then(([error]) => ({ type: "error" as const, error })),
-  ]);
-  if (result.type === "error" || result.code !== 0 || outputExceeded) {
-    throw new Error(`Command failed: ${command}`);
-  }
-  return Buffer.concat(chunks).toString("utf8");
-}
-
-function assertSafeArchiveEntries(entries: string[]): void {
-  for (const rawEntry of entries) {
-    const entry = rawEntry.trim().replace(/\\/g, "/");
-    if (!entry) continue;
-    const segments = entry.split("/").filter(Boolean);
-    if (
-      entry.startsWith("/") ||
-      /^[a-zA-Z]:\//.test(entry) ||
-      segments.includes("..")
-    ) {
-      throw new Error("Refusing OpenCode archive with an unsafe entry path");
-    }
-  }
-}
-
-async function resolveVerifiedOpencodeReleaseAsset(
-  version: string,
-  assetName: string,
-): Promise<{ url: string; sha256: string }> {
-  const releaseUrl = `https://api.github.com/repos/anomalyco/opencode/releases/tags/v${encodeURIComponent(version)}`;
-  const response = await fetch(releaseUrl, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      "User-Agent": "Matterhorn-Desks",
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-  });
-  if (!response.ok) {
-    await response.body?.cancel().catch(() => undefined);
-    throw new Error(`Unable to verify the OpenCode release asset (HTTP ${response.status})`);
-  }
-  const release = await response.json() as {
-    assets?: Array<{
-      name?: unknown;
-      browser_download_url?: unknown;
-      digest?: unknown;
-    }>;
-  };
-  const asset = release.assets?.find((candidate) => candidate.name === assetName);
-  const url = typeof asset?.browser_download_url === "string"
-    ? asset.browser_download_url
-    : "";
-  const digest = typeof asset?.digest === "string" ? asset.digest.trim() : "";
-  const match = /^sha256:([a-f0-9]{64})$/i.exec(digest);
-  if (!url || !match) {
-    throw new Error(`Refusing unverified OpenCode release asset: ${assetName}`);
-  }
-  return { url, sha256: match[1].toLowerCase() };
+  if (!options.expectedVersion) throw new Error("A locally pinned version is required to download a sidecar");
+  return downloadVerifiedSidecar({ ...options, expectedVersion: options.expectedVersion });
 }
 
 async function resolveOpencodeDownload(
   sidecar: SidecarConfig,
   expectedVersion?: string,
 ): Promise<string | null> {
-  if (!expectedVersion) return null;
-  if (!sidecar.target) return null;
-
-  const assetOverride =
-    process.env.OPENWORK_OPENCODE_ASSET ?? process.env.OPENCODE_ASSET;
-  const asset = assetOverride?.trim() || resolveOpencodeAsset(sidecar.target);
-  if (!asset) return null;
-
-  const version = expectedVersion.startsWith("v")
-    ? expectedVersion.slice(1)
-    : expectedVersion;
-  const targetDir = join(sidecar.dir, "opencode", version, sidecar.target);
-  const targetPath = join(
-    targetDir,
-    process.platform === "win32" ? "opencode.exe" : "opencode",
-  );
-
-  const hostTarget = resolveSidecarTarget();
-  const runnableOnHost = hostTarget !== null && sidecar.target === hostTarget;
-
-  if (await fileExists(targetPath)) {
-    if (!runnableOnHost) {
-      await ensureExecutable(targetPath);
-      return targetPath;
-    }
-    const actual = await readCliVersion(targetPath);
-    if (actual === version) {
-      await ensureExecutable(targetPath);
-      return targetPath;
-    }
-  }
-
-  const releaseAsset = await resolveVerifiedOpencodeReleaseAsset(version, asset);
-
-  await mkdir(targetDir, { recursive: true });
-  const stamp = Date.now();
-  const archivePath = join(
-    tmpdir(),
-    `openwork-orchestrator-opencode-${stamp}-${asset}`,
-  );
-  const extractDir = await mkdtemp(
-    join(tmpdir(), "openwork-orchestrator-opencode-"),
-  );
-
-  try {
-    await downloadToPath(releaseAsset.url, archivePath);
-    await verifyBinary(archivePath, {
-      version,
-      sha256: releaseAsset.sha256,
-    });
-    if (process.platform === "win32") {
-      const listing = await captureCommand("powershell", [
-        "-NoProfile",
-        "-Command",
-        `(Get-ChildItem -LiteralPath '${archivePath.replace(/'/g, "''")}' -Stream * -ErrorAction SilentlyContinue) | Out-Null; Add-Type -AssemblyName System.IO.Compression.FileSystem; [IO.Compression.ZipFile]::OpenRead('${archivePath.replace(/'/g, "''")}').Entries.FullName`,
-      ]);
-      assertSafeArchiveEntries(listing.split(/\r?\n/));
-      const psQuote = (value: string) => `'${value.replace(/'/g, "''")}'`;
-      const psScript = [
-        "$ErrorActionPreference = 'Stop'",
-        `Expand-Archive -Path ${psQuote(archivePath)} -DestinationPath ${psQuote(extractDir)} -Force`,
-      ].join("; ");
-      await runCommand("powershell", ["-NoProfile", "-Command", psScript]);
-    } else if (asset.endsWith(".zip")) {
-      const listing = await captureCommand("unzip", ["-Z1", archivePath]);
-      assertSafeArchiveEntries(listing.split(/\r?\n/));
-      await runCommand("unzip", ["-q", archivePath, "-d", extractDir]);
-    } else if (asset.endsWith(".tar.gz")) {
-      const listing = await captureCommand("tar", ["-tzf", archivePath]);
-      assertSafeArchiveEntries(listing.split(/\r?\n/));
-      await runCommand("tar", ["-xzf", archivePath, "-C", extractDir]);
-    } else {
-      throw new Error(`Unsupported opencode asset type: ${asset}`);
-    }
-
-    const entries = await readdir(extractDir, { withFileTypes: true });
-    const queue = entries.map((entry) => join(extractDir, entry.name));
-    let candidate: string | null = null;
-    while (queue.length) {
-      const current = queue.shift();
-      if (!current) break;
-      const statInfo = await stat(current);
-      if (statInfo.isDirectory()) {
-        const nested = await readdir(current, { withFileTypes: true });
-        queue.push(...nested.map((entry) => join(current, entry.name)));
-        continue;
-      }
-      const base = basename(current);
-      if (base === "opencode" || base === "opencode.exe") {
-        candidate = current;
-        break;
-      }
-    }
-
-    if (!candidate) {
-      throw new Error("OpenCode binary not found after extraction.");
-    }
-
-    const resolvedCandidate = await realpath(candidate);
-    const resolvedExtractDir = await realpath(extractDir);
-    const candidateRelativePath = relative(resolvedExtractDir, resolvedCandidate);
-    if (candidateRelativePath === ".." || candidateRelativePath.startsWith(`..${sep}`)) {
-      throw new Error("Refusing OpenCode binary outside the extraction directory");
-    }
-
-    await copyFile(resolvedCandidate, targetPath);
-    await ensureExecutable(targetPath);
-    return targetPath;
-  } finally {
-    await rm(extractDir, { recursive: true, force: true });
-    await rm(archivePath, { force: true });
-  }
+  if (!expectedVersion) throw new Error("A locally pinned version is required to download OpenCode");
+  return downloadVerifiedOpencode({
+    sidecar, expectedVersion,
+    assetOverride: process.env.OPENWORK_OPENCODE_ASSET ?? process.env.OPENCODE_ASSET,
+  });
 }
 
 async function sha256File(path: string): Promise<string> {
@@ -2449,6 +2057,13 @@ async function resolveExpectedVersion(
   if (name !== "opencode") {
     const manifestVersion = manifest?.entries[name]?.version;
     if (manifestVersion) return manifestVersion;
+  }
+
+  if (name === "openwork-server" && typeof __OPENWORK_PINNED_SERVER_VERSION__ === "string") {
+    return __OPENWORK_PINNED_SERVER_VERSION__;
+  }
+  if (name === "opencode-router" && typeof __OPENWORK_PINNED_ROUTER_VERSION__ === "string") {
+    return __OPENWORK_PINNED_ROUTER_VERSION__;
   }
 
   try {
@@ -2767,6 +2382,7 @@ async function resolveOpenworkServerBin(options: {
     const downloaded = await downloadSidecarBinary({
       name: "openwork-server",
       sidecar: options.sidecar,
+      expectedVersion,
     });
     if (!downloaded) {
       throw new Error(
@@ -2794,6 +2410,7 @@ async function resolveOpenworkServerBin(options: {
   const downloaded = await downloadSidecarBinary({
     name: "openwork-server",
     sidecar: options.sidecar,
+    expectedVersion,
   });
   if (downloaded) return downloaded;
 
@@ -2856,12 +2473,6 @@ async function resolveOpencodeBin(options: {
   }
 
   if (options.source === "downloaded") {
-    const downloaded = await downloadSidecarBinary({
-      name: "opencode",
-      sidecar: options.sidecar,
-      expectedVersion,
-    });
-    if (downloaded) return downloaded;
     const opencodeDownloaded = await resolveOpencodeDownload(
       options.sidecar,
       expectedVersion,
@@ -2886,13 +2497,6 @@ async function resolveOpencodeBin(options: {
   if (options.explicit) {
     return resolveExternal();
   }
-
-  const downloaded = await downloadSidecarBinary({
-    name: "opencode",
-    sidecar: options.sidecar,
-    expectedVersion,
-  });
-  if (downloaded) return downloaded;
 
   const opencodeDownloaded = await resolveOpencodeDownload(
     options.sidecar,
@@ -3000,6 +2604,7 @@ async function resolveOpenCodeRouterBin(options: {
     const downloaded = await downloadSidecarBinary({
       name: "opencode-router",
       sidecar: options.sidecar,
+      expectedVersion,
     });
     if (!downloaded) {
       throw new Error(
@@ -3028,6 +2633,7 @@ async function resolveOpenCodeRouterBin(options: {
   const downloaded = await downloadSidecarBinary({
     name: "opencode-router",
     sidecar: options.sidecar,
+    expectedVersion,
   });
   if (downloaded) return downloaded;
 
@@ -6587,16 +6193,18 @@ async function runRouterDaemon(args: ParsedArgs) {
         const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
         bytes += buffer.byteLength;
         if (bytes > ROUTER_DAEMON_MAX_BODY_BYTES) {
-          const error = new Error("payload_too_large");
-          (error as Error & { statusCode?: number }).statusCode = 413;
-          throw error;
+          throw new RouterDaemonRequestError("payload_too_large");
         }
         chunks.push(buffer);
       }
       if (!chunks.length) return null;
       const raw = Buffer.concat(chunks).toString("utf8");
       if (!raw.trim()) return null;
-      return JSON.parse(raw);
+      try {
+        return JSON.parse(raw);
+      } catch {
+        throw new RouterDaemonRequestError("invalid_json");
+      }
     };
 
     try {
@@ -6753,7 +6361,7 @@ async function runRouterDaemon(args: ParsedArgs) {
         const client = createOpencodeClient({
           baseUrl,
           directory: directory ? directory : undefined,
-          headers: authHeaders,
+          ...routerWorkspaceRequestOptions(workspace.workspaceType, authHeaders),
         });
         const pathInfo = unwrap(await client.path.get());
         workspace.lastUsedAt = nowMs();
@@ -6789,7 +6397,7 @@ async function runRouterDaemon(args: ParsedArgs) {
           : workspace.path;
         const response = await fetch(
           `${baseUrl.replace(/\/$/, "")}/instance/dispose?directory=${encodeURIComponent(directory)}`,
-          { method: "POST", headers: authHeaders },
+          { method: "POST", ...routerWorkspaceRequestOptions(workspace.workspaceType, authHeaders) },
         );
         const ok = response.ok ? await response.json() : false;
         workspace.lastUsedAt = nowMs();
@@ -6806,18 +6414,9 @@ async function runRouterDaemon(args: ParsedArgs) {
 
       send(404, { error: "not found" });
     } catch (error) {
-      const statusCode =
-        typeof (error as { statusCode?: unknown })?.statusCode === "number"
-          ? (error as { statusCode: number }).statusCode
-          : 500;
-      send(statusCode, {
-        error:
-          statusCode === 413
-            ? "payload_too_large"
-            : error instanceof Error
-              ? error.message
-              : String(error),
-      });
+      const failure = routerDaemonErrorResponse(error);
+      logger.warn("Router request failed", runtimeUpgradeFailureDiagnostic(error), "openwork-orchestrator-router");
+      send(failure.status, { error: failure.error });
     }
   });
 
@@ -11171,13 +10770,7 @@ async function runStart(args: ParsedArgs) {
     );
   };
   const performRuntimeUpgrade = async (services: RuntimeServiceName[]) => {
-    const opId = randomUUID();
-    runtimeUpgradeState.status = "running";
-    runtimeUpgradeState.startedAt = Date.now();
-    runtimeUpgradeState.finishedAt = null;
-    runtimeUpgradeState.error = null;
-    runtimeUpgradeState.operationId = opId;
-    runtimeUpgradeState.services = services;
+    let phase: RuntimeUpgradePhase = "validate";
     try {
       if (sandboxMode !== "none") {
         throw new Error(
@@ -11189,6 +10782,7 @@ async function runStart(args: ParsedArgs) {
         openworkServerBinary.source === "external" &&
         openworkServerBinary.expectedVersion
       ) {
+        phase = "install-openwork-server";
         await installGlobalPackages([
           `openwork-server@${openworkServerBinary.expectedVersion}`,
         ]);
@@ -11198,11 +10792,13 @@ async function runStart(args: ParsedArgs) {
         opencodeRouterBinary?.source === "external" &&
         opencodeRouterBinary.expectedVersion
       ) {
+        phase = "install-opencode-router";
         await installGlobalPackages([
           `opencode-router@${opencodeRouterBinary.expectedVersion}`,
         ]);
       }
       if (services.includes("openwork-server")) {
+        phase = "resolve-openwork-server";
         openworkServerBinary = await resolveOpenworkServerBin({
           explicit: explicitOpenworkServerBin,
           manifest,
@@ -11212,6 +10808,7 @@ async function runStart(args: ParsedArgs) {
         });
       }
       if (services.includes("opencode")) {
+        phase = "resolve-opencode";
         opencodeBinary = await resolveOpencodeBin({
           explicit: explicitOpencodeBin,
           manifest,
@@ -11221,6 +10818,7 @@ async function runStart(args: ParsedArgs) {
         });
       }
       if (services.includes("opencode-router") && opencodeRouterEnabled) {
+        phase = "resolve-opencode-router";
         opencodeRouterBinary = await resolveOpenCodeRouterBin({
           explicit: explicitOpenCodeRouterBin,
           manifest,
@@ -11230,27 +10828,27 @@ async function runStart(args: ParsedArgs) {
         });
       }
       if (services.includes("opencode")) {
+        phase = "restart-opencode";
         await restartOpencode();
       }
       if (services.includes("opencode-router")) {
+        phase = "restart-opencode-router";
         await restartOpenCodeRouter();
       }
       if (
         services.includes("openwork-server") ||
         services.includes("opencode")
       ) {
+        phase = "restart-openwork-server";
         await restartOpenworkServer();
       }
       runtimeUpgradeState.status = "idle";
       runtimeUpgradeState.finishedAt = Date.now();
     } catch (error) {
-      runtimeUpgradeState.status = "failed";
-      runtimeUpgradeState.finishedAt = Date.now();
-      runtimeUpgradeState.error =
-        error instanceof Error ? error.message : String(error);
+      Object.assign(runtimeUpgradeState, failRuntimeUpgrade(runtimeUpgradeState, Date.now()));
       logger.error(
         "Runtime upgrade failed",
-        { error: runtimeUpgradeState.error, services },
+        { ...runtimeUpgradeFailureDiagnostic(error), phase, operationId: runtimeUpgradeState.operationId, services },
         "openwork-orchestrator",
       );
     }
@@ -11639,13 +11237,14 @@ async function runStart(args: ParsedArgs) {
           );
           return;
         }
+        Object.assign(runtimeUpgradeState, startRuntimeUpgrade(services, randomUUID(), Date.now()));
         res.statusCode = 202;
         res.end(
           JSON.stringify({
             ok: true,
             started: true,
             services,
-            upgrade: { ...runtimeUpgradeState, status: "running" },
+            upgrade: { ...runtimeUpgradeState },
           }),
         );
         void performRuntimeUpgrade(services);

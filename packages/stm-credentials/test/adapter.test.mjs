@@ -238,7 +238,7 @@ test("post-spawn acknowledgement failure reaps a tool that ignores SIGTERM", asy
   const f = await launchFixture(t);
   const ready = join(f.workspace, "ready.json");
   const registry = JSON.parse(await readFile(f.launchPath, "utf8"));
-  registry.grants[0].command = [process.execPath, "-e", `process.on('SIGTERM',()=>{});require('node:fs').writeFileSync(${JSON.stringify(ready)},JSON.stringify({pid:process.pid}));setInterval(()=>{},1000)`];
+  registry.grants[0].command = [process.execPath, "-e", "process.on('SIGTERM',()=>{});require('node:fs').writeFileSync(process.argv[1],JSON.stringify({pid:process.pid}));setInterval(()=>{},1000)", ready];
   await writeFile(f.launchPath, JSON.stringify(registry));
   let pid;
   t.after(() => { if (pid) { try { process.kill(pid, "SIGKILL"); } catch {} } });

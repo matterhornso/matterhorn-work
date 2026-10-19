@@ -5,6 +5,12 @@ import { join } from "node:path";
 
 import { ensureWorkspaceFiles, resolveMatterhornManagedAgentPrompt } from "./workspace-init.js";
 import { openworkExtensionsPreviewPluginPath } from "./openwork-extensions-plugin-path.js";
+import { MATTERHORN_PRELOADED_WORKSPACE_SKILLS, getMatterhornBuiltinDeskGuidance } from "./builtin-workspace-skills.js";
+import { listSkills, readSkillContent } from "./skills.js";
+import { renderPreloadedWorkspaceSkill } from "./builtin-skill-catalog.js";
+import { parseFrontmatter } from "./frontmatter.js";
+import { buildManagedOpencodeRuntimeConfig } from "./managed-opencode-runtime-config.js";
+import { MATTERHORN_DESK_AGENT_MANIFESTS, buildMatterhornDeskRuntimeTools } from "@matterhorn-work/types/desk-agents";
 
 async function withWorkspace(fn: (root: string) => Promise<void>) {
   const root = await mkdtemp(join(tmpdir(), "openwork-workspace-init-"));
@@ -48,7 +54,11 @@ describe("ensureWorkspaceFiles", () => {
       expect(agent).toContain("outputs/");
       expect(agent).toContain("<!-- MATTERHORN_ARTIFACTS_START -->");
       expect(agent).toContain("<!-- MATTERHORN_BROWSER_START -->");
-      expect(agent.length).toBeLessThan(2_500);
+      // Includes common evidence rules and only the Private AI workflow, not
+      // the connector catalog or every other desk's instructions.
+      expect(agent.length).toBeLessThan(6_500);
+      expect(agent).not.toContain("## Connection setup and catalog");
+      expect(agent).not.toContain("## Bittensor research");
       expect(agent.toLowerCase()).not.toContain("openwork");
       expect(bittensorAgent.toLowerCase()).not.toContain("openwork");
       expect(bittensorAgent).toContain("Bittensor Agent");
@@ -122,6 +132,78 @@ describe("ensureWorkspaceFiles", () => {
 
       const secondResult = await ensureWorkspaceFiles(root, "starter");
       expect(secondResult).toEqual({ changed: false, reloadReasons: [] });
+    });
+  });
+
+  test("preloads release-owned workspace skills without fetching or connecting accounts", async () => {
+    await withWorkspace(async (root) => {
+      await ensureWorkspaceFiles(root, "starter");
+      const skills = await listSkills(root, false);
+      expect(skills.map((item) => item.name).sort()).toEqual(MATTERHORN_PRELOADED_WORKSPACE_SKILLS.map((item) => item.name).sort());
+      for (const definition of MATTERHORN_PRELOADED_WORKSPACE_SKILLS) {
+        const item = skills.find((candidate) => candidate.name === definition.name);
+        if (!item) throw new Error("Expected built-in skill entry");
+        expect(await readSkillContent(item)).toBe(renderPreloadedWorkspaceSkill(definition));
+        expect(item.builtin).toBe(true);
+        expect(item.userInvocable).toBe(false);
+      }
+      await expect(stat(join(root, ".opencode", "skills"))).rejects.toThrow();
+      expect(await readFile(join(root, "opencode.jsonc"), "utf8")).not.toContain('"mcp"');
+      expect(await ensureWorkspaceFiles(root, "starter")).toEqual({ changed: false, reloadReasons: [] });
+    });
+  });
+
+  test("preserves a customized preloaded skill when an existing workspace is resolved again", async () => {
+    await withWorkspace(async (root) => {
+      await ensureWorkspaceFiles(root, "starter");
+      const directory = join(root, ".opencode", "skills", MATTERHORN_PRELOADED_WORKSPACE_SKILLS[0].name);
+      await mkdir(directory, { recursive: true });
+      const path = join(directory, "SKILL.md");
+      await writeFile(path, "User-authored replacement; do not overwrite.", "utf8");
+      expect(await ensureWorkspaceFiles(root, "starter")).toEqual({ changed: false, reloadReasons: [] });
+      expect(await readFile(path, "utf8")).toBe("User-authored replacement; do not overwrite.");
+    });
+  });
+
+  test("keeps generated core prompts identical to privacy preflight and managed runtime", async () => {
+    await withWorkspace(async (root) => {
+      await ensureWorkspaceFiles(root, "starter");
+      const config = JSON.parse(buildManagedOpencodeRuntimeConfig({ serverUrl: "https://matterhorn.invalid", clientToken: "fixture-only" }));
+      for (const agentId of ["matterhorn", "matterhorn-bittensor", "matterhorn-hyperliquid", "matterhorn-polymarket", "matterhorn-sui"]) {
+        const content = await readFile(join(root, ".opencode", "agents", `${agentId}.md`), "utf8");
+        const canonical = resolveMatterhornManagedAgentPrompt(agentId);
+        if (canonical === null) throw new Error("Expected canonical desk prompt");
+        expect(canonical.length).toBeLessThanOrEqual(10_500);
+        expect(parseFrontmatter(content).body.trim()).toBe(canonical);
+        expect(config.agent[agentId].prompt).toBe(canonical);
+        expect(canonical).toContain(getMatterhornBuiltinDeskGuidance(agentId));
+        expect(canonical).not.toContain("## Connection setup and catalog");
+        const manifest = Object.values(MATTERHORN_DESK_AGENT_MANIFESTS).find((agent) => agent.agentId === agentId);
+        if (!manifest) throw new Error("Expected core desk manifest");
+        if (manifest.toolPolicy.runtimeKind === "managed_desk") {
+          expect(config.agent[agentId].tools).toEqual(buildMatterhornDeskRuntimeTools(manifest));
+          expect(config.agent[agentId].tools.skill).toBeUndefined();
+          expect(config.agent[agentId].tools["*"]).toBe(false);
+        }
+      }
+    });
+  });
+
+  test("upgrades only the exact previous default prompt, preserving customized generic agents", async () => {
+    await withWorkspace(async (root) => {
+      await ensureWorkspaceFiles(root, "starter");
+      const path = join(root, ".opencode", "agents", "matterhorn.md");
+      const current = await readFile(path, "utf8");
+      const legacy = current.slice(0, current.indexOf("## Matterhorn built-in workflow guidance")).trimEnd() + "\n";
+      expect(legacy).not.toBe(current);
+      await writeFile(path, legacy, "utf8");
+      expect((await ensureWorkspaceFiles(root, "starter")).reloadReasons).toEqual(["agents"]);
+      expect(await readFile(path, "utf8")).toBe(current);
+      const customized = `${legacy}\nPrivate user scoring instructions.\n`;
+      await writeFile(path, customized, "utf8");
+      expect(await ensureWorkspaceFiles(root, "starter")).toEqual({ changed: false, reloadReasons: [] });
+      expect(await readFile(path, "utf8")).toBe(customized);
+      expect(resolveMatterhornManagedAgentPrompt("matterhorn")).not.toContain("Private user scoring instructions");
     });
   });
 

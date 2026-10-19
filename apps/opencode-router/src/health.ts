@@ -3,6 +3,7 @@ import http from "node:http";
 import type { Logger } from "pino";
 
 import type { OutboundMessagePart, PartDeliveryResult } from "./media.js";
+import { parseControlJson, publicIdentityResult, publicRouterFailure, publicSendResult, routerFailureDiagnostic } from "./public-control-error.js";
 
 export type HealthSnapshot = {
   ok: boolean;
@@ -230,6 +231,12 @@ export async function startHealthServer(
       }
 
       const pathname = req.url ? new URL(req.url, "http://localhost").pathname : "";
+      const sendControlError = (error: unknown) => {
+        const failure = publicRouterFailure(error);
+        logger.warn({ error: routerFailureDiagnostic(error) }, "router control request failed");
+        res.writeHead(failure.status, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: failure.message }));
+      };
 
       if (!pathname || pathname === "/" || pathname === "/health") {
         const snapshot = getStatus();
@@ -274,7 +281,7 @@ export async function startHealthServer(
         }
 
         try {
-          const payload = JSON.parse(raw || "{}");
+          const payload = parseControlJson(raw);
           const token = typeof payload.token === "string" ? payload.token.trim() : "";
           if (!token) {
             res.writeHead(400, { "Content-Type": "application/json" });
@@ -283,13 +290,10 @@ export async function startHealthServer(
           }
           const result = await handlers.upsertTelegramIdentity({ id: "default", token, enabled: true });
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: true, telegram: result }));
+          res.end(JSON.stringify({ ok: true, telegram: publicIdentityResult(result) }));
           return;
         } catch (error) {
-          const statusRaw = (error as any)?.status;
-          const status = typeof statusRaw === "number" && statusRaw >= 400 && statusRaw < 600 ? statusRaw : 500;
-          res.writeHead(status, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: String(error instanceof Error ? error.message : error) }));
+          sendControlError(error);
           return;
         }
       }
@@ -313,7 +317,7 @@ export async function startHealthServer(
         }
 
         try {
-          const payload = JSON.parse(raw || "{}");
+          const payload = parseControlJson(raw);
           const botToken = typeof payload.botToken === "string" ? payload.botToken.trim() : "";
           const appToken = typeof payload.appToken === "string" ? payload.appToken.trim() : "";
           if (!botToken || !appToken) {
@@ -323,13 +327,10 @@ export async function startHealthServer(
           }
           const result = await handlers.upsertSlackIdentity({ id: "default", botToken, appToken, enabled: true });
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: true, slack: result }));
+          res.end(JSON.stringify({ ok: true, slack: publicIdentityResult(result) }));
           return;
         } catch (error) {
-          const statusRaw = (error as any)?.status;
-          const status = typeof statusRaw === "number" && statusRaw >= 400 && statusRaw < 600 ? statusRaw : 500;
-          res.writeHead(status, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: String(error instanceof Error ? error.message : error) }));
+          sendControlError(error);
           return;
         }
       }
@@ -347,10 +348,7 @@ export async function startHealthServer(
           res.end(JSON.stringify({ ok: true, ...result }));
           return;
         } catch (error) {
-          const statusRaw = (error as any)?.status;
-          const status = typeof statusRaw === "number" && statusRaw >= 400 && statusRaw < 600 ? statusRaw : 500;
-          res.writeHead(status, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: String(error instanceof Error ? error.message : error) }));
+          sendControlError(error);
           return;
         }
       }
@@ -372,7 +370,7 @@ export async function startHealthServer(
           }
         }
         try {
-          const payload = JSON.parse(raw || "{}");
+          const payload = parseControlJson(raw);
           const token = typeof payload.token === "string" ? payload.token.trim() : "";
           const id = typeof payload.id === "string" ? payload.id.trim() : undefined;
           const directory = typeof payload.directory === "string" ? payload.directory.trim() : undefined;
@@ -393,13 +391,10 @@ export async function startHealthServer(
             ...(pairingCodeHash ? { pairingCodeHash } : {}),
           });
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: true, telegram: result }));
+          res.end(JSON.stringify({ ok: true, telegram: publicIdentityResult(result) }));
           return;
         } catch (error) {
-          const statusRaw = (error as any)?.status;
-          const status = typeof statusRaw === "number" && statusRaw >= 400 && statusRaw < 600 ? statusRaw : 500;
-          res.writeHead(status, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: String(error instanceof Error ? error.message : error) }));
+          sendControlError(error);
           return;
         }
       }
@@ -420,11 +415,10 @@ export async function startHealthServer(
         try {
           const result = await handlers.deleteTelegramIdentity(id);
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: true, telegram: result }));
+          res.end(JSON.stringify({ ok: true, telegram: publicIdentityResult(result) }));
           return;
         } catch (error) {
-          res.writeHead(500, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: String(error) }));
+          sendControlError(error);
           return;
         }
       }
@@ -442,8 +436,7 @@ export async function startHealthServer(
           res.end(JSON.stringify({ ok: true, ...result }));
           return;
         } catch (error) {
-          res.writeHead(500, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: String(error) }));
+          sendControlError(error);
           return;
         }
       }
@@ -465,7 +458,7 @@ export async function startHealthServer(
           }
         }
         try {
-          const payload = JSON.parse(raw || "{}");
+          const payload = parseControlJson(raw);
           const botToken = typeof payload.botToken === "string" ? payload.botToken.trim() : "";
           const appToken = typeof payload.appToken === "string" ? payload.appToken.trim() : "";
           const id = typeof payload.id === "string" ? payload.id.trim() : undefined;
@@ -484,11 +477,10 @@ export async function startHealthServer(
             ...(directory ? { directory } : {}),
           });
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: true, slack: result }));
+          res.end(JSON.stringify({ ok: true, slack: publicIdentityResult(result) }));
           return;
         } catch (error) {
-          res.writeHead(500, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: String(error) }));
+          sendControlError(error);
           return;
         }
       }
@@ -509,11 +501,10 @@ export async function startHealthServer(
         try {
           const result = await handlers.deleteSlackIdentity(id);
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: true, slack: result }));
+          res.end(JSON.stringify({ ok: true, slack: publicIdentityResult(result) }));
           return;
         } catch (error) {
-          res.writeHead(500, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: String(error) }));
+          sendControlError(error);
           return;
         }
       }
@@ -551,7 +542,7 @@ export async function startHealthServer(
         }
 
         try {
-          const payload = JSON.parse(raw || "{}");
+          const payload = parseControlJson(raw);
           const enabled = payload.enabled === true || payload.enabled === "true";
 
           const result = await handlers.setGroupsEnabled(enabled);
@@ -559,8 +550,7 @@ export async function startHealthServer(
           res.end(JSON.stringify({ ok: true, ...result }));
           return;
         } catch (error) {
-          res.writeHead(500, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: String(error) }));
+          sendControlError(error);
           return;
         }
       }
@@ -584,8 +574,7 @@ export async function startHealthServer(
           res.end(JSON.stringify({ ok: true, ...result }));
           return;
         } catch (error) {
-          res.writeHead(500, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: String(error) }));
+          sendControlError(error);
           return;
         }
       }
@@ -608,7 +597,7 @@ export async function startHealthServer(
         }
 
         try {
-          const payload = JSON.parse(raw || "{}");
+          const payload = parseControlJson(raw);
           const channel = typeof payload.channel === "string" ? payload.channel.trim() : "";
           const identityId = typeof payload.identityId === "string" ? payload.identityId.trim() : "";
           const peerId = typeof payload.peerId === "string" ? payload.peerId.trim() : "";
@@ -642,8 +631,7 @@ export async function startHealthServer(
           res.end(JSON.stringify({ ok: true }));
           return;
         } catch (error) {
-          res.writeHead(500, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: String(error) }));
+          sendControlError(error);
           return;
         }
       }
@@ -666,7 +654,7 @@ export async function startHealthServer(
         }
 
         try {
-          const payload = JSON.parse(raw || "{}");
+          const payload = parseControlJson(raw);
           const channel = typeof payload.channel === "string" ? payload.channel.trim() : "";
           const identityId = typeof payload.identityId === "string" ? payload.identityId.trim() : "";
           const directory = typeof payload.directory === "string" ? payload.directory.trim() : "";
@@ -697,13 +685,10 @@ export async function startHealthServer(
             ...(hasParts ? { parts } : {}),
           });
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: true, ...result }));
+          res.end(JSON.stringify({ ok: true, ...publicSendResult(result) }));
           return;
         } catch (error) {
-          const statusRaw = (error as any)?.status;
-          const status = typeof statusRaw === "number" && statusRaw >= 400 && statusRaw < 600 ? statusRaw : 500;
-          res.writeHead(status, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: String(error instanceof Error ? error.message : error) }));
+          sendControlError(error);
           return;
         }
       }
@@ -711,7 +696,7 @@ export async function startHealthServer(
       res.writeHead(404, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: false, error: "Not found" }));
     })().catch((error) => {
-      logger.error({ error }, "health server request failed");
+      logger.error({ error: routerFailureDiagnostic(error) }, "health server request failed");
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: false, error: "Internal error" }));
     });

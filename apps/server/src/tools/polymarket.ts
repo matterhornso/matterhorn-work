@@ -791,7 +791,9 @@ export class PolymarketInfoProvider implements PolymarketProvider {
     const capped = Number.isFinite(limit) && limit !== null ? Math.max(1, Math.min(100, Math.trunc(limit))) : 10;
     const cleanQuery = sanitizePolymarketSearchQuery(query);
     if (cleanQuery) {
-      const url = `${this.gammaBaseUrl}/public-search?q=${encodeURIComponent(cleanQuery)}&limit_per_type=${Math.min(25, capped * 2)}`;
+      // Filter upstream too: a small first page otherwise fills with closed
+      // historical events, and filtering after pagination reports a false miss.
+      const url = `${this.gammaBaseUrl}/public-search?q=${encodeURIComponent(cleanQuery)}&limit_per_type=${Math.min(25, capped * 2)}&events_status=active&keep_closed_markets=0`;
       const data = await this.getJsonCached("public-search:" + cleanQuery, url);
       const source = nowSource(this.gammaBaseUrl + "/public-search");
       const records: Record<string, unknown>[] = [];

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readReleaseFileSnapshot } from "./lib/release-file-snapshot.mjs";
 
 const scriptRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const args = process.argv.slice(2);
@@ -109,23 +110,21 @@ function lineNumberAt(text, offset) {
 
 const scanned = [];
 const skippedLarge = [];
+const unreadableFiles = [];
 const findings = [];
 
 for (const path of listFiles()) {
   if (!shouldScan(path)) continue;
   const absolutePath = resolve(repoRoot, path);
-  let size;
+  let buffer;
   try {
-    size = statSync(absolutePath).size;
-  } catch {
+    ({ buffer } = readReleaseFileSnapshot(absolutePath, { maxBytes: maxFileBytes }));
+  } catch (error) {
+    if (error.code === "ENOENT") continue; // Tracked file deleted from the working tree.
+    if (error.code === "RELEASE_FILE_TOO_LARGE") skippedLarge.push({ path, bytes: error.size });
+    else unreadableFiles.push({ path, reason: error.code || "read_failed" });
     continue;
   }
-  if (size > maxFileBytes) {
-    skippedLarge.push({ path, bytes: size });
-    continue;
-  }
-
-  const buffer = readFileSync(absolutePath);
   if (buffer.includes(0)) continue;
   const text = buffer.toString("utf8");
   scanned.push(path);
@@ -150,9 +149,10 @@ const report = {
   repository: repoRoot,
   branch: git(["branch", "--show-current"]).trim(),
   head: git(["rev-parse", "HEAD"]).trim(),
-  ready: findings.length === 0 && skippedLarge.length === 0,
+  ready: findings.length === 0 && skippedLarge.length === 0 && unreadableFiles.length === 0,
   scannedFiles: scanned.length,
   skippedLarge,
+  unreadableFiles,
   findings,
   policy: {
     reportsMatchedValues: false,
@@ -173,6 +173,7 @@ if (json) {
   console.log(`  Source files scanned: ${report.scannedFiles}`);
   console.log(`  Findings:            ${report.findings.length}`);
   console.log(`  Oversized skipped:   ${report.skippedLarge.length}`);
+  console.log(`  Unreadable files:    ${report.unreadableFiles.length}`);
   if (jsonOutput) console.log(`  Report:               ${resolve(repoRoot, jsonOutput)}`);
   for (const finding of findings) {
     console.log(`  - ${finding.path}:${finding.line} (${finding.rule})`);

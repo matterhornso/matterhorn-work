@@ -4,6 +4,7 @@ import { basename, extname, isAbsolute, join, resolve } from "node:path";
 
 import type { MediaKind } from "./media.js";
 import { isWithinWorkspaceRootPath } from "./path-scope.js";
+import { createRouterPublicError } from "./public-control-error.js";
 
 export type StoredMediaFile = {
   filePath: string;
@@ -14,7 +15,7 @@ export type StoredMediaFile = {
 
 function sanitizeSegment(value: string): string {
   const safe = value.replace(/[^a-zA-Z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "");
-  return safe || "unknown";
+  return safe && safe !== "." && safe !== ".." ? safe : "unknown";
 }
 
 function extensionFromMime(mimeType: string | undefined, kind: MediaKind): string {
@@ -48,7 +49,7 @@ export class MediaStore {
   constructor(private readonly rootDir: string) {}
 
   async ensureReady(): Promise<void> {
-    await mkdir(this.rootDir, { recursive: true });
+    await mkdir(this.rootDir, { recursive: true, mode: 0o700 });
   }
 
   private inboundDir(channel: string, identityId: string, peerId: string): string {
@@ -74,7 +75,7 @@ export class MediaStore {
     mimeType?: string;
   }): Promise<StoredMediaFile> {
     const dir = this.inboundDir(input.channel, input.identityId, input.peerId);
-    await mkdir(dir, { recursive: true });
+    await mkdir(dir, { recursive: true, mode: 0o700 });
 
     const defaultExt = extensionFromMime(input.mimeType, input.kind);
     const safeFilename = sanitizeFilename(
@@ -82,9 +83,11 @@ export class MediaStore {
       `${input.kind}-${Date.now()}-${randomUUID().slice(0, 8)}`,
       defaultExt,
     );
-    const filePath = join(dir, safeFilename);
+    // Provider filenames are display metadata, not a storage identity. Repeated
+    // attachments must not replace earlier data, even on the same day/peer.
+    const filePath = join(dir, `${randomUUID()}-${safeFilename}`);
 
-    await writeFile(filePath, input.buffer);
+    await writeFile(filePath, input.buffer, { flag: "wx", mode: 0o600 });
 
     return {
       filePath,
@@ -136,33 +139,24 @@ export class MediaStore {
   }): Promise<StoredMediaFile> {
     const raw = input.filePath.trim();
     if (!raw) {
-      const error = new Error("filePath is required") as Error & { status?: number };
-      error.status = 400;
-      throw error;
+      throw createRouterPublicError("file_required");
     }
 
     const baseDirectory = resolve(input.baseDirectory);
     const resolved = isAbsolute(raw) ? resolve(raw) : resolve(baseDirectory, raw);
     if (!isWithinWorkspaceRootPath({ workspaceRoot: baseDirectory, candidate: resolved })) {
-      const error = new Error("File path must stay within the active workspace.") as Error & { status?: number };
-      error.status = 400;
-      throw error;
+      throw createRouterPublicError("file_outside_workspace");
     }
 
     let info;
     try {
       info = await stat(resolved);
-    } catch (error) {
-      const wrapped = new Error(`File not found: ${basename(resolved)}`) as Error & { status?: number };
-      wrapped.status = 404;
-      (wrapped as any).cause = error;
-      throw wrapped;
+    } catch {
+      throw createRouterPublicError("file_unavailable");
     }
 
     if (!info.isFile()) {
-      const error = new Error(`Not a file: ${resolved}`) as Error & { status?: number };
-      error.status = 400;
-      throw error;
+      throw createRouterPublicError("not_regular_file");
     }
 
     const [realBase, realFile] = await Promise.all([
@@ -170,17 +164,11 @@ export class MediaStore {
       realpath(resolved),
     ]);
     if (!isWithinWorkspaceRootPath({ workspaceRoot: realBase, candidate: realFile })) {
-      const error = new Error("File path must stay within the active workspace.") as Error & { status?: number };
-      error.status = 400;
-      throw error;
+      throw createRouterPublicError("file_outside_workspace");
     }
 
     if (typeof input.maxBytes === "number" && Number.isFinite(input.maxBytes) && info.size > input.maxBytes) {
-      const error = new Error(
-        `File exceeds maximum allowed size (${info.size} > ${Math.floor(input.maxBytes)} bytes): ${basename(resolved)}`,
-      ) as Error & { status?: number };
-      error.status = 413;
-      throw error;
+      throw createRouterPublicError("payload_too_large");
     }
 
     return {

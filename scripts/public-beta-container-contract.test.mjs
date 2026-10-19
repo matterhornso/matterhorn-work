@@ -61,6 +61,43 @@ for (const required of [
   assert.ok(ciWorkflow.includes(required), `CI must include ${required}`);
 }
 
+const webContainerJob = ciWorkflow
+  .split("  public-beta-web-container-build:\n")[1]
+  ?.split(/\n  [a-z][a-z0-9-]*:\n/)[0];
+assert.ok(webContainerJob, "CI must build and smoke the production web image separately");
+for (const required of [
+  "timeout-minutes: 20",
+  "MATTERHORN_BUILD_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}",
+  "ref: ${{ env.MATTERHORN_BUILD_COMMIT }}",
+  "persist-credentials: false",
+  "file: packaging/docker/Dockerfile.public-beta-web",
+  "VITE_MATTERHORN_BUILD_COMMIT=${{ env.MATTERHORN_BUILD_COMMIT }}",
+  "load: true",
+  "push: false",
+  "timeout-minutes: 2",
+  "trap cleanup EXIT",
+  '--network none',
+  '--env MATTERHORN_CONTROL_PLANE_URL=',
+  '--env MATTERHORN_PROXY_SECRET=',
+  'docker exec --env MATTERHORN_BUILD_COMMIT="$MATTERHORN_BUILD_COMMIT"',
+  "for attempt in $(seq 1 30)",
+  "AbortSignal.timeout(3000)",
+  'assert.equal(root.status, 200)',
+  'name="matterhorn-build-commit" content="${expectedCommit}"',
+  'data-matterhorn-static-auth',
+  'assert.doesNotMatch(html, /data-matterhorn-ui="retro"/)',
+  "http://127.0.0.1:8080/health/ready",
+  "assert.equal(health.status, 503)",
+  'assert.equal((await health.json()).code, "control_plane_unavailable")',
+]) {
+  assert.ok(webContainerJob.includes(required), `web container CI must include ${required}`);
+}
+assert.doesNotMatch(
+  webContainerJob,
+  /secrets\.|push:\s*true|docker\s+push|docker\/login-action|--publish|--env-file/,
+  "web container CI must remain unpublished, network-isolated and independent of real credentials",
+);
+
 assert.equal(railway.$schema, "https://railway.com/railway.schema.json");
 assert.deepEqual(railway.build, {
   builder: "DOCKERFILE",

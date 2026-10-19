@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 import { writeFileSync } from "node:fs";
 import process from "node:process";
+import { reportUrl, validateBrowserTarget } from "./lib/browser-smoke-privacy.mjs";
 
 const DEFAULT_SERVER_URL = "http://127.0.0.1:4125";
 const DEFAULT_TOKEN = "matterhorn-media-smoke-client-token";
 const REPORT_VERSION = "matterhorn.generated-media-production-readiness.v1";
+class ReadinessError extends Error {}
 
 const forbiddenLeakKeys = [
   "X-Matterhorn-Host-Token",
@@ -231,17 +233,15 @@ async function fetchJson(config, path) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const error = new Error(`GET ${path} -> ${response.status}`);
-      error.status = response.status;
-      error.payload = payload;
-      throw error;
+      throw new ReadinessError(`GET ${path} -> ${response.status}`);
     }
     return payload;
   } catch (error) {
     if (error?.name === "AbortError") {
-      throw new Error(`GET ${path} timed out after ${config.timeoutMs}ms`);
+      throw new ReadinessError(`GET ${path} timed out after ${config.timeoutMs}ms`);
     }
-    throw error;
+    if (error instanceof ReadinessError) throw error;
+    throw new ReadinessError("Generated-media diagnostics request failed");
   } finally {
     clearTimeout(timer);
   }
@@ -251,7 +251,7 @@ async function resolveWorkspaceId(config) {
   if (config.workspaceId) return config.workspaceId;
   const payload = await fetchJson(config, "/workspaces");
   const workspaceId = String(payload.activeId ?? payload.items?.[0]?.id ?? payload.workspaces?.[0]?.id ?? "").trim();
-  if (!workspaceId) throw new Error("Matterhorn server did not report an active workspace.");
+  if (!workspaceId) throw new ReadinessError("Matterhorn server did not report an active workspace.");
   return workspaceId;
 }
 
@@ -312,15 +312,15 @@ function buildEnvChecklist(blockers) {
 function assertNoLeaks(payload, config, label) {
   const serialized = JSON.stringify(payload);
   if (config.token && serialized.includes(config.token)) {
-    throw new Error(`${label} leaked the client token`);
+    throw new ReadinessError(`${label} leaked the client token`);
   }
   for (const key of forbiddenLeakKeys) {
     if (serialized.includes(key)) {
-      throw new Error(`${label} exposed forbidden secret marker ${key}`);
+      throw new ReadinessError(`${label} exposed forbidden secret marker ${key}`);
     }
   }
   if (/(sk-[A-Za-z0-9_-]{20,}|owt_[A-Za-z0-9._-]{16,})/.test(serialized)) {
-    throw new Error(`${label} exposed an API-key or Matterhorn-token shaped value`);
+    throw new ReadinessError(`${label} exposed an API-key or Matterhorn-token shaped value`);
   }
 }
 
@@ -344,7 +344,7 @@ async function runGeneratedMediaProductionReadiness(config) {
     requireProduction: config.requireProduction,
     metadata: {
       generatedAt: new Date().toISOString(),
-      serverUrl: config.serverUrl,
+      serverUrl: reportUrl(config.serverUrl),
       workspaceId: "",
     },
     status: "unknown",
@@ -367,6 +367,7 @@ async function runGeneratedMediaProductionReadiness(config) {
   };
 
   try {
+    validateBrowserTarget(config.serverUrl);
     const workspaceId = await resolveWorkspaceId(config);
     report.metadata.workspaceId = workspaceId;
     const diagnostics = await fetchJson(config, `/workspace/${encodeURIComponent(workspaceId)}/generated-media/diagnostics`);
@@ -398,8 +399,7 @@ async function runGeneratedMediaProductionReadiness(config) {
   } catch (error) {
     report.ok = false;
     report.ready = false;
-    report.error = error instanceof Error ? error.message : String(error);
-    report.details = error?.payload;
+    report.error = error instanceof ReadinessError ? error.message : "Generated-media readiness check failed";
   }
 
   return report;

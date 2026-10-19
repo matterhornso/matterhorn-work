@@ -59,6 +59,7 @@ import { ProtocolDeskMark } from "../workflows/protocol-brand-logo";
 import { resultCardDeskId } from "./result-card-memory";
 import { responseCompletionSummary } from "../message-completion-metadata";
 import { PublicReadLimitations } from "./public-read-limitations";
+import { findMessageElement } from "./message-element";
 
 type TranscriptPart = Part;
 
@@ -532,6 +533,7 @@ function AssistantResponseActions(props: {
   message: UIMessage;
   messageId: string;
   getText: () => string;
+  emptyResponse?: boolean;
   onRetry?: (messageId: string) => Promise<void> | void;
   onContinue?: (messageId: string) => Promise<void> | void;
   onSave?: (messageId: string, text: string) => Promise<OpenTarget | void> | OpenTarget | void;
@@ -606,7 +608,10 @@ function AssistantResponseActions(props: {
         </div>
       ) : null}
       <div
-        className="relative z-10 flex max-w-full touch-pan-x items-center gap-0.5 overflow-x-auto select-none opacity-100 transition-opacity duration-150 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+        className={cn(
+          "relative z-10 flex max-w-full touch-pan-x items-center gap-0.5 overflow-x-auto select-none opacity-100 transition-opacity duration-150",
+          !props.emptyResponse && "md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100",
+        )}
         role="group"
         aria-label="Response actions"
       >
@@ -623,14 +628,16 @@ function AssistantResponseActions(props: {
               }
             }}
             disabled={busy}
+            className={props.emptyResponse ? "w-auto gap-1.5 px-2 sm:w-auto" : undefined}
             title={retryState === "failed" ? "Retry failed — try again" : retryState === "retrying" ? "Retrying response" : "Retry response"}
             aria-label={retryState === "retrying" ? "Retrying response" : "Retry response"}
           >
             <RotateCcw size={14} className={retryState === "retrying" ? "animate-spin" : undefined} />
+            {props.emptyResponse ? <span>{retryState === "retrying" ? "Retrying…" : "Retry response"}</span> : null}
           </MessageActionIconButton>
         ) : null}
-        <CopyButton getText={props.getText} />
-        {props.onSave ? (
+        {!props.emptyResponse ? <CopyButton getText={props.getText} /> : null}
+        {!props.emptyResponse && props.onSave ? (
           <MessageActionIconButton
             onClick={async () => {
               if (savedTarget) {
@@ -655,7 +662,7 @@ function AssistantResponseActions(props: {
             {saveState === "saved" ? <Check size={14} /> : <Save size={14} />}
           </MessageActionIconButton>
         ) : null}
-        {props.onRate ? (
+        {!props.emptyResponse && props.onRate ? (
           <>
             <MessageActionIconButton
               onClick={() => rate("helpful")}
@@ -2014,6 +2021,9 @@ function MessageBlockRow(props: {
     ? inlineOpenTargetsForMessage(block.message, props.openTargets)
     : [];
   const isActiveAssistantResponse = !block.isUser && props.isStreaming && block.messageId === props.latestAssistantMessageId;
+  const responseState = !block.isUser ? responseCompletionSummary(block.message).state : null;
+  const emptyResponse = (responseState === "stopped" || responseState === "failed")
+    && block.attachments.length === 0 && block.groups.length === 0;
 
   if (isSyntheticSessionError) {
     const messageText = block.renderableParts
@@ -2062,6 +2072,13 @@ function MessageBlockRow(props: {
           searchOutlineClass,
         )}
       >
+        {emptyResponse && !isActiveAssistantResponse ? (
+          <p className="text-sm text-dls-secondary">
+            {responseState === "stopped"
+              ? "Stopped before an answer was returned."
+              : "Response failed before an answer was returned."}
+          </p>
+        ) : null}
         {block.attachments.length > 0 ? (
           <div className={cn("flex flex-wrap gap-2", block.isUser ? "mb-3" : "mb-4")}>
             {block.attachments.map((attachment) => (
@@ -2153,7 +2170,8 @@ function MessageBlockRow(props: {
             message={block.message}
             messageId={block.messageId}
             getText={() => messageToText(block.message)}
-            onRetry={block.messageId === props.latestAssistantMessageId ? props.onRetryAssistantResponse : undefined}
+            emptyResponse={emptyResponse}
+            onRetry={!props.isStreaming && block.messageId === props.latestAssistantMessageId ? props.onRetryAssistantResponse : undefined}
             onContinue={!props.isStreaming && block.messageId === props.latestAssistantMessageId ? props.onContinueAssistantResponse : undefined}
             onSave={props.onSaveAssistantResponse}
             onRate={props.onRateAssistantResponse}
@@ -2249,7 +2267,11 @@ function SessionTranscriptInner(props: SessionTranscriptProps) {
         );
       });
 
-      if (!renderableParts.length) return;
+      const outcome = message.role === "assistant" ? responseCompletionSummary(message.source).state : null;
+      const interruptedResponse = outcome === "stopped" || outcome === "failed";
+      // An early Stop can finish an assistant record before its first text part.
+      // Keep that record so its guarded Retry action remains reachable.
+      if (!renderableParts.length && !interruptedResponse) return;
 
       const isUser = message.role === "user";
       const attachments = attachmentsForParts(renderableParts);
@@ -2270,7 +2292,7 @@ function SessionTranscriptInner(props: SessionTranscriptProps) {
           }))
         : [];
 
-      if (isStepsOnly && stepGroups.length > 0) {
+      if (isStepsOnly && stepGroups.length > 0 && !interruptedResponse) {
         blocks.push({
           kind: "steps-cluster",
           id: stepGroups[0].id,
@@ -2393,8 +2415,7 @@ function SessionTranscriptInner(props: SessionTranscriptProps) {
 
       const container = props.scrollElement?.();
       if (!container) return false;
-      const escapedId = messageId.replace(/"/g, '\\"');
-      const target = container.querySelector(`[data-message-id="${escapedId}"]`) as HTMLElement | null;
+      const target = findMessageElement(container.querySelectorAll<HTMLElement>("[data-message-id]"), messageId);
       if (!target) return false;
       target.scrollIntoView({ behavior, block: "center" });
       return true;
@@ -2468,7 +2489,7 @@ function SessionTranscriptInner(props: SessionTranscriptProps) {
                       onOpenTarget={props.onOpenTarget}
                       onSaveBittensorEvidence={props.onSaveBittensorEvidence}
                       onSaveResultToMemory={props.onSaveResultToMemory}
-                      onRetryAssistantResponse={props.onRetryAssistantResponse}
+                      onRetryAssistantResponse={props.messages.at(-1)?.id === latestAssistantMessageId ? props.onRetryAssistantResponse : undefined}
                       onContinueAssistantResponse={props.messages.at(-1)?.id === latestAssistantMessageId ? props.onContinueAssistantResponse : undefined}
                       onSaveAssistantResponse={props.onSaveAssistantResponse}
                       onRateAssistantResponse={props.onRateAssistantResponse}
@@ -2502,7 +2523,7 @@ function SessionTranscriptInner(props: SessionTranscriptProps) {
               onOpenTarget={props.onOpenTarget}
               onSaveBittensorEvidence={props.onSaveBittensorEvidence}
               onSaveResultToMemory={props.onSaveResultToMemory}
-              onRetryAssistantResponse={props.onRetryAssistantResponse}
+              onRetryAssistantResponse={props.messages.at(-1)?.id === latestAssistantMessageId ? props.onRetryAssistantResponse : undefined}
               onContinueAssistantResponse={props.messages.at(-1)?.id === latestAssistantMessageId ? props.onContinueAssistantResponse : undefined}
               onSaveAssistantResponse={props.onSaveAssistantResponse}
               onRateAssistantResponse={props.onRateAssistantResponse}

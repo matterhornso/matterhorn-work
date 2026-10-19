@@ -217,7 +217,8 @@ export function createTelegramAdapter(
           sizeBytes: stored.sizeBytes,
           providerFileId: candidate.fileId,
           ...(candidate.fileUniqueId ? { providerFileUniqueId: candidate.fileUniqueId } : {}),
-          providerUrl: url,
+          // Telegram download URLs contain the bot credential. Keep them only
+          // inside the download request, never in attachment metadata.
         },
       };
     } catch (error) {

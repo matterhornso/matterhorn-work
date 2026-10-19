@@ -70,6 +70,13 @@ try {
   assert.equal(summary.safety.acceptsRawSignatures, false);
   assert.match(summary.followUpPrompt, /Compare my public wallet state/i);
 
+  for (const status of ["finalized", "success", "submitted", "in_block", "in block", "included", "broadcast", " FINALIZED "]) {
+    execFileSync(process.execPath, [script, "--receipt-json", JSON.stringify({ txHash, status, payloadSha256: sha }), "--strict"], { stdio: "pipe" });
+  }
+  for (const status of ["unsuccessful", "not_submitted", "not_finalized", "broadcast_failed", "submitted_to_sidecar", "unknown", ""]) {
+    expectFailure(["--receipt-json", JSON.stringify({ txHash, status, payloadSha256: sha }), "--strict"], /Receipt status needs review/i);
+  }
+
   expectFailure(
     [
       "--receipt-json",

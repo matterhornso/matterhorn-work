@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { MatterhornEntitlementKey } from "@matterhorn-work/types/billing";
 import type {
@@ -33,6 +33,7 @@ import { ApiError } from "./errors.js";
 import {
   createImageGenerationProvider,
   detectSecretShapedInput,
+  isImageGenerationFormat,
   resolveImageGenerationProviderFromEnv,
 } from "./image-generation-provider.js";
 import {
@@ -40,7 +41,7 @@ import {
   buildGeneratedMediaReadinessMarkdown,
   generatedMediaReadinessReportFilename,
 } from "./generated-media-diagnostics.js";
-import { MatterhornGeneratedImageStore, imageFilePath } from "./generated-image-store.js";
+import { MatterhornGeneratedImageStore, readGeneratedImageFile } from "./generated-image-store.js";
 import { MatterhornImageNftDraftStore } from "./image-nft-draft-store.js";
 import { MatterhornBillingAccountStore } from "./billing-account-store.js";
 import { resolveNftEnvironmentConfig, type NftEnvironmentConfig } from "./image-nft-capabilities.js";
@@ -241,9 +242,8 @@ export function addGeneratedMediaRoutes(
     const store = new MatterhornGeneratedImageStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const image = await store.get(ctx.params.imageId);
     if (!image) throw new ApiError(404, "image_not_found", "Generated image not found.");
-    const filePath = imageFilePath(workspace.path, image.fileName);
     try {
-      const bytes = await readFile(filePath);
+      const bytes = await readGeneratedImageFile(workspace.path, image);
       return new Response(bytes, {
         headers: {
           "Content-Type": image.contentType,
@@ -477,7 +477,7 @@ export function addGeneratedMediaRoutes(
 
     let bytes: Uint8Array;
     try {
-      bytes = await readFile(imageFilePath(workspace.path, image.fileName));
+      bytes = await readGeneratedImageFile(workspace.path, image);
     } catch {
       throw new ApiError(404, "image_file_not_found", "Image file not found on disk.");
     }
@@ -1909,11 +1909,14 @@ function validateImageGenerationInput(body: unknown): MatterhornImageGenerationI
   if (typeof b.prompt !== "string" || !b.prompt.trim()) {
     throw new ApiError(400, "image_prompt_required", "A non-empty prompt string is required.");
   }
+  if (b.format !== undefined && !isImageGenerationFormat(b.format)) {
+    throw new ApiError(400, "invalid_image_format", "Image format must be png, jpeg, or webp.");
+  }
   return {
     prompt: b.prompt.trim(),
     size: typeof b.size === "string" ? (b.size as MatterhornImageGenerationInput["size"]) : undefined,
     quality: typeof b.quality === "string" ? (b.quality as MatterhornImageGenerationInput["quality"]) : undefined,
-    format: typeof b.format === "string" ? (b.format as MatterhornImageGenerationInput["format"]) : undefined,
+    format: b.format,
     model: typeof b.model === "string" ? b.model : undefined,
     n: typeof b.n === "number" ? b.n : undefined,
     sessionId: typeof b.sessionId === "string" ? b.sessionId : undefined,

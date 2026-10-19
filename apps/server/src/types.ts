@@ -223,6 +223,8 @@ export interface SkillItem {
   trigger?: string;
   /** Whether a person can invoke this skill from the chat composer. */
   userInvocable: boolean;
+  /** Read-only release document, not a filesystem path or native slash command. */
+  builtin?: true;
 }
 
 export interface HubSkillItem {

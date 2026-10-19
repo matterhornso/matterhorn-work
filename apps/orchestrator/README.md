@@ -22,13 +22,46 @@ matterhorn-work serve --workspace /path/to/workspace
 `matterhorn-work` ships as a compiled binary, so Bun is not required at runtime.
 The legacy `openwork` command remains available as a compatibility shim.
 
-If npm skips the optional platform package, `postinstall` falls back to downloading the matching
-binary from the `openwork-orchestrator-v<version>` GitHub release. Override the download host with
-`OPENWORK_ORCHESTRATOR_DOWNLOAD_BASE_URL` when you need to use a mirror.
+Installation requires the matching optional platform package at the exact meta-package version.
+If it is missing or incomplete, reinstall `openwork-orchestrator` with optional dependencies enabled
+and the same pinned version. The installer and both command names reject old `dist/bin` fallbacks;
+they no longer download executables independently or honor either `*_ORCHESTRATOR_DOWNLOAD_BASE_URL`.
+`MATTERHORN_WORK_ORCHESTRATOR_BIN_PATH` / `OPENWORK_ORCHESTRATOR_BIN_PATH` still explicitly select an
+operator-trusted executable: setting either bypasses package resolution and is not integrity verification.
+
+Desktop `prepare-sidecar.mjs` uses Bun and the shared verified official OpenCode downloader with the
+version in `constants.json`. It verifies fresh official release metadata and the archive digest on
+each build, including when replacing existing output binaries, without executing them for a version
+probe. Custom OpenCode repository overrides are rejected; `OPENCODE_ASSET` may only name an archive
+from that pinned official release. Temporary archives use a private directory and only the selected
+regular executable is streamed out. Build outputs are staged privately before replacement; the
+checkout, output-directory ancestors, build tools and same-user processes remain operator-trusted.
+No package publication is performed by this verification step.
 
 `matterhorn-work` downloads and caches the `matterhorn-work-server`/legacy `openwork-server`, `opencode-router`, and `opencode` sidecars on
 first run using a SHA-256 manifest. Use `--sidecar-dir` or `OPENWORK_SIDECAR_DIR` to control the
 cache location, and `--sidecar-base-url` / `--sidecar-manifest` to point at a custom host.
+
+Download hosts are an explicit operator trust choice, not a signature verification service.
+Use HTTPS; HTTP is accepted only for loopback development mirrors. A manifest can select
+assets only below the configured download base, so set `--sidecar-base-url` explicitly for
+a separate CDN. Redirects must stay on the configured origin; official Matterhorn GitHub
+release downloads may also use GitHub's release-assets CDN. URL credentials are not supported.
+Downloaded versions must match the locally pinned dependency versions. Invalid manifests,
+digest mismatches, unsafe cache entries and unapproved redirects stop resolution rather than
+falling back to another executable. An absent optional manifest entry may still use the
+separately verified OpenCode release fallback. That fallback requires the pinned official
+GitHub release metadata, an exact release asset URL and its SHA-256 digest on every resolution,
+including when an archive is cached. If that metadata or digest is unavailable, resolution
+stops; there is no offline legacy-cache bypass. `OPENWORK_OPENCODE_ASSET` / `OPENCODE_ASSET`
+may select only a flat archive name from that same official release. Archives are bounded and
+only the selected regular executable is streamed out; archive trees are not unpacked.
+Verified downloads use a new `verified-v1` cache namespace with locally determined filenames;
+existing legacy caches are left untouched and are not used for fallback version probes.
+On Unix, use a cache owned by the running user with no group/other write permissions; unsafe
+cache directories, symlinks, hardlinks and writable-by-others files are rejected. The operator
+must also trust the cache's parent directories. These checks do not isolate mutually untrusted
+processes running as the same user.
 
 Use `--sidecar-source` to control where `matterhorn-work-server`/`openwork-server` and `opencode-router` are resolved
 (`auto` | `bundled` | `downloaded` | `external`), and `--opencode-source` to control

@@ -186,7 +186,13 @@ function walletTimelineSummary(timeline) {
 
 function readinessGateReady(markdown) {
   if (!markdown) return false;
-  return /READY_FOR_TEST_CUSTOMERS|passes this evidence-backed Bittensor customer-readiness gate/i.test(markdown);
+  // Only the document's decision field is authoritative. Narrative, code,
+  // table cells and duplicate/conflicting fields cannot establish readiness.
+  const lines = markdown.split(/\r?\n/);
+  const decisions = lines.filter((line) => /^(?:- )?Result:/.test(line));
+  if (decisions.length !== 1 || !/^(?:- )?Result: READY_FOR_TEST_CUSTOMERS$/.test(decisions[0])) return false;
+  const decisionIndex = lines.indexOf(decisions[0]);
+  return lines.slice(0, decisionIndex).every((line) => !line.trim() || /^#{1,2} [^\r\n]+$/.test(line));
 }
 
 

@@ -499,8 +499,8 @@ import { ApprovalService } from "./approvals.js";
 import { addPlugin, listPlugins, normalizePluginSpec, removePlugin } from "./plugins.js";
 import { sanitizePortableOpencodeConfig } from "./portable-opencode.js";
 import { addMcp, listMcp, removeMcp, setMcpEnabled } from "./mcp.js";
-import { deleteSkill, listSkills, upsertSkill } from "./skills.js";
-import { installHubSkill, listHubSkills } from "./skill-hub.js";
+import { deleteSkill, importWorkspaceSkill, listSkills, readSkillContent, upsertSkill } from "./skills.js";
+import { hubSkillInstallApprovalSummary, installHubSkill, listHubSkills, normalizeHubSkillInstallInput } from "./skill-hub.js";
 import { deleteCommand, listCommands, repairCommands, upsertCommand } from "./commands.js";
 import { ApiError, formatError } from "./errors.js";
 import { drainMatterhornEmailOutbox } from "./email-outbox.js";
@@ -643,6 +643,7 @@ import {
   googleWorkspaceTestConnection,
 } from "./extensions/google-workspace.js";
 import { callExperimentalExtensionAction, listExperimentalExtensionActions } from "./extensions/index.js";
+import { googleWorkspaceExtensionOperation, runGoogleWorkspaceOperation } from "./google-workspace-access.js";
 import { handleManagedOpencodeMcp } from "./managed-opencode-mcp.js";
 import {
   handleHostedGuardedMcpPost,
@@ -14008,37 +14009,33 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/experimental/extensions/call", "client", async (ctx) => {
-    if (ctx.actor?.scope === "viewer") {
-      throw new ApiError(403, "forbidden", "Viewer tokens cannot call extension actions");
-    }
     const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Host token");
-    return jsonResponse(await callExperimentalExtensionAction(config, body));
+    return jsonResponse(await runGoogleWorkspaceOperation(ctx, googleWorkspaceExtensionOperation(body),
+      () => callExperimentalExtensionAction(config, body)));
   });
 
-  addRoute(routes, "GET", "/experimental/google-workspace/status", "client", async () => {
-    return jsonResponse(await googleWorkspaceStatus(config));
+  addRoute(routes, "GET", "/experimental/google-workspace/status", "client", async (ctx) => {
+    return jsonResponse(await runGoogleWorkspaceOperation(ctx, "status", () => googleWorkspaceStatus(config)));
   });
 
   addRoute(routes, "POST", "/experimental/google-workspace/connect/start", "client", async (ctx) => {
-    if (ctx.actor?.scope === "viewer") throw new ApiError(403, "forbidden", "Viewer tokens cannot connect Google Workspace");
-    return jsonResponse(await googleWorkspaceConnectFlows.start(), 201);
+    return jsonResponse(await runGoogleWorkspaceOperation(ctx, "connect", () => googleWorkspaceConnectFlows.start()), 201);
   });
 
   addRoute(routes, "GET", "/experimental/google-workspace/connect/status/:flowId", "client", async (ctx) => {
-    return jsonResponse(await googleWorkspaceConnectFlows.status(ctx.params.flowId));
+    return jsonResponse(await runGoogleWorkspaceOperation(ctx, "connect_status", () => googleWorkspaceConnectFlows.status(ctx.params.flowId)));
   });
 
   addRoute(routes, "POST", "/experimental/google-workspace/disconnect", "client", async (ctx) => {
-    if (ctx.actor?.scope === "viewer") throw new ApiError(403, "forbidden", "Viewer tokens cannot disconnect Google Workspace");
-    return jsonResponse(await googleWorkspaceDisconnect(config));
+    return jsonResponse(await runGoogleWorkspaceOperation(ctx, "disconnect", () => googleWorkspaceDisconnect(config)));
   });
 
-  addRoute(routes, "POST", "/experimental/google-workspace/test", "client", async () => {
-    return jsonResponse(await googleWorkspaceTestConnection(config));
+  addRoute(routes, "POST", "/experimental/google-workspace/test", "client", async (ctx) => {
+    return jsonResponse(await runGoogleWorkspaceOperation(ctx, "test", () => googleWorkspaceTestConnection(config)));
   });
 
-  addRoute(routes, "POST", "/experimental/google-workspace/smoke-test", "client", async () => {
-    return jsonResponse(await googleWorkspaceRunScopeSmokeTest(config));
+  addRoute(routes, "POST", "/experimental/google-workspace/smoke-test", "client", async (ctx) => {
+    return jsonResponse(await runGoogleWorkspaceOperation(ctx, "smoke_test", () => googleWorkspaceRunScopeSmokeTest(config)));
   });
 
   addRoute(routes, "GET", "/workspaces", "client", async (ctx) => {
@@ -17265,14 +17262,15 @@ function createRoutes(
         }
       : undefined;
 
+    const installInput = normalizeHubSkillInstallInput({ name, overwrite, repo });
     await requireApproval(ctx, {
       workspaceId: workspace.id,
       action: "skills.install_hub",
-      summary: `Install hub skill ${name}`,
-      paths: [join(workspace.path, ".opencode", "skills", name)],
+      summary: hubSkillInstallApprovalSummary(installInput),
+      paths: [join(workspace.path, ".opencode", "skills", installInput.name)],
     });
 
-    const result = await installHubSkill(workspace.path, { name, overwrite, repo });
+    const result = await installHubSkill(workspace.path, installInput);
     await recordAudit(workspace.path, {
       id: shortId(),
       workspaceId: workspace.id,
@@ -17305,7 +17303,7 @@ function createRoutes(
     if (!item) {
       throw new ApiError(404, "skill_not_found", `Skill not found: ${name}`);
     }
-    const content = await readFile(item.path, "utf8");
+    const content = await readSkillContent(item);
     return jsonResponse({ item, content });
   });
 
@@ -23625,7 +23623,9 @@ async function exportWorkspace(
   const rawOpencode = await readOpencodeConfig(workspace.path);
   let opencode = sanitizePortableOpencodeConfig(rawOpencode);
   const openwork = sanitizeOpenworkTemplateConfig(await readOpenworkConfig(workspace.path));
-  const skills = await listSkills(workspace.path, false);
+  // Release-owned guidance is automatically available in every destination.
+  // Export only actual user-owned copies, including customized built-in names.
+  const skills = (await listSkills(workspace.path, false)).filter((skill) => !skill.builtin);
   const commands = await listCommands(workspace.path, "workspace");
   let files = await listPortableFiles(workspace.path);
   const warnings = collectWorkspaceExportWarnings({ opencode: rawOpencode, files });
@@ -23646,7 +23646,7 @@ async function exportWorkspace(
     skills.map(async (skill) => ({
       name: skill.name,
       description: skill.description,
-      content: await readFile(skill.path, "utf8"),
+      content: await readSkillContent(skill),
     })),
   );
   const commandContents = await Promise.all(
@@ -23729,7 +23729,7 @@ async function importWorkspace(workspace: WorkspaceInfo, payload: Record<string,
     for (const skill of input.skills) {
       const path = workspaceImportRelativePath(workspace, join(projectSkillsDir(workspace.path), skill.name, "SKILL.md"));
       if (!changedPath("skill", path)) continue;
-      await upsertSkill(workspace.path, skill);
+      await importWorkspaceSkill(workspace.path, skill);
     }
     if (input.modes.skills === "replace") {
       for (const change of preview.changes) {

@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { rmSync } from "node:fs";
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runMarketOfficialSdkOperatorLoop } from "./market-official-sdk-operator-loop.mjs";
 
 const tmp = await mkdtemp(join(tmpdir(), "matterhorn-market-sdk-loop-"));
+process.once("exit", () => rmSync(tmp, { recursive: true, force: true }));
 const smokePath = join(tmp, "customer-ready-smoke.json");
 await writeFile(smokePath, JSON.stringify({
   ready: true,
@@ -93,6 +95,20 @@ assert.equal(parsed.files.officialSdkEvidence.endsWith("matterhorn-market-sdk-ev
 assert.equal(parsed.files.operatorSummaryMarkdown.endsWith("matterhorn-market-sdk-operator-summary.md"), true);
 assert.equal(parsed.files.runManifest.endsWith("matterhorn-market-sdk-run-manifest.json"), true);
 assert.equal(JSON.stringify(parsed).includes("privateKey"), false);
+
+const defaultOutputs = new Set();
+for (let index = 0; index < 2; index++) {
+  const defaultRun = spawnSync("node", ["scripts/market-official-sdk-operator-loop.mjs", "--fixture", "--json"], {
+    cwd: process.cwd(), encoding: "utf8", env: { ...process.env, TMPDIR: tmp, TMP: tmp, TEMP: tmp },
+  });
+  assert.equal(defaultRun.status, 0, defaultRun.stderr || defaultRun.stdout);
+  const output = JSON.parse(defaultRun.stdout);
+  assert.ok(output.outputDir.startsWith(join(tmp, "matterhorn-market-sdk-operator-loop-")));
+  if (process.platform !== "win32") assert.equal((await stat(output.outputDir)).mode & 0o777, 0o700);
+  assert.ok((await readFile(output.files.runManifest, "utf8")).length > 0, "default output remains accessible after exit");
+  defaultOutputs.add(output.outputDir);
+}
+assert.equal(defaultOutputs.size, 2, "default runs must not share a predictable output directory");
 
 const unsafe = await runMarketOfficialSdkOperatorLoop({
   outputDir: join(tmp, "unsafe"),

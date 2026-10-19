@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
 import { createServer } from "node:http";
 import net from "node:net";
-import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import {
   cp,
   mkdir,
@@ -21,7 +21,10 @@ import { fileURLToPath } from "node:url";
 
 import { app, BrowserWindow, Menu, WebContentsView, clipboard, dialog, ipcMain, nativeImage, nativeTheme, session, shell } from "electron";
 import { registerMigrationIpc } from "./migration.mjs";
+import { writeMigrationFile, writeMigrationFileSync } from "./migration-write.mjs";
 import { createRuntimeManager } from "./runtime.mjs";
+import { createUiControlRequestHandler } from "./ui-control-handler.mjs";
+import { writeUiControlDiscovery } from "./ui-control-discovery.mjs";
 import { registerUpdaterIpc } from "./updater.mjs";
 import { exportWorkspaceConfig, importWorkspaceConfig } from "./workspace-archive.mjs";
 import {
@@ -257,7 +260,7 @@ function migrateLegacyUserDataIdentityIfNeeded() {
       }
     }
 
-    writeFileSync(
+    const markerWritten = writeMigrationFileSync(
       migrationMarker,
       `${JSON.stringify({
         version: 1,
@@ -266,8 +269,8 @@ function migrateLegacyUserDataIdentityIfNeeded() {
         copiedEntries,
         migratedAt: new Date().toISOString(),
       }, null, 2)}\n`,
-      { encoding: "utf8", mode: 0o600 },
     );
+    if (!markerWritten) return;
     if (status === "copied") {
       console.info(`[migration] copied local Matterhorn state from ${sourceIdentifier}`);
     }
@@ -1584,7 +1587,7 @@ async function migrateLegacyElectronWorkspaceStateIfNeeded() {
     if (!existsSync(legacy)) return false;
     await mkdir(path.dirname(current), { recursive: true });
     const raw = await readFile(legacy, "utf8");
-    await writeFile(current, raw, "utf8");
+    if (!await writeMigrationFile(current, raw)) return false;
     console.info(
       "[migration] copied workspace-state.json → openwork-workspaces.json",
     );
@@ -3245,14 +3248,6 @@ async function handleDesktopInvoke(event, command, ...args) {
   }
 }
 
-function sendJsonResponse(response, statusCode, payload) {
-  response.writeHead(statusCode, {
-    "Content-Type": "application/json; charset=utf-8",
-    "Cache-Control": "no-store",
-  });
-  response.end(JSON.stringify(payload));
-}
-
 function readJsonRequestBody(request) {
   return new Promise((resolve, reject) => {
     let raw = "";
@@ -3333,34 +3328,12 @@ async function runOpenworkControlCommand(command, args = {}) {
 
 async function startUiControlServer() {
   if (uiControlServer) return;
-  uiControlServer = createServer(async (request, response) => {
-    try {
-      const url = new URL(request.url ?? "/", "http://127.0.0.1");
-      if (request.method === "GET" && url.pathname === "/health") {
-        sendJsonResponse(response, 200, { ok: true, app: APP_NAME, version: 1 });
-        return;
-      }
-      if (!authorizedUiControlRequest(request)) {
-        sendJsonResponse(response, 401, { ok: false, error: "Unauthorized" });
-        return;
-      }
-      if (request.method === "GET" && url.pathname === "/snapshot") {
-        sendJsonResponse(response, 200, await runOpenworkControlCommand("snapshot"));
-        return;
-      }
-      if (request.method === "GET" && url.pathname === "/actions") {
-        sendJsonResponse(response, 200, await runOpenworkControlCommand("actions"));
-        return;
-      }
-      if (request.method === "POST" && url.pathname === "/execute") {
-        sendJsonResponse(response, 200, await runOpenworkControlCommand("execute", await readJsonRequestBody(request)));
-        return;
-      }
-      sendJsonResponse(response, 404, { ok: false, error: "Not found" });
-    } catch (error) {
-      sendJsonResponse(response, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
-    }
-  });
+  uiControlServer = createServer(createUiControlRequestHandler({
+    appName: APP_NAME,
+    isAuthorized: authorizedUiControlRequest,
+    readBody: readJsonRequestBody,
+    runCommand: runOpenworkControlCommand,
+  }));
   await new Promise((resolve, reject) => {
     uiControlServer.once("error", reject);
     uiControlServer.listen(0, "127.0.0.1", () => resolve(undefined));
@@ -3373,7 +3346,7 @@ async function startUiControlServer() {
     path.join(app.getPath("userData"), "matterhorn-work-ui-control.json"),
     path.join(app.getPath("userData"), "openwork-ui-control.json"),
   ];
-  await Promise.all(uiControlDiscoveryPaths.map((discoveryPath) => writeFile(discoveryPath, discoveryPayload, "utf8")));
+  await Promise.all(uiControlDiscoveryPaths.map((discoveryPath) => writeUiControlDiscovery(discoveryPath, discoveryPayload)));
 }
 
 async function stopUiControlServer() {

@@ -212,6 +212,82 @@ jobs:
           echo "Public Beta container did not become live within 90 seconds." >&2
           exit 1
 
+  public-beta-web-container-build:
+    name: public-beta-web-container-build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      MATTERHORN_BUILD_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+
+    steps:
+      - name: Checkout exact web candidate
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.MATTERHORN_BUILD_COMMIT }}
+          persist-credentials: false
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build production web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packaging/docker/Dockerfile.public-beta-web
+          build-args: |
+            VITE_MATTERHORN_BUILD_COMMIT=${{ env.MATTERHORN_BUILD_COMMIT }}
+          load: true
+          push: false
+          tags: matterhorn-public-beta-web:ci
+
+      - name: Smoke web artifact and unconfigured health boundary
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          set -euo pipefail
+          container="matterhorn-public-beta-web-ci"
+          cleanup() {
+            docker logs "$container" 2>/dev/null || true
+            docker rm -f "$container" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker run --detach \
+            --name "$container" \
+            --network none \
+            --env PORT=8080 \
+            --env MATTERHORN_CONTROL_PLANE_URL= \
+            --env MATTERHORN_PROXY_SECRET= \
+            matterhorn-public-beta-web:ci >/dev/null
+
+          for attempt in $(seq 1 30); do
+            if docker exec --env MATTERHORN_BUILD_COMMIT="$MATTERHORN_BUILD_COMMIT" "$container" bun -e '
+              import assert from "node:assert/strict";
+              const expectedCommit = process.env.MATTERHORN_BUILD_COMMIT;
+              assert.match(expectedCommit, /^[a-f0-9]{40}$/);
+              const root = await fetch("http://127.0.0.1:8080/", { signal: AbortSignal.timeout(3000) });
+              assert.equal(root.status, 200);
+              const html = await root.text();
+              assert.ok(html.includes(`name="matterhorn-build-commit" content="${expectedCommit}"`));
+              assert.ok(html.includes("data-matterhorn-static-auth"));
+              assert.doesNotMatch(html, /data-matterhorn-ui="retro"/);
+              // No upstream or secret: readiness must fail closed, never serve the SPA.
+              const health = await fetch("http://127.0.0.1:8080/health/ready", { signal: AbortSignal.timeout(3000) });
+              assert.equal(health.status, 503);
+              assert.equal((await health.json()).code, "control_plane_unavailable");
+            '; then
+              exit 0
+            fi
+            if ! docker inspect --format '{{.State.Running}}' "$container" | grep -qx true; then
+              echo "Public Beta web container exited before its smoke checks passed." >&2
+              exit 1
+            fi
+            sleep 1
+          done
+
+          echo "Public Beta web container failed its bounded smoke checks." >&2
+          exit 1
+
   matterhorn-platform-safety:
     name: matterhorn-platform-safety
     runs-on: ubuntu-22.04

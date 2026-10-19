@@ -2,14 +2,14 @@
 
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-function run(args) {
+function run(args, env = process.env) {
   return new Promise((resolve) => {
-    const child = spawn("node", ["scripts/bittensor-beta-customer-packet.mjs", ...args], { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn("node", ["scripts/bittensor-beta-customer-packet.mjs", ...args], { env, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
     child.stdout.setEncoding("utf8");
@@ -21,10 +21,11 @@ function run(args) {
 }
 
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
-assert.equal(packageJson.scripts["beta:bittensor:packet"], "node scripts/bittensor-beta-customer-packet.mjs --output-dir /tmp/matterhorn-bittensor-beta-rc --fixture --json");
+assert.equal(packageJson.scripts["beta:bittensor:packet"], "node scripts/bittensor-beta-customer-packet.mjs --fixture --json");
 assert.equal(packageJson.scripts["test:bittensor-beta-customer-packet"], "node scripts/bittensor-beta-customer-packet.test.mjs");
 
 const dir = await mkdtemp(join(tmpdir(), "matterhorn-bittensor-beta-packet-"));
+process.once("exit", () => rmSync(dir, { recursive: true, force: true }));
 const betaPath = join(dir, "beta.json");
 const smokePath = join(dir, "smoke.json");
 const evidencePath = join(dir, "bittensor-evidence.json");
@@ -135,6 +136,18 @@ const fixtureSummary = JSON.parse(fixture.stdout);
 assert.equal(fixtureSummary.ready, false);
 assert.ok(fixtureSummary.warnings.some((warning) => warning.includes("Fixture mode")));
 assert.ok(fixtureSummary.errors.some((error) => error.includes("Browser QA checklist is missing")));
+
+const defaultOutputs = new Set();
+for (let index = 0; index < 2; index++) {
+  const defaultRun = await run(["--fixture", "--json"], { ...process.env, TMPDIR: dir, TMP: dir, TEMP: dir });
+  assert.equal(defaultRun.code, 0, defaultRun.stderr || defaultRun.stdout);
+  const output = JSON.parse(defaultRun.stdout);
+  assert.ok(output.outputDir.startsWith(join(dir, "matterhorn-bittensor-beta-rc-")));
+  if (process.platform !== "win32") assert.equal((await stat(output.outputDir)).mode & 0o777, 0o700);
+  assert.ok((await readFile(output.files.json, "utf8")).length > 0, "default output remains accessible after exit");
+  defaultOutputs.add(output.outputDir);
+}
+assert.equal(defaultOutputs.size, 2, "default runs must not share a predictable output directory");
 
 const unsafePath = join(dir, "unsafe.json");
 await writeFile(unsafePath, JSON.stringify({

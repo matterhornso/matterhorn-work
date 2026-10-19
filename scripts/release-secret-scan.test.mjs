@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -67,6 +67,13 @@ try {
   assert.equal(pythonBlocked.status, 1);
   assert.ok(JSON.parse(pythonBlocked.stdout).findings.some(finding => finding.path === "src/bridge.py"));
   assert.ok(!pythonBlocked.stdout.includes(fakeProviderToken));
+
+  symlinkSync(join(temp, "src/app.ts"), join(temp, "src/symbolic.ts"));
+  const symbolic = run(["--json"]);
+  assert.equal(symbolic.status, 1);
+  assert.equal(JSON.parse(symbolic.stdout).ready, false);
+  assert.ok(JSON.parse(symbolic.stdout).unreadableFiles.some(entry => entry.path === "src/symbolic.ts"));
+  assert.ok(!symbolic.stdout.includes(fakeProviderToken));
 
   console.log("Release secret scan contract passed.");
 } finally {

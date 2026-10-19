@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -163,9 +164,9 @@ assert.ok(
   "the reviewed Hyperliquid wallet ticket should call the exact-intent submit route",
 );
 
-const fixtureDir = "/tmp/matterhorn-desktop-beta-first-run-test";
-rmSync(fixtureDir, { recursive: true, force: true });
-mkdirSync(fixtureDir, { recursive: true });
+const fixtureDir = mkdtempSync(join(tmpdir(), "matterhorn-desktop-beta-first-run-test-"));
+process.once("exit", () => rmSync(fixtureDir, { recursive: true, force: true }));
+if (process.platform !== "win32") assert.equal(statSync(fixtureDir).mode & 0o777, 0o700);
 const dmgText = "fixture dmg\n";
 const zipText = "fixture zip\n";
 const dmgPath = join(fixtureDir, "Matterhorn-Desks-test-arm64-unsigned.dmg");

@@ -350,21 +350,18 @@ const PUBLIC_BETA_PROTOCOL_DESK_COPY: Partial<
     agentDescription: "Researches public prediction markets across supported venues without preparing trades.",
   },
   sui: {
-    shortDescription: "Read public Sui account, object, network, and transaction details.",
-    capabilityBullets: ["Account and object reads", "Network and fee research", "Transaction receipts"],
+    shortDescription: "Check a public Sui address balance with source and network details.",
+    capabilityBullets: ["Public address balances", "Source and observation time", "Saved balance results"],
     primaryActions: [
-      publicBetaAction("read_account_context", "Read account context", "Read public Sui account context"),
-      publicBetaAction("inspect_objects", "Inspect objects", "Inspect public Sui objects"),
-      publicBetaAction("review_network_context", "Review network context", "Review public Sui network context"),
+      publicBetaAction("read_account_context", "Check balance", "Read the balance of a supplied public Sui address and report the network, source, and observation time"),
     ],
     secondaryActions: [
-      publicBetaAction("import_public_receipts", "Import public receipts", "Import public Sui transaction receipts"),
       publicBetaAction("save_public_evidence", "Save result", "Save the cited Sui result"),
     ],
-    safetySummary: "Public Beta is limited to public Sui reads, monitoring, and transaction receipts.",
-    railTitle: "Sui: account and object reads, network research, watches, and transaction receipts",
+    safetySummary: "Public Beta chat supports public address balances. Object, checkpoint, and transaction-history reads are not available in this chat.",
+    railTitle: "Sui: public address balances and saved results",
     sessionBoundary: "Public Beta keeps this desk read-only. Transfer preparation, signing handoffs, and wallet actions stay hidden.",
-    agentDescription: "Researches public Sui account, object, network, and receipt context without preparing transfers.",
+    agentDescription: "Reads public Sui address balances without preparing transfers.",
   },
 };
 

@@ -2,15 +2,14 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import {
-  existsSync,
   lstatSync,
   mkdirSync,
-  readFileSync,
   readlinkSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readReleaseFileSnapshot } from "./lib/release-file-snapshot.mjs";
 
 export const MANIFEST_VERSION = "matterhorn.release-candidate-manifest.v1";
 
@@ -200,10 +199,14 @@ function safeCandidatePath(repoRoot, path) {
 
 function fileEvidence(repoRoot, entry) {
   const target = safeCandidatePath(repoRoot, entry.path);
-  if (entry.status.includes("D") || !existsSync(target)) {
+  if (entry.status.includes("D")) {
     return { kind: "deleted", size: 0, sha256: null };
   }
-  const stat = lstatSync(target);
+  let stat;
+  try { stat = lstatSync(target); } catch (error) {
+    if (error.code === "ENOENT") return { kind: "deleted", size: 0, sha256: null };
+    throw error;
+  }
   if (stat.isSymbolicLink()) {
     const link = readlinkSync(target);
     return { kind: "symlink", size: Buffer.byteLength(link), sha256: sha256(link) };
@@ -211,7 +214,8 @@ function fileEvidence(repoRoot, entry) {
   if (!stat.isFile()) {
     return { kind: "other", size: stat.size, sha256: null };
   }
-  return { kind: "file", size: stat.size, sha256: sha256(readFileSync(target)) };
+  const { buffer } = readReleaseFileSnapshot(target);
+  return { kind: "file", size: buffer.length, sha256: sha256(buffer) };
 }
 
 export function buildManifest(repoRoot, inventory, expectedHead = "") {

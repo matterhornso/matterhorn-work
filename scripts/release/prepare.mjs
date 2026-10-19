@@ -13,6 +13,7 @@ import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertReleaseVersion, runVersionCommand } from "./version-command.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const args = process.argv.slice(2);
@@ -39,6 +40,14 @@ const run = (cmd, opts = {}) => {
   } catch (err) {
     if (opts.allowFail) return "";
     fail(`Command failed: ${cmd}\n${err.stderr || err.message}`);
+  }
+};
+
+const runVersionStep = (step, version) => {
+  try {
+    return runVersionCommand(step, version, { cwd: root, dryRun, log });
+  } catch (err) {
+    fail(`Git version ${step} failed: ${err.stderr || err.message}`);
   }
 };
 
@@ -73,7 +82,7 @@ if (!dryRun) {
 
 // Read the new version
 const appPkg = JSON.parse(readFileSync(resolve(root, "apps/app/package.json"), "utf8"));
-const version = appPkg.version;
+const version = assertReleaseVersion(appPkg.version);
 success(`Version is now ${version}`);
 
 // ── Step 3: Lockfile ────────────────────────────────────────────────
@@ -95,13 +104,13 @@ success("Release review passed");
 // ── Step 5: Commit ──────────────────────────────────────────────────
 heading("Committing version bump");
 run("git add -A");
-run(`git commit -m "chore: bump version to ${version}"`);
+runVersionStep("commit", version);
 success(`Committed: chore: bump version to ${version}`);
 
 // ── Step 6: Tag ─────────────────────────────────────────────────────
 heading("Creating tag");
 const tag = `v${version}`;
-run(`git tag ${tag}`);
+runVersionStep("tag", version);
 success(`Tagged ${tag}`);
 
 // ── Summary ─────────────────────────────────────────────────────────

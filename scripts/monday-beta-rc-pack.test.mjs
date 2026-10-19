@@ -1,11 +1,26 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
-const outputDir = "/tmp/matterhorn-monday-beta-rc-pack-test";
-rmSync(outputDir, { recursive: true, force: true });
+const outputDir = mkdtempSync(join(tmpdir(), "matterhorn-monday-beta-rc-pack-test-"));
+process.once("exit", () => rmSync(outputDir, { recursive: true, force: true }));
+
+const defaultOutputs = new Set();
+for (let index = 0; index < 2; index++) {
+  const defaultRun = spawnSync("node", ["scripts/monday-beta-rc-pack.mjs", "--dry-run", "--json"], {
+    encoding: "utf8", maxBuffer: 10 * 1024 * 1024, env: { ...process.env, TMPDIR: outputDir, TMP: outputDir, TEMP: outputDir },
+  });
+  assert.equal(defaultRun.status, 0, defaultRun.stderr || defaultRun.stdout);
+  const output = JSON.parse(defaultRun.stdout);
+  assert.ok(output.outputDir.startsWith(join(outputDir, "matterhorn-monday-beta-rc-")));
+  if (process.platform !== "win32") assert.equal(statSync(output.outputDir).mode & 0o777, 0o700);
+  assert.ok(existsSync(join(output.outputDir, "matterhorn-monday-beta-rc.json")), "default output remains accessible after exit");
+  defaultOutputs.add(output.outputDir);
+}
+assert.equal(defaultOutputs.size, 2, "default runs must not share a predictable output directory");
 
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 assert.equal(packageJson.scripts?.["beta:monday-rc"], "node scripts/monday-beta-rc-pack.mjs");

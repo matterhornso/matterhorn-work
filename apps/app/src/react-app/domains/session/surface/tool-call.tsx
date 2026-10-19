@@ -3,11 +3,7 @@ import { useMemo, useState } from "react";
 import type { DynamicToolUIPart } from "ai";
 
 import { safeStringify, summarizeStep } from "../../../../app/utils";
-
-function normalizeToolText(value: unknown) {
-  if (typeof value !== "string") return "";
-  return value.replace(/(?:\r?\n\s*)+$/, "");
-}
+import { normalizeToolText } from "./tool-text";
 
 function hasStructuredValue(value: unknown) {
   if (value === undefined || value === null) return false;

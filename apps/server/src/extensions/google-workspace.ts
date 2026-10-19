@@ -195,7 +195,7 @@ function createGoogleWorkspacePkce() {
   return { verifier, challenge };
 }
 
-async function googleWorkspaceVaultKey(config: ServerConfig): Promise<Buffer> {
+async function googleWorkspaceVaultKey(config: ServerConfig, createIfMissing: boolean): Promise<Buffer> {
   const envKey =
     process.env.MATTERHORN_ENCRYPTION_KEY?.trim() ||
     process.env.OPENWORK_ENCRYPTION_KEY?.trim();
@@ -210,6 +210,10 @@ async function googleWorkspaceVaultKey(config: ServerConfig): Promise<Buffer> {
     if ((error as { code?: string })?.code !== "ENOENT") throw error;
   }
 
+  // Reading an existing vault must never replace its missing or invalid key.
+  if (!createIfMissing) {
+    throw new ApiError(500, "google_workspace_vault_key_unavailable", "Google Workspace vault key is unavailable");
+  }
   const key = randomBytes(32);
   await mkdir(dirname(keyPath), { recursive: true });
   await writeFile(keyPath, `${key.toString("base64")}\n`, { encoding: "utf8", mode: 0o600 });
@@ -229,7 +233,7 @@ async function readGoogleWorkspaceVault(config: ServerConfig): Promise<Record<st
     }
     const envelope = JSON.parse(raw) as unknown;
     if (!isRecord(envelope) || typeof envelope.iv !== "string" || typeof envelope.tag !== "string" || typeof envelope.data !== "string") return null;
-    const key = await googleWorkspaceVaultKey(config);
+    const key = await googleWorkspaceVaultKey(config, false);
     const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(envelope.iv, "base64"));
     decipher.setAuthTag(Buffer.from(envelope.tag, "base64"));
     const decrypted = Buffer.concat([decipher.update(Buffer.from(envelope.data, "base64")), decipher.final()]).toString("utf8");
@@ -250,7 +254,7 @@ async function writeGoogleWorkspaceVault(config: ServerConfig, value: Record<str
     await chmod(target, 0o600).catch(() => undefined);
     return;
   }
-  const key = await googleWorkspaceVaultKey(config);
+  const key = await googleWorkspaceVaultKey(config, true);
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
   const encrypted = Buffer.concat([cipher.update(JSON.stringify(value), "utf8"), cipher.final()]);
@@ -463,13 +467,18 @@ async function googleWorkspaceCreateDraft(config: ServerConfig, args: Record<str
   });
 }
 
+export function googleDriveSearchQuery(query: string): string {
+  const literal = query.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  return `name contains '${literal}' and trashed = false`;
+}
+
 async function googleWorkspaceSearchFiles(config: ServerConfig, args: Record<string, unknown>) {
   const query = readStringField(args, "query");
   if (!query) throw new ApiError(400, "invalid_payload", "query is required");
   const maxResults = Math.min(Math.max(Number(args.maxResults ?? 10), 1), 50);
   const { accessToken } = await googleWorkspaceAccessToken(config);
   const url = new URL("https://www.googleapis.com/drive/v3/files");
-  url.searchParams.set("q", `name contains '${query.replace(/'/g, "\\'")}' and trashed = false`);
+  url.searchParams.set("q", googleDriveSearchQuery(query));
   url.searchParams.set("pageSize", String(maxResults));
   url.searchParams.set("fields", "files(id,name,mimeType,webViewLink,modifiedTime,size)");
   return fetchGoogleJson(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });

@@ -1,132 +1,37 @@
 #!/usr/bin/env node
 
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { lstatSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
-import os from "os"
-import { createRequire } from "module"
+import os from "node:os"
+import { createRequire } from "node:module"
 import { fileURLToPath } from "node:url"
 
 const require = createRequire(import.meta.url)
 const rootDir = dirname(fileURLToPath(import.meta.url))
+const platform = os.platform() === "win32" ? "windows" : os.platform()
+const pkg = `openwork-orchestrator-${platform}-${os.arch()}`
+const extension = platform === "windows" ? ".exe" : ""
 
-function detect() {
-  const platformMap = {
-    darwin: "darwin",
-    linux: "linux",
-    win32: "windows",
+try {
+  const own = JSON.parse(readFileSync(join(rootDir, "package.json"), "utf8"))
+  const packagePath = require.resolve(`${pkg}/package.json`)
+  const installed = JSON.parse(readFileSync(packagePath, "utf8"))
+  if (typeof own.version !== "string" || !own.version || installed.version !== own.version) {
+    throw new Error("Platform package version does not match")
   }
-  const archMap = {
-    x64: "x64",
-    arm64: "arm64",
-    arm: "arm",
-  }
-
-  const platform = platformMap[os.platform()] || os.platform()
-  const arch = archMap[os.arch()] || os.arch()
-  return { platform, arch }
+  const hasBinary = ["matterhorn-work", "openwork"].some((name) => {
+    try { return lstatSync(join(dirname(packagePath), "bin", `${name}${extension}`)).isFile() }
+    catch { return false }
+  })
+  if (!hasBinary) throw new Error("Platform package binary is missing")
+  console.log(`matterhorn-work-orchestrator: verified installed platform package: ${pkg}`)
+} catch {
+  // The package manager owns download integrity. Never fetch executable bytes
+  // independently or reuse an unverified dist/bin left by an older installer.
+  console.error(
+    `matterhorn-work-orchestrator: matching platform package ${pkg} is missing or incomplete.\n` +
+      `Reinstall openwork-orchestrator with optional dependencies enabled and the same pinned version.\n` +
+      `Network fallback downloads and legacy dist/bin binaries are no longer supported.`,
+  )
+  process.exitCode = 1
 }
-
-function packageName() {
-  const { platform, arch } = detect()
-  return `openwork-orchestrator-${platform}-${arch}`
-}
-
-function binaryName() {
-  const { platform } = detect()
-  return platform === "windows" ? "matterhorn-work.exe" : "matterhorn-work"
-}
-
-function legacyBinaryName() {
-  const { platform } = detect()
-  return platform === "windows" ? "openwork.exe" : "openwork"
-}
-
-function fallbackAssetName() {
-  const { platform, arch } = detect()
-  return `matterhorn-work-bun-${platform}-${arch}${platform === "windows" ? ".exe" : ""}`
-}
-
-function fallbackBinaryPath() {
-  return join(rootDir, "dist", "bin", binaryName())
-}
-
-function legacyFallbackBinaryPath() {
-  return join(rootDir, "dist", "bin", legacyBinaryName())
-}
-
-function readOwnVersion() {
-  const pkg = JSON.parse(readFileSync(join(rootDir, "package.json"), "utf8"))
-  const version = String(pkg.version || "").trim()
-  if (!version) {
-    throw new Error("matterhorn-work-orchestrator: package version is missing")
-  }
-  return version
-}
-
-function resolveFallbackBaseUrl(version) {
-  const override = String(
-    process.env.MATTERHORN_WORK_ORCHESTRATOR_DOWNLOAD_BASE_URL ||
-      process.env.OPENWORK_ORCHESTRATOR_DOWNLOAD_BASE_URL ||
-      "",
-  ).trim()
-  if (override) {
-    return override.replace(/\/$/, "")
-  }
-  return `https://github.com/matterhornso/matterhorn-work/releases/download/openwork-orchestrator-v${version}`
-}
-
-async function downloadFallbackBinary() {
-  const version = readOwnVersion()
-  const asset = fallbackAssetName()
-  const url = `${resolveFallbackBaseUrl(version)}/${asset}`
-  const destination = fallbackBinaryPath()
-
-  console.log(`matterhorn-work-orchestrator: downloading fallback binary ${asset}`)
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`download failed (${response.status} ${response.statusText}) from ${url}`)
-  }
-
-  const buffer = Buffer.from(await response.arrayBuffer())
-  mkdirSync(dirname(destination), { recursive: true })
-  writeFileSync(destination, buffer)
-  if (detect().platform !== "windows") {
-    chmodSync(destination, 0o755)
-  }
-
-  console.log(`matterhorn-work-orchestrator: installed fallback binary at ${destination}`)
-}
-
-async function main() {
-  try {
-    const pkg = packageName()
-    require.resolve(`${pkg}/package.json`)
-    console.log(`matterhorn-work-orchestrator: verified platform package: ${pkg}`)
-    return
-  } catch {
-    if (existsSync(fallbackBinaryPath())) {
-      console.log(`matterhorn-work-orchestrator: using existing fallback binary at ${fallbackBinaryPath()}`)
-      return
-    }
-    if (existsSync(legacyFallbackBinaryPath())) {
-      console.log(`matterhorn-work-orchestrator: using existing legacy fallback binary at ${legacyFallbackBinaryPath()}`)
-      return
-    }
-  }
-
-  try {
-    await downloadFallbackBinary()
-  } catch (error) {
-    const pkg = packageName()
-    const message = error instanceof Error ? error.message : String(error)
-    console.error(
-      `matterhorn-work-orchestrator: failed to locate platform binary package (${pkg}).\n` +
-        `Your package manager may have skipped optionalDependencies, or the package asset is unavailable.\n` +
-        `Fallback download failed: ${message}\n` +
-        `Try installing it manually: npm i -g ${pkg}`,
-    )
-    process.exit(1)
-  }
-}
-
-await main()

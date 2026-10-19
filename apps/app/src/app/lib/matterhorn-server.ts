@@ -640,6 +640,7 @@ export type MatterhornSkillItem = {
   scope: "project" | "global";
   trigger?: string;
   userInvocable: boolean;
+  builtin?: true;
 };
 
 export type MatterhornSkillContent = {

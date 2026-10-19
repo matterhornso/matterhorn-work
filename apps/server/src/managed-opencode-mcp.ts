@@ -759,6 +759,40 @@ function projectBittensorRead(result: JsonObject): JsonObject {
   };
 }
 
+function projectPolymarketRead(result: JsonObject): JsonObject {
+  if (JSON.stringify(result).length <= MANAGED_MCP_MODEL_READ_CONTENT_MAX_CHARS) return result;
+  const marketKeys = [
+    "id", "question", "slug", "active", "closed", "endDate", "outcomes", "outcomePrices", "tokenIds", "volume", "liquidity",
+  ];
+  const projectMarket = (market: JsonObject): JsonObject => {
+    const source = pickDefinedFields(market.source, ["source", "fetchedAt", "freshness"]);
+    const warnings = boundedModelStrings(isJsonObject(market.source) ? market.source.warnings : undefined, 2, 180);
+    return {
+      ...pickDefinedFields(market, marketKeys),
+      source: { ...source,
+        ...(warnings.values.length ? { warnings: warnings.values } : {}),
+        ...(warnings.truncated ? { warningsTruncated: true, omittedWarningCount: warnings.omittedCount } : {}),
+      },
+      ...(typeof market.description === "string" && market.description ? { descriptionOmitted: true } : {}),
+    };
+  };
+  if (isJsonObject(result.market)) return { ...result, market: projectMarket(result.market) };
+  if (!Array.isArray(result.markets)) return result;
+  const candidates = result.markets.filter(isJsonObject);
+  const markets = candidates.map(projectMarket);
+  const projected = (): JsonObject => ({
+    ...result, markets,
+    ...(markets.length < candidates.length ? {
+      marketsTruncated: true, omittedMarketCount: candidates.length - markets.length,
+    } : {}),
+  });
+  // Preserve complete outcome probabilities, public token IDs and provenance
+  // for fewer markets instead of dropping every result in generic compaction.
+  while (markets.length > 1
+    && JSON.stringify(projected()).length > MANAGED_MCP_MODEL_READ_CONTENT_MAX_CHARS - 100) markets.pop();
+  return projected();
+}
+
 function stripPrivateModelResultFields(value: unknown, depth = 0): unknown {
   if (value == null || typeof value !== "object") return value;
   if (depth >= 10) return "[Matterhorn omitted over-nested external content]";
@@ -866,6 +900,7 @@ function projectManagedMcpResult(input: {
       .filter((key) => rawResult[key] !== undefined)
       .map((key) => [key, rawResult[key]]));
     if (input.tool.name === "matterhorn_bittensor_chat") closed = projectBittensorRead(closed);
+    if (input.tool.name === "matterhorn_polymarket_search_markets") closed = projectPolymarketRead(closed);
   }
   if (Object.keys(closed).length === 0) {
     throw new Error("matterhorn_tool_result_rejected");

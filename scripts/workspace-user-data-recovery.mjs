@@ -8,8 +8,8 @@ import {
 } from "node:crypto";
 import { constants, createReadStream, createWriteStream } from "node:fs";
 import {
-  appendFile,
   chmod,
+  link,
   lstat,
   mkdir,
   mkdtemp,
@@ -27,6 +27,7 @@ import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep } fr
 import process from "node:process";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { fileURLToPath } from "node:url";
 import { MAX_TENANT_ARCHIVE_BYTES, validateTenantArchive } from "./lib/validate-tenant-archive.mjs";
 
 const ARCHIVE_VERSION = "matterhorn.tenant-data-backup.v2";
@@ -266,75 +267,81 @@ async function* bundleChunks(manifest, files) {
   }
 }
 
-async function writeEncryptedArchive(outputPath, manifest, files, secret, force) {
+export async function writeEncryptedArchive(outputPath, manifest, files, secret, force) {
   const target = resolve(outputPath);
   await mkdir(dirname(target), { recursive: true });
   if ((await pathExists(target)) && !force) throw new Error(`Archive already exists: ${target}. Use --force to replace it.`);
-  const temporary = `${target}.tmp-${process.pid}-${Date.now()}`;
-  const salt = randomBytes(SALT_BYTES);
-  const iv = randomBytes(IV_BYTES);
-  const key = scryptSync(secret, salt, 32);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const staging = await mkdtemp(join(dirname(target), `.${basename(target)}.backup-`));
+  const temporary = join(staging, "archive.mhdb");
   try {
-    await writeFile(temporary, Buffer.concat([MAGIC, salt, iv]), { mode: 0o600 });
+    const salt = randomBytes(SALT_BYTES);
+    const iv = randomBytes(IV_BYTES);
+    const key = scryptSync(secret, salt, 32);
+    const cipher = createCipheriv("aes-256-gcm", key, iv);
+    await writeFile(temporary, Buffer.concat([MAGIC, salt, iv]), { flag: "wx", mode: 0o600 });
     await pipeline(
       Readable.from(bundleChunks(manifest, files)),
       cipher,
-      createWriteStream(temporary, { flags: "a", mode: 0o600 }),
+      createWriteStream(temporary, { flags: constants.O_WRONLY | constants.O_APPEND | constants.O_NOFOLLOW }),
     );
-    await appendFile(temporary, cipher.getAuthTag());
-    await chmod(temporary, 0o600);
-    if (await pathExists(target)) await rm(target, { force: true });
-    await rename(temporary, target);
+    const final = await open(temporary, constants.O_WRONLY | constants.O_APPEND | constants.O_NOFOLLOW);
+    try { await final.write(cipher.getAuthTag()); } finally { await final.close(); }
+    if (force) await rename(temporary, target);
+    else {
+      // Exclusive publication: a concurrent file/symlink cannot be overwritten
+      // between the early existence check and completion of encryption.
+      await link(temporary, target).catch(error => {
+        if (error.code === "EEXIST") throw new Error(`Archive already exists: ${target}. Use --force to replace it.`);
+        throw error;
+      });
+    }
     return target;
-  } catch (error) {
-    await rm(temporary, { force: true });
-    throw error;
-  }
+  } finally { await rm(staging, { recursive: true, force: true }); }
 }
 
-async function readArchiveEnvelope(archivePath) {
-  const archive = resolve(archivePath);
-  const archiveStat = await stat(archive);
+async function readArchiveEnvelope(handle) {
+  const archiveStat = await handle.stat();
+  if (!archiveStat.isFile()) throw new Error("Backup archive must be a regular file.");
   const headerBytes = MAGIC.length + SALT_BYTES + IV_BYTES;
   if (archiveStat.size <= headerBytes + TAG_BYTES + 4) throw new Error("Backup archive is truncated.");
-  const handle = await open(archive, "r");
-  try {
-    const header = Buffer.alloc(headerBytes);
-    const tag = Buffer.alloc(TAG_BYTES);
-    await handle.read(header, 0, header.length, 0);
-    await handle.read(tag, 0, tag.length, archiveStat.size - TAG_BYTES);
-    if (!header.subarray(0, MAGIC.length).equals(MAGIC)) throw new Error("Backup archive format is not recognized.");
-    return {
-      archive,
-      size: archiveStat.size,
-      salt: header.subarray(MAGIC.length, MAGIC.length + SALT_BYTES),
-      iv: header.subarray(MAGIC.length + SALT_BYTES),
-      tag,
-      ciphertextStart: headerBytes,
-      ciphertextEnd: archiveStat.size - TAG_BYTES - 1,
-    };
-  } finally {
-    await handle.close();
-  }
+  const header = Buffer.alloc(headerBytes);
+  const tag = Buffer.alloc(TAG_BYTES);
+  const headerRead = await handle.read(header, 0, header.length, 0);
+  const tagRead = await handle.read(tag, 0, tag.length, archiveStat.size - TAG_BYTES);
+  if (headerRead.bytesRead !== header.length || tagRead.bytesRead !== tag.length) throw new Error("Backup archive is truncated.");
+  if (!header.subarray(0, MAGIC.length).equals(MAGIC)) throw new Error("Backup archive format is not recognized.");
+  return {
+    stat: archiveStat,
+    salt: header.subarray(MAGIC.length, MAGIC.length + SALT_BYTES),
+    iv: header.subarray(MAGIC.length + SALT_BYTES),
+    tag,
+    ciphertextStart: headerBytes,
+    ciphertextEnd: archiveStat.size - TAG_BYTES - 1,
+  };
 }
 
-async function decryptArchive(archivePath, secret, outputPath) {
-  const envelope = await readArchiveEnvelope(archivePath);
-  const key = scryptSync(secret, envelope.salt, 32);
-  const decipher = createDecipheriv("aes-256-gcm", key, envelope.iv);
-  decipher.setAuthTag(envelope.tag);
+export async function decryptArchive(archivePath, secret, outputPath) {
+  const handle = await open(resolve(archivePath), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  let output;
   try {
+    const envelope = await readArchiveEnvelope(handle);
+    const key = scryptSync(secret, envelope.salt, 32);
+    const decipher = createDecipheriv("aes-256-gcm", key, envelope.iv);
+    decipher.setAuthTag(envelope.tag);
+    output = await open(outputPath, "wx", 0o600);
     await pipeline(
-      createReadStream(envelope.archive, { start: envelope.ciphertextStart, end: envelope.ciphertextEnd }),
+      handle.createReadStream({ autoClose: false, start: envelope.ciphertextStart, end: envelope.ciphertextEnd }),
       decipher,
-      createWriteStream(outputPath, { mode: 0o600 }),
+      output.createWriteStream(),
     );
-    await chmod(outputPath, 0o600);
+    const after = await handle.stat();
+    if (envelope.stat.size !== after.size || envelope.stat.mtimeMs !== after.mtimeMs || envelope.stat.ctimeMs !== after.ctimeMs) {
+      throw new Error("Backup archive changed during decryption.");
+    }
   } catch {
-    await rm(outputPath, { force: true });
+    if (output) await rm(outputPath, { force: true });
     throw new Error("Backup authentication failed. The passphrase is wrong or the archive was modified.");
-  }
+  } finally { await handle.close(); await output?.close(); }
 }
 
 async function readManifest(bundlePath) {
@@ -506,7 +513,8 @@ async function restore(config) {
   }
   const secret = passphrase(config);
   const startedAt = Date.now();
-  const temporaryBundle = join(tmpdir(), `matterhorn-user-data-restore-${process.pid}-${Date.now()}.bundle`);
+  const restoreTemporary = await mkdtemp(join(tmpdir(), "matterhorn-user-data-restore-"));
+  const temporaryBundle = join(restoreTemporary, "plaintext.bundle");
   try {
     await decryptArchive(config.archive, secret, temporaryBundle);
     const result = await restoreBundle(temporaryBundle, config.restoreTo);
@@ -539,7 +547,7 @@ async function restore(config) {
     const reportPath = await writeReport(config, report, `${result.target}.restore-report.json`);
     return { report, reportPath };
   } finally {
-    await rm(temporaryBundle, { force: true });
+    await rm(restoreTemporary, { recursive: true, force: true });
   }
 }
 
@@ -554,7 +562,9 @@ async function main() {
   else process.stdout.write(`Workspace archive ${result.report.operation}: VERIFIED (application recovery not tested)\nReport: ${result.reportPath}\n`);
 }
 
-main().catch((error) => {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-  process.exitCode = 1;
-});
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  });
+}
