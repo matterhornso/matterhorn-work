@@ -21,6 +21,24 @@ function run(args) {
   });
 }
 
+{
+  const outputDir = mkdtempSync(join(tmpdir(), "matterhorn-readiness-url-"));
+  const secret = "synthetic-readiness-url-secret";
+  try {
+    const jsonPath = join(outputDir, "report.json");
+    const markdownPath = join(outputDir, "report.md");
+    const result = await run(["--server-url", `http://synthetic-user:${secret}@127.0.0.1:1?token=${secret}#${secret}`,
+      "--workspace-id", "ws_test", "--json-output", jsonPath, "--markdown-output", markdownPath, "--json"]);
+    assert.equal(result.code, 1);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.metadata.serverUrl, "http://127.0.0.1:1/");
+    for (const output of [result.stdout, result.stderr, readFileSync(jsonPath, "utf8"), readFileSync(markdownPath, "utf8")]) {
+      assert.ok(!output.includes(secret));
+      assert.ok(!output.includes("synthetic-user"));
+    }
+  } finally { rmSync(outputDir, { recursive: true, force: true }); }
+}
+
 function productionDiagnostics(overrides = {}) {
   const mode = overrides.mode ?? "production_candidate";
   const blocked = mode === "needs_setup";
@@ -250,17 +268,28 @@ for (const required of [
 }
 
 {
-  const server = await startMatterhornServer({ diagnostics: { error: "boom" }, diagnosticsStatus: 500 });
+  const secret = "synthetic-client-token-not-for-reports";
+  const outputDir = mkdtempSync(join(tmpdir(), "matterhorn-readiness-errors-"));
+  const server = await startMatterhornServer({ diagnostics: { error: secret, privateKey: "synthetic-private-value" }, diagnosticsStatus: 500 });
   try {
-    const result = await run(["--server-url", server.url, "--workspace-id", "ws_test", "--json"]);
+    const jsonPath = join(outputDir, "report.json");
+    const markdownPath = join(outputDir, "report.md");
+    const result = await run(["--server-url", server.url, "--workspace-id", "ws_test", "--token", secret,
+      "--json-output", jsonPath, "--markdown-output", markdownPath, "--json"]);
     assert.equal(result.code, 1, result.stderr || result.stdout);
     const report = JSON.parse(result.stdout);
     assert.equal(report.ok, false);
     assert.equal(report.ready, false);
     assert.match(report.error, /GET .* -> 500/);
+    assert.equal(report.details, undefined);
+    for (const output of [result.stdout, result.stderr, readFileSync(jsonPath, "utf8"), readFileSync(markdownPath, "utf8")]) {
+      assert.ok(!output.includes(secret));
+      assert.ok(!output.includes("synthetic-private-value"));
+    }
     assertNoWrites(server.requests);
   } finally {
     await server.close();
+    rmSync(outputDir, { recursive: true, force: true });
   }
 }
 

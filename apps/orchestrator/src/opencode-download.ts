@@ -123,6 +123,21 @@ export async function downloadVerifiedOpencode(options: {
   checkedVersion(sidecar.releaseVersion);
   const sidecarBinary = await downloadVerifiedSidecar({ name: "opencode", sidecar, expectedVersion: version, fetchImpl: options.fetchImpl });
   if (sidecarBinary) return sidecarBinary.bin;
+  return downloadVerifiedOfficialOpencode({ ...options, directory: sidecar.dir, target, cacheReleaseVersion: sidecar.releaseVersion });
+}
+
+// Build tooling uses the same pinned official-release verifier without first
+// requiring a separately published Matterhorn sidecar manifest.
+export async function downloadVerifiedOfficialOpencode(options: {
+  directory: string; target: SidecarTarget; expectedVersion: string; assetOverride?: string;
+  cacheReleaseVersion?: string; fetchImpl?: typeof fetch;
+}): Promise<string> {
+  const version = checkedVersion(options.expectedVersion);
+  const { target } = options;
+  const sidecar: SidecarConfig = {
+    dir: options.directory, target, releaseVersion: checkedVersion(options.cacheReleaseVersion ?? version),
+    baseUrl: `${RELEASE_DOWNLOAD}v${version}`, manifestUrl: `${RELEASE_API}v${version}`,
+  };
   const assetName = options.assetOverride?.trim() || ASSETS[target];
   if (!/^opencode-[A-Za-z0-9._-]+\.(zip|tar\.gz)$/.test(assetName) || assetName.includes("..")) {
     throw new Error("OpenCode asset override must be a flat official release archive name");

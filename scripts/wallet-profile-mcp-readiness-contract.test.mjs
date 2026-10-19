@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { PROFILE_READINESS_REGISTRY } from "../packages/types/src/profile-readiness.ts";
 
 const rootPackage = JSON.parse(readFileSync("package.json", "utf8"));
 const index = readFileSync("packages/types/src/index.ts", "utf8");
@@ -121,17 +122,43 @@ for (const token of [
   assert.ok(profileReadiness.includes(token), `profile-readiness.ts missing ${token}`);
 }
 
-// 5. All support links are Matterhorn-owned or explicitly marked external.
+// 5. Every support URL uses the Matterhorn HTTPS origin; external surfaces are labeled separately.
 const linkFieldMatches = [...profileReadiness.matchAll(/(docsUrl|feedbackUrl|issueUrl|accountUrl):/g)];
 assert.ok(linkFieldMatches.length > 0, "profile readiness must declare support link fields");
 assert.ok(
   profileReadiness.includes("function matterhornLink"),
   "profile readiness must build links via matterhornLink helper",
 );
-assert.ok(
-  !profileReadiness.includes("https://") || profileReadiness.includes("https://matterhorn.so"),
-  "profile readiness must only use Matterhorn-owned https links",
-);
+function isMatterhornSupportUrl(value) {
+  if (typeof value !== "string") return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.origin === "https://matterhorn.so"
+      && url.username === "" && url.password === "";
+  } catch {
+    return false;
+  }
+}
+for (const [state, readiness] of Object.entries(PROFILE_READINESS_REGISTRY)) {
+  for (const [field, url] of Object.entries(readiness.supportLinks)) {
+    assert.ok(isMatterhornSupportUrl(url), `${state}.${field} must use the Matterhorn HTTPS origin without credentials`);
+  }
+}
+assert.ok(isMatterhornSupportUrl("https://matterhorn.so/docs"));
+for (const url of [
+  "https://matterhorn.so.evil.invalid/docs",
+  "https://evil.invalid/?next=https://matterhorn.so",
+  "https://matterhorn.so@evil.invalid/docs",
+  "https://user:password@matterhorn.so/docs",
+  "https://matterhorn.so:444/docs",
+  "http://matterhorn.so/docs",
+  "//matterhorn.so/docs",
+  "javascript:alert('https://matterhorn.so')",
+  "not-a-url",
+  null,
+]) {
+  assert.equal(isMatterhornSupportUrl(url), false, `unsafe support URL must be rejected: ${url}`);
+}
 const externalLabelsMatches = [...profileReadiness.matchAll(/externalLinkLabels:\s*\[([^\]]*)\]/g)];
 for (const [, content] of externalLabelsMatches) {
   if (content.includes('"')) {

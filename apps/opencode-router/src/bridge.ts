@@ -16,6 +16,7 @@ import { MediaStore } from "./media-store.js";
 import { readMessagingAgentFile } from "./messaging-agent-file.js";
 import { buildPermissionRules, createClient } from "./opencode.js";
 import { isWithinWorkspaceRootPath, normalizeScopedDirectoryPath } from "./path-scope.js";
+import { createRouterPublicError, ROUTER_ADAPTER_START_FAILURE, routerFailureDiagnostic } from "./public-control-error.js";
 import { chunkText, formatInputSummary, truncateText } from "./text.js";
 import { createSlackAdapter } from "./slack.js";
 import { createTelegramAdapter, isTelegramPeerId } from "./telegram.js";
@@ -457,7 +458,7 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
     if (!isWithinWorkspaceRoot(resolved)) {
       return {
         ok: false,
-        error: `Directory must stay within workspace root: ${workspaceRootNormalized}`,
+        error: "Directory must stay within workspace root.",
       };
     }
     return { ok: true, directory: normalizeDirectory(resolved) };
@@ -961,7 +962,7 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
           const startResult = await startAdapterBounded(adapter, {
             timeoutMs: 2_500,
             onError: (error) => {
-              logger.error({ error, channel: "telegram", identityId: id }, "telegram adapter start failed");
+              logger.error({ error: routerFailureDiagnostic(error), channel: "telegram", identityId: id }, "telegram adapter start failed");
               adapters.delete(key);
             },
           });
@@ -983,7 +984,7 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
               access: runtimeAccess,
               pairingRequired: runtimeAccess === "private",
               applied: false,
-              error: String(startResult.error),
+              error: ROUTER_ADAPTER_START_FAILURE,
             };
           }
           return {
@@ -1152,7 +1153,7 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
           const startResult = await startAdapterBounded(adapter, {
             timeoutMs: 2_500,
             onError: (error) => {
-              logger.error({ error, channel: "slack", identityId: id }, "slack adapter start failed");
+              logger.error({ error: routerFailureDiagnostic(error), channel: "slack", identityId: id }, "slack adapter start failed");
               adapters.delete(key);
             },
           });
@@ -1161,7 +1162,7 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
             return { id, enabled: true, applied: false, starting: true };
           }
           if (startResult.status === "error") {
-            return { id, enabled: true, applied: false, error: String(startResult.error) };
+            return { id, enabled: true, applied: false, error: ROUTER_ADAPTER_START_FAILURE };
           }
           return { id, enabled: true, applied: true };
         },
@@ -1252,9 +1253,7 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
           }
           const scoped = resolveScopedDirectory(directory);
           if (!scoped.ok) {
-            const error = new Error(scoped.error) as Error & { status?: number };
-            error.status = 400;
-            throw error;
+            throw createRouterPublicError("outside_workspace");
           }
           const normalizedDir = scoped.directory;
           store.upsertBinding(channel as ChannelName, identityId, peerKey, normalizedDir);
@@ -1304,9 +1303,7 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
           const normalizedDir = directoryInput ? (() => {
             const scoped = resolveScopedDirectory(directoryInput);
             if (!scoped.ok) {
-              const error = new Error(scoped.error) as Error & { status?: number };
-              error.status = 400;
-              throw error;
+              throw createRouterPublicError("outside_workspace");
             }
             return scoped.directory;
           })() : "";

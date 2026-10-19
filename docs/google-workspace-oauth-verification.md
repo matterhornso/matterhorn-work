@@ -81,6 +81,26 @@ browser bundle, or passed in a command-line argument.
 
 ## Deployment Modes
 
+### Experimental local account access
+
+The experimental server connector currently uses one host-global vault, not a
+vault bound to each hosted user or workspace. Its account routes and extension
+actions require a locally issued `owner` token; viewer, collaborator and hosted
+browser/MCP identities are denied. The actions catalog does not expose an account.
+Do not enable this connector for hosted users without reviewed account binding.
+
+Connect, disconnect, scope smoke-test and Gmail draft creation use the server's
+existing approval policy. In manual mode, the host operator must inspect
+`GET /approvals` and reply through `POST /approvals/:id` using host authorization;
+these requests use `workspaceId: global:google-workspace`, so a workspace-filtered
+client may not show them. Auto approval remains an explicit host policy. A smoke
+test creates a Drive file and Gmail draft; it does not send email.
+
+Only account status and connect-flow status are available in read-only mode.
+Other operations may refresh and persist credentials even when the provider
+action only reads data. Reading an existing vault never generates or replaces
+its encryption key; an unavailable key requires operator recovery.
+
 ### Local-first desktop
 
 The desktop flow uses PKCE and a loopback redirect. The app exchanges the code

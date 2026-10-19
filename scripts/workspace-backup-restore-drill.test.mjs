@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { closeSync, fstatSync, mkdtempSync, openSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -24,6 +24,7 @@ let releaseImport = null;
 let decoyApproved = false;
 let restoreApplied = false;
 let importedMode = null;
+let imports = 0;
 
 function json(response, status, body) {
   response.writeHead(status, { "content-type": "application/json" });
@@ -42,6 +43,7 @@ const server = createServer(async (request, response) => {
       : { fingerprint: "preview-123", summary: { total: 2, create: 0, update: 2, replace: 0, delete: 0, unchanged: 0 } });
   }
   if (url.pathname === "/workspace/ws_restore/import" && request.method === "POST" && isClient) {
+    imports += 1;
     let body = "";
     for await (const chunk of request) body += chunk;
     const parsed = JSON.parse(body);
@@ -83,7 +85,7 @@ const outputDir = mkdtempSync(join(tmpdir(), "matterhorn-backup-restore-"));
 
 function run(args) {
   return new Promise((resolve) => {
-    const child = spawn("node", [scriptPath, ...args], { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(process.execPath, [scriptPath, ...args], { stdio: ["ignore", "pipe", "pipe"], env: { PATH: process.env.PATH, TMPDIR: outputDir } });
     let stdout = "";
     let stderr = "";
     child.stdout.setEncoding("utf8");
@@ -92,6 +94,14 @@ function run(args) {
     child.stderr.on("data", (chunk) => { stderr += chunk; });
     child.on("close", (code) => resolve({ code, stdout, stderr }));
   });
+}
+
+function readPrivateFile(file) {
+  const fd = openSync(file, "r");
+  try {
+    if (process.platform !== "win32") assert.equal(fstatSync(fd).mode & 0o777, 0o600);
+    return readFileSync(fd, "utf8");
+  } finally { closeSync(fd); }
 }
 
 try {
@@ -136,8 +146,39 @@ try {
   });
   assert.equal(decoyApproved, false);
   assert.match(report.backup.sha256, /^[a-f0-9]{64}$/);
-  assert.deepEqual(JSON.parse(readFileSync(reportPath, "utf8")), report);
+  assert.deepEqual(JSON.parse(readPrivateFile(reportPath)), report);
+  assert.deepEqual(JSON.parse(readPrivateFile(join(outputDir, report.backup.file))), sourcePayload);
   assert.doesNotMatch(JSON.stringify(report), new RegExp(`${clientToken}|${hostToken}`));
+
+  const args = ["--server-url", serverUrl, "--token", clientToken, "--host-token", hostToken,
+    "--source-workspace", "ws_source", "--target-workspace", "ws_restore", "--apply", "--confirm-target", "ws_restore", "--output-dir", outputDir];
+  const beforeImports = imports;
+  const occupied = join(outputDir, "existing-report.json");
+  writeFileSync(occupied, "preserve existing content", { mode: 0o640, flag: "wx" });
+  const linked = join(outputDir, "linked-report.json");
+  symlinkSync(occupied, linked);
+  for (const target of [occupied, linked]) {
+    const collision = await run([...args, "--json-output", target]);
+    assert.equal(collision.code, 1);
+    assert.match(collision.stderr, /EEXIST/);
+    assert.equal(imports, beforeImports, "collision must fail before an import");
+  }
+  const fd = openSync(occupied, "r");
+  try {
+    assert.equal(readFileSync(fd, "utf8"), "preserve existing content");
+    if (process.platform !== "win32") assert.equal(fstatSync(fd).mode & 0o777, 0o640 & ~process.umask());
+  } finally { closeSync(fd); }
+
+  const defaultRun = await run(["--server-url", serverUrl, "--token", clientToken,
+    "--source-workspace", "ws_source", "--target-workspace", "ws_restore", "--json"]);
+  assert.equal(defaultRun.code, 0, defaultRun.stderr);
+  const defaultReport = JSON.parse(defaultRun.stdout);
+  assert.equal(defaultReport.status, "preview_only");
+  assert.ok(defaultReport.outputDirectory.startsWith(join(outputDir, "matterhorn-backup-restore-")));
+  const directoryFd = openSync(defaultReport.outputDirectory, "r");
+  try { if (process.platform !== "win32") assert.equal(fstatSync(directoryFd).mode & 0o777, 0o700); }
+  finally { closeSync(directoryFd); }
+  assert.deepEqual(JSON.parse(readPrivateFile(join(defaultReport.outputDirectory, defaultReport.backup.file))), sourcePayload);
 
   const help = await run(["--help"]);
   assert.equal(help.code, 0);

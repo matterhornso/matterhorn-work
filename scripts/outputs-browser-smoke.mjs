@@ -1,11 +1,10 @@
 #!/usr/bin/env node
-import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { chromium } from "playwright";
 import { resolveBrowserSmokeTarget } from "./lib/browser-smoke-runtime.mjs";
+import { networkDiagnostic, privateEvidenceDirectory, recordDiagnostic, reportUrl, validateBrowserTarget, writePrivateEvidence } from "./lib/browser-smoke-privacy.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "..");
-const DEFAULT_OUTPUT_DIR = "qa-reports/outputs-browser-smoke";
 
 function parseArgs(argv = process.argv.slice(2)) {
   const flags = new Set();
@@ -34,7 +33,7 @@ function parseArgs(argv = process.argv.slice(2)) {
     url: values.get("--url") || process.env.MATTERHORN_OUTPUTS_BROWSER_URL || "",
     serverUrl: (values.get("--server-url") || process.env.MATTERHORN_OUTPUTS_BROWSER_SERVER_URL || "").replace(/\/$/, ""),
     token: values.get("--token") || process.env.MATTERHORN_OUTPUTS_BROWSER_TOKEN || process.env.VITE_MATTERHORN_WORK_TOKEN || "",
-    outputDir: resolve(repoRoot, values.get("--output-dir") || process.env.MATTERHORN_OUTPUTS_BROWSER_OUTPUT_DIR || DEFAULT_OUTPUT_DIR),
+    outputDir: values.get("--output-dir") || process.env.MATTERHORN_OUTPUTS_BROWSER_OUTPUT_DIR || "",
   };
 }
 
@@ -49,7 +48,7 @@ Options:
   --url <url>          Matterhorn app URL.
   --server-url <url>   Authenticated Matterhorn backend. Uses the live fixture when omitted.
   --token <token>      Collaborator client token. Never written to the report.
-  --output-dir <dir>   Evidence directory. Default: ${DEFAULT_OUTPUT_DIR}
+  --output-dir <dir>   Parent for a new private evidence directory; default is the OS temporary directory.
   --strict             Exit nonzero on journey, network, console, or page errors.
   --json               Print the full JSON report.
   --headed             Show Chromium while running.
@@ -63,9 +62,9 @@ Boundaries:
 }
 
 function workspaceContext(appUrl) {
-  const url = new URL(appUrl);
+  const url = validateBrowserTarget(appUrl);
   const match = url.pathname.match(/^\/workspace\/([^/]+)/);
-  if (!match?.[1]) throw new Error(`Workspace id is missing from ${appUrl}`);
+  if (!match?.[1]) throw new Error("Workspace id is missing from the browser target");
   return {
     workspaceId: decodeURIComponent(match[1]),
     sessionUrl(panel) {
@@ -81,8 +80,8 @@ function workspaceContext(appUrl) {
 function makeReport(config) {
   return {
     name: "matterhorn-outputs-browser-smoke",
-    url: config.url,
-    serverUrl: config.serverUrl,
+    url: reportUrl(config.url),
+    serverUrl: reportUrl(config.serverUrl),
     startedAt: new Date().toISOString(),
     ready: false,
     stages: [],
@@ -99,7 +98,7 @@ async function stage(report, id, label, action) {
     report.stages.push({ id, label, status: "pass", durationMs: Date.now() - startedAt });
     return value;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = `${label} failed; raw browser details omitted`;
     report.stages.push({ id, label, status: "fail", durationMs: Date.now() - startedAt, error: message });
     throw error;
   }
@@ -130,8 +129,14 @@ function shouldRecordConsoleError(message) {
 }
 
 function routeResponse(page, method, matcher) {
+  // The UI may call the configured backend directly or its configured app's
+  // same-origin proxy. Unrelated hosts cannot establish cleanup ownership.
+  const origins = new Set([new URL(config.serverUrl).origin, new URL(config.url).origin]);
   return page.waitForResponse(
-    (response) => response.request().method() === method && matcher(new URL(response.url()).pathname),
+    (response) => {
+      const url = new URL(response.url());
+      return origins.has(url.origin) && response.request().method() === method && matcher(url.pathname);
+    },
     { timeout: 15_000 },
   );
 }
@@ -147,6 +152,7 @@ async function responseJson(response, label) {
 async function backendJson(config, path, init = {}) {
   const response = await fetch(`${config.serverUrl}${path}`, {
     ...init,
+    redirect: "error",
     headers: {
       Authorization: `Bearer ${config.token}`,
       ...(init.body ? { "Content-Type": "application/json" } : {}),
@@ -180,12 +186,16 @@ if (!config.token) {
   process.exit(2);
 }
 
-await resolveBrowserSmokeTarget(config, {
-  repoRoot,
-  label: "Outputs browser smoke",
-});
-
-const workspace = workspaceContext(config.url);
+let workspace;
+try {
+  await resolveBrowserSmokeTarget(config, { repoRoot, label: "Outputs browser smoke" });
+  validateBrowserTarget(config.serverUrl);
+  workspace = workspaceContext(config.url);
+} catch {
+  console.error("Outputs browser smoke requires valid HTTP(S) workspace/backend URLs without URL credentials and a live fixture when omitted.");
+  process.exit(2);
+}
+config.outputDir = await privateEvidenceDirectory(config.outputDir ? resolve(repoRoot, config.outputDir) : undefined);
 const report = makeReport(config);
 const consoleErrors = [];
 const pageErrors = [];
@@ -201,8 +211,6 @@ let browser;
 let page;
 
 try {
-  await mkdir(config.outputDir, { recursive: true });
-
   await stage(report, "seed_preview_output", "Create one wallet-reviewed QA output", async () => {
     const { response, payload } = await backendJson(
       config,
@@ -222,12 +230,15 @@ try {
       },
     );
     if (response.status !== 201) throw new Error(`QA output seed returned HTTP ${response.status}.`);
-    outputPath = payload.evidence?.outputPath ?? null;
-    outputFileName = outputPath?.split("/").pop() ?? null;
-    if (!outputPath?.startsWith(`outputs/sui/${qaSessionId}/`) || !outputFileName) {
+    const preview = payload.preview;
+    const candidatePath = payload.evidence?.outputPath;
+    // Derive the sole cleanup path from the requested QA session and this
+    // preview's closed filename schema, never from a prefix-only server path.
+    if (preview?.kind !== "transfer_sui" || typeof preview.previewSha256 !== "string" || preview.previewSha256.length !== 64
+      || !/^[a-f0-9]{64}$/.test(preview.previewSha256)
+      || candidatePath !== `outputs/sui/${qaSessionId}/transfer_sui-preview-${preview.previewSha256.slice(0, 16)}.json`) {
       throw new Error("QA output seed returned an unexpected workspace path.");
     }
-    const preview = payload.preview;
     const handoff = preview?.handoff;
     if (
       preview?.custody !== false
@@ -243,6 +254,9 @@ try {
     ) {
       throw new Error("QA output seed did not preserve connected-wallet approval boundaries.");
     }
+    // Only fully bound, validated objects may be retained for finally cleanup.
+    outputPath = candidatePath;
+    outputFileName = outputPath.split("/").pop();
   });
 
   browser = await chromium.launch({ headless: !config.headed });
@@ -254,14 +268,14 @@ try {
   page = await context.newPage();
 
   page.on("console", (message) => {
-    if (message.type() === "error" && shouldRecordConsoleError(message.text())) consoleErrors.push(message.text());
+    if (message.type() === "error" && shouldRecordConsoleError(message.text())) recordDiagnostic(consoleErrors, "Browser console error; details omitted");
   });
-  page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("pageerror", () => recordDiagnostic(pageErrors, "Browser page error; details omitted"));
   page.on("response", (response) => {
     if (response.status() < 400) return;
     if (response.status() === 404 && isOptionalDevWorkspace404(response.url())) return;
     if (!isBackendRequest(response.url()) && response.status() < 500) return;
-    networkFailures.push({ status: response.status(), method: response.request().method(), url: response.url() });
+    recordDiagnostic(networkFailures, networkDiagnostic(response));
   });
 
   await stage(report, "open_output", "Open the seeded output from the live Outputs rail", async () => {
@@ -302,11 +316,14 @@ try {
     const response = await createNotePromise;
     if (response.status() !== 201) throw new Error(`Linked note creation returned HTTP ${response.status()}.`);
     const payload = await responseJson(response, "Linked note creation");
-    noteId = payload.note?.id ?? null;
+    const candidateNote = payload.note;
     const expectedTitle = `Note about ${outputFileName}`.slice(0, 150);
-    if (!noteId || payload.note?.title !== expectedTitle || payload.note?.outputPath !== outputPath) {
+    if (typeof candidateNote?.id !== "string" || candidateNote.id.length !== 23 || !/^note_[a-f0-9]{18}$/.test(candidateNote.id)
+      || candidateNote.workspaceId !== workspace.workspaceId || candidateNote.title !== expectedTitle
+      || candidateNote.outputPath !== outputPath || candidateNote.body !== `Linked output: ${outputPath}`) {
       throw new Error("Linked note did not preserve its output title and path.");
     }
+    noteId = candidateNote.id;
     const notesPanel = page.getByRole("region", { name: "Notes panel", exact: true });
     await notesPanel.waitFor({ state: "visible", timeout: 15_000 });
     const noteButton = notesPanel.getByRole("button").filter({ hasText: expectedTitle });
@@ -364,17 +381,17 @@ try {
   });
 
   const screenshotPath = resolve(config.outputDir, "outputs-browser-smoke.png");
-  await page.screenshot({ path: screenshotPath });
+  await writePrivateEvidence(screenshotPath, await page.screenshot());
   report.artifacts.screenshot = screenshotPath;
-  report.artifacts.finalUrl = page.url();
+  report.artifacts.finalUrl = reportUrl(page.url());
   report.artifacts.qaRecord = { outputPath, noteId, outputDeleted, noteDeleted };
   report.ready = true;
 } catch (error) {
-  report.error = error instanceof Error ? error.message : String(error);
+  report.error = "Outputs browser smoke failed; raw browser details omitted";
   report.errors.push(report.error);
   if (page) {
     const failedScreenshot = resolve(config.outputDir, "outputs-browser-smoke-failed.png");
-    await page.screenshot({ path: failedScreenshot, fullPage: true }).catch(() => undefined);
+    await page.screenshot({ fullPage: true }).then((bytes) => writePrivateEvidence(failedScreenshot, bytes)).catch(() => undefined);
     report.artifacts.failedScreenshot = failedScreenshot;
   }
 } finally {
@@ -399,14 +416,14 @@ try {
   report.finishedAt = new Date().toISOString();
   const reportPath = resolve(config.outputDir, "summary.json");
   report.artifacts.report = reportPath;
-  await mkdir(config.outputDir, { recursive: true });
-  await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
-  await browser?.close();
+  try { await writePrivateEvidence(reportPath, `${JSON.stringify(report, null, 2)}\n`); }
+  finally { await browser?.close(); }
 }
 
 if (config.json) console.log(JSON.stringify(report, null, 2));
 else {
   console.log(`Matterhorn Outputs browser smoke: ${report.ready ? "READY" : "NOT READY"}`);
+  console.log(`Private evidence directory: ${config.outputDir}`);
   for (const item of report.stages) console.log(`[${item.status}] ${item.id}`);
   if (report.error) console.error(report.error);
 }

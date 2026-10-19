@@ -166,6 +166,8 @@ test("createTelegramAdapter downloads inbound media to store", async () => {
     assert.ok(mediaPart.media.filePath);
     assert.equal(fs.existsSync(mediaPart.media.filePath), true);
     assert.equal(fs.readFileSync(mediaPart.media.filePath, "utf8"), "telegram-media");
+    assert.equal(mediaPart.media.providerUrl, undefined);
+    assert.equal(JSON.stringify(inbound).includes("tg-token"), false);
   } finally {
     globalThis.fetch = originalFetch;
   }

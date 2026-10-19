@@ -6,10 +6,12 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   openSync,
   readFileSync,
   readSync,
-  readdirSync,
+  renameSync,
+  rmSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -34,20 +36,6 @@ const sidecarOverride = process.env.OPENWORK_SIDECAR_DIR?.trim() || readArg("--o
 const sidecarDir = sidecarOverride ? resolve(sidecarOverride) : join(__dirname, "..", "src-tauri", "sidecars");
 const constantsPath = resolve(__dirname, "..", "..", "..", "constants.json");
 
-const opencodeGithubRepo = (() => {
-  const raw =
-    process.env.OPENCODE_GITHUB_REPO?.trim() ||
-    process.env.OPENWORK_OPENCODE_GITHUB_REPO?.trim() ||
-    "anomalyco/opencode";
-  const normalized = raw
-    .replace(/^https:\/\/github\.com\//i, "")
-    .replace(/\.git$/i, "")
-    .trim();
-  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(normalized)) {
-    return "anomalyco/opencode";
-  }
-  return normalized;
-})();
 const opencodeVersion = (() => {
   try {
     const raw = readFileSync(constantsPath, "utf8");
@@ -64,8 +52,6 @@ const normalizeVersion = (value) => {
   if (raw.toLowerCase() === "latest") return null;
   return raw.startsWith("v") ? raw.slice(1) : raw;
 };
-
-const opencodeAssetOverride = process.env.OPENCODE_ASSET?.trim() || null;
 
 // Target triple for native platform binaries
 const resolvedTargetTriple = (() => {
@@ -116,7 +102,6 @@ const opencodeTargetName = resolvedTargetTriple
 const opencodeTargetPath = opencodeTargetName ? join(sidecarDir, opencodeTargetName) : null;
 
 const opencodeCandidatePath = opencodeTargetPath ?? opencodePath;
-let existingOpencodeVersion = null;
 
 // openwork-server paths
 const openworkServerBaseName = "openwork-server";
@@ -183,46 +168,6 @@ const isStubBinary = (filePath) => {
   return false;
 };
 
-const readDirectory = (dir) => {
-  let entries = [];
-  try {
-    entries = readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-
-  return entries.flatMap((entry) => {
-    const next = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      return readDirectory(next);
-    }
-    if (entry.isFile()) {
-      return [next];
-    }
-    return [];
-  });
-};
-
-const findOpencodeBinary = (dir) => {
-  const candidates = readDirectory(dir);
-  return (
-    candidates.find((file) => file.endsWith(`/${opencodeBaseName}`) || file.endsWith(`\\${opencodeBaseName}`)) ??
-    candidates.find((file) => file.endsWith("/opencode.exe") || file.endsWith("\\opencode.exe")) ??
-    candidates.find((file) => file.endsWith("/opencode") || file.endsWith("\\opencode")) ??
-    null
-  );
-};
-
-const readBinaryVersion = (filePath) => {
-  try {
-    const result = spawnSync(filePath, ["--version"], { encoding: "utf8" });
-    if (result.status === 0 && result.stdout) return result.stdout.trim();
-  } catch {
-    // ignore
-  }
-  return null;
-};
-
 const sha256File = (filePath) => {
   const hash = createHash("sha256");
   hash.update(readFileSync(filePath));
@@ -280,13 +225,6 @@ const didBuildOpenworkServer = false;
 
 // Server binary copy/sign skipped — runs in-process.
 
-if (!existingOpencodeVersion && opencodeCandidatePath) {
-  existingOpencodeVersion =
-    existsSync(opencodeCandidatePath) && !isStubBinary(opencodeCandidatePath)
-      ? readBinaryVersion(opencodeCandidatePath)
-      : null;
-}
-
 const normalizedOpencodeVersion = normalizeVersion(opencodeVersion);
 
 if (!normalizedOpencodeVersion) {
@@ -296,119 +234,28 @@ if (!normalizedOpencodeVersion) {
   process.exit(1);
 }
 
-const opencodeAssetByTarget = {
-  "aarch64-apple-darwin": "opencode-darwin-arm64.zip",
-  "x86_64-apple-darwin": "opencode-darwin-x64-baseline.zip",
-  "x86_64-unknown-linux-gnu": "opencode-linux-x64-baseline.tar.gz",
-  "aarch64-unknown-linux-gnu": "opencode-linux-arm64.tar.gz",
-  "x86_64-pc-windows-msvc": "opencode-windows-x64-baseline.zip",
-  "aarch64-pc-windows-msvc": "opencode-windows-arm64.zip",
-};
-
-const opencodeAsset =
-  opencodeAssetOverride ?? (resolvedTargetTriple ? opencodeAssetByTarget[resolvedTargetTriple] : null);
-
-const opencodeUrl = opencodeAsset
-  ? `https://github.com/${opencodeGithubRepo}/releases/download/v${normalizedOpencodeVersion}/${opencodeAsset}`
-  : null;
-
-const shouldDownloadOpencode =
-  !opencodeCandidatePath ||
-  !existsSync(opencodeCandidatePath) ||
-  isStubBinary(opencodeCandidatePath) ||
-  !existingOpencodeVersion ||
-  existingOpencodeVersion !== normalizedOpencodeVersion;
-
-if (!shouldDownloadOpencode) {
-  console.log(`OpenCode sidecar already present (${existingOpencodeVersion}).`);
-}
-
-if (shouldDownloadOpencode) {
-  if (!opencodeAsset || !opencodeUrl) {
-    console.error(
-      `No OpenCode asset configured for target ${resolvedTargetTriple ?? "unknown"}. Set OPENCODE_ASSET to override.`
-    );
-    process.exit(1);
+// Never execute a pre-existing sidecar to establish trust. Fetch pinned official
+// metadata, verify the archive digest, and stream only its regular executable.
+const downloadDir = mkdtempSync(join(tmpdir(), "matterhorn-opencode-build-"));
+try {
+  const result = spawnSync("bun", ["--no-env-file", join(__dirname, "verified-opencode.ts"), resolvedTargetTriple ?? "", downloadDir], {
+    encoding: "utf8", maxBuffer: 1024 * 1024,
+  });
+  if (result.error || result.status !== 0 || !result.stdout.trim()) {
+    throw new Error(result.stderr?.trim() || "Verified OpenCode preparation failed; Bun is required");
   }
-
   mkdirSync(sidecarDir, { recursive: true });
-
-  const stamp = Date.now();
-  const archivePath = join(tmpdir(), `opencode-${stamp}-${opencodeAsset}`);
-  const extractDir = join(tmpdir(), `opencode-${stamp}`);
-
-  mkdirSync(extractDir, { recursive: true });
-
-  if (process.platform === "win32") {
-    const psQuote = (value) => `'${value.replace(/'/g, "''")}'`;
-    const psScript = [
-      "$ErrorActionPreference = 'Stop'",
-      `Invoke-WebRequest -Uri ${psQuote(opencodeUrl)} -OutFile ${psQuote(archivePath)}`,
-      `Expand-Archive -Path ${psQuote(archivePath)} -DestinationPath ${psQuote(extractDir)} -Force`,
-    ].join("; ");
-
-    const result = spawnSync("powershell", ["-NoProfile", "-Command", psScript], {
-      stdio: "inherit",
-    });
-
-    if (result.status !== 0) {
-      process.exit(result.status ?? 1);
+  const stagingDir = mkdtempSync(join(sidecarDir, ".verified-opencode-"));
+  try {
+    for (const [index, target] of [...new Set([opencodeTargetPath, opencodePath].filter(Boolean))].entries()) {
+      const staged = join(stagingDir, String(index));
+      copyFileSync(result.stdout.trim(), staged);
+      chmodSync(staged, 0o755);
+      renameSync(staged, target);
     }
-  } else {
-    const downloadResult = spawnSync("curl", ["-fsSL", "-o", archivePath, opencodeUrl], {
-      stdio: "inherit",
-    });
-    if (downloadResult.status !== 0) {
-      process.exit(downloadResult.status ?? 1);
-    }
-
-    mkdirSync(extractDir, { recursive: true });
-
-    if (opencodeAsset.endsWith(".zip")) {
-      const unzipResult = spawnSync("unzip", ["-q", archivePath, "-d", extractDir], {
-        stdio: "inherit",
-      });
-      if (unzipResult.status !== 0) {
-        process.exit(unzipResult.status ?? 1);
-      }
-    } else if (opencodeAsset.endsWith(".tar.gz")) {
-      const tarResult = spawnSync("tar", ["-xzf", archivePath, "-C", extractDir], {
-        stdio: "inherit",
-      });
-      if (tarResult.status !== 0) {
-        process.exit(tarResult.status ?? 1);
-      }
-    } else {
-      console.error(`Unknown OpenCode archive type: ${opencodeAsset}`);
-      process.exit(1);
-    }
-  }
-
-  const extractedBinary = findOpencodeBinary(extractDir);
-  if (!extractedBinary) {
-    console.error("OpenCode binary not found after extraction.");
-    process.exit(1);
-  }
-
-  const opencodeTargets = [opencodeTargetPath, opencodePath].filter(Boolean);
-  for (const target of opencodeTargets) {
-    try {
-      if (existsSync(target)) {
-        unlinkSync(target);
-      }
-    } catch {
-      // ignore
-    }
-    copyFileSync(extractedBinary, target);
-    try {
-      chmodSync(target, 0o755);
-    } catch {
-      // ignore
-    }
-  }
-
-  console.log(`OpenCode sidecar updated to ${normalizedOpencodeVersion}.`);
-}
+  } finally { rmSync(stagingDir, { recursive: true, force: true }); }
+} finally { rmSync(downloadDir, { recursive: true, force: true }); }
+console.log(`OpenCode sidecar verified and updated to ${normalizedOpencodeVersion}.`);
 
 // Build orchestrator sidecar
 let didBuildOrchestrator = false;

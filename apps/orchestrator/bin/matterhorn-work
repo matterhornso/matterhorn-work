@@ -50,23 +50,19 @@ const pkg = `openwork-orchestrator-${platform}-${arch}`
 const executableExt = platform === "windows" ? ".exe" : ""
 const canonicalBinary = `matterhorn-work${executableExt}`
 const legacyBinary = `openwork${executableExt}`
-const fallbackCandidates = [
-  path.join(__dirname, "..", "dist", "bin", canonicalBinary),
-  path.join(__dirname, "..", "dist", "bin", legacyBinary),
-]
-
 let pkgJsonPath
 try {
   pkgJsonPath = require.resolve(`${pkg}/package.json`)
-} catch {
-  for (const fallback of fallbackCandidates) {
-    if (fs.existsSync(fallback)) {
-      run(fallback)
-    }
+  const own = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8"))
+  const installed = JSON.parse(fs.readFileSync(pkgJsonPath, "utf8"))
+  if (typeof own.version !== "string" || !own.version || installed.version !== own.version) {
+    throw new Error("Platform package version does not match")
   }
+} catch {
   console.error(
-    `matterhorn-work: no prebuilt binary package found for ${platform}/${arch}.\n` +
-      `Try reinstalling matterhorn-work-orchestrator or installing the platform package manually: ${pkg}`,
+    `matterhorn-work: matching prebuilt binary package ${pkg} is missing or incomplete.\n` +
+      `Reinstall openwork-orchestrator with optional dependencies enabled and the same pinned version.\n` +
+      `Unverified legacy dist/bin binaries will not be executed.`,
   )
   process.exit(1)
 }
@@ -74,12 +70,12 @@ try {
 const pkgBinDir = path.join(path.dirname(pkgJsonPath), "bin")
 for (const binary of [canonicalBinary, legacyBinary]) {
   const resolved = path.join(pkgBinDir, binary)
-  if (fs.existsSync(resolved)) {
-    run(resolved)
-  }
+  let regular = false
+  try { regular = fs.lstatSync(resolved).isFile() } catch {}
+  if (regular) run(resolved)
 }
 
 console.error(
-  `matterhorn-work: prebuilt package ${pkg} did not contain ${canonicalBinary}. Try reinstalling matterhorn-work-orchestrator.`,
+  `matterhorn-work: prebuilt package ${pkg} did not contain ${canonicalBinary}. Reinstall openwork-orchestrator with optional dependencies enabled.`,
 )
 process.exit(1)

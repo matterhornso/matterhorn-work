@@ -41,6 +41,8 @@ import { once } from "node:events";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { downloadVerifiedSidecar, type SidecarConfig, type SidecarName, type SidecarTarget } from "./sidecar-download.js";
 import { downloadVerifiedOpencode } from "./opencode-download.js";
+import { routerWorkspaceRequestOptions } from "./router-workspace-request.js";
+import { RouterDaemonRequestError, routerDaemonErrorResponse } from "./router-daemon-error.js";
 import { failRuntimeUpgrade, runtimeUpgradeFailureDiagnostic, startRuntimeUpgrade,
   type RuntimeServiceName, type RuntimeUpgradePhase, type RuntimeUpgradeState } from "./runtime-upgrade-state.js";
 import type { TuiHandle } from "./tui/app.js";
@@ -6191,16 +6193,18 @@ async function runRouterDaemon(args: ParsedArgs) {
         const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
         bytes += buffer.byteLength;
         if (bytes > ROUTER_DAEMON_MAX_BODY_BYTES) {
-          const error = new Error("payload_too_large");
-          (error as Error & { statusCode?: number }).statusCode = 413;
-          throw error;
+          throw new RouterDaemonRequestError("payload_too_large");
         }
         chunks.push(buffer);
       }
       if (!chunks.length) return null;
       const raw = Buffer.concat(chunks).toString("utf8");
       if (!raw.trim()) return null;
-      return JSON.parse(raw);
+      try {
+        return JSON.parse(raw);
+      } catch {
+        throw new RouterDaemonRequestError("invalid_json");
+      }
     };
 
     try {
@@ -6357,7 +6361,7 @@ async function runRouterDaemon(args: ParsedArgs) {
         const client = createOpencodeClient({
           baseUrl,
           directory: directory ? directory : undefined,
-          headers: authHeaders,
+          ...routerWorkspaceRequestOptions(workspace.workspaceType, authHeaders),
         });
         const pathInfo = unwrap(await client.path.get());
         workspace.lastUsedAt = nowMs();
@@ -6393,7 +6397,7 @@ async function runRouterDaemon(args: ParsedArgs) {
           : workspace.path;
         const response = await fetch(
           `${baseUrl.replace(/\/$/, "")}/instance/dispose?directory=${encodeURIComponent(directory)}`,
-          { method: "POST", headers: authHeaders },
+          { method: "POST", ...routerWorkspaceRequestOptions(workspace.workspaceType, authHeaders) },
         );
         const ok = response.ok ? await response.json() : false;
         workspace.lastUsedAt = nowMs();
@@ -6410,18 +6414,9 @@ async function runRouterDaemon(args: ParsedArgs) {
 
       send(404, { error: "not found" });
     } catch (error) {
-      const statusCode =
-        typeof (error as { statusCode?: unknown })?.statusCode === "number"
-          ? (error as { statusCode: number }).statusCode
-          : 500;
-      send(statusCode, {
-        error:
-          statusCode === 413
-            ? "payload_too_large"
-            : error instanceof Error
-              ? error.message
-              : String(error),
-      });
+      const failure = routerDaemonErrorResponse(error);
+      logger.warn("Router request failed", runtimeUpgradeFailureDiagnostic(error), "openwork-orchestrator-router");
+      send(failure.status, { error: failure.error });
     }
   });
 

@@ -22,9 +22,21 @@ matterhorn-work serve --workspace /path/to/workspace
 `matterhorn-work` ships as a compiled binary, so Bun is not required at runtime.
 The legacy `openwork` command remains available as a compatibility shim.
 
-If npm skips the optional platform package, `postinstall` falls back to downloading the matching
-binary from the `openwork-orchestrator-v<version>` GitHub release. Override the download host with
-`OPENWORK_ORCHESTRATOR_DOWNLOAD_BASE_URL` when you need to use a mirror.
+Installation requires the matching optional platform package at the exact meta-package version.
+If it is missing or incomplete, reinstall `openwork-orchestrator` with optional dependencies enabled
+and the same pinned version. The installer and both command names reject old `dist/bin` fallbacks;
+they no longer download executables independently or honor either `*_ORCHESTRATOR_DOWNLOAD_BASE_URL`.
+`MATTERHORN_WORK_ORCHESTRATOR_BIN_PATH` / `OPENWORK_ORCHESTRATOR_BIN_PATH` still explicitly select an
+operator-trusted executable: setting either bypasses package resolution and is not integrity verification.
+
+Desktop `prepare-sidecar.mjs` uses Bun and the shared verified official OpenCode downloader with the
+version in `constants.json`. It verifies fresh official release metadata and the archive digest on
+each build, including when replacing existing output binaries, without executing them for a version
+probe. Custom OpenCode repository overrides are rejected; `OPENCODE_ASSET` may only name an archive
+from that pinned official release. Temporary archives use a private directory and only the selected
+regular executable is streamed out. Build outputs are staged privately before replacement; the
+checkout, output-directory ancestors, build tools and same-user processes remain operator-trusted.
+No package publication is performed by this verification step.
 
 `matterhorn-work` downloads and caches the `matterhorn-work-server`/legacy `openwork-server`, `opencode-router`, and `opencode` sidecars on
 first run using a SHA-256 manifest. Use `--sidecar-dir` or `OPENWORK_SIDECAR_DIR` to control the

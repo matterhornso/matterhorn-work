@@ -162,6 +162,28 @@ try {
   assert.equal(summary.watchAutopilotScheduler.iterations, 6);
   assert.equal(summary.watchAutopilotScheduler.totalAlerts, 2);
 
+  const decision = async (text) => {
+    await writeFile(gate, text);
+    execFileSync(process.execPath, [script, "--bittensor-live-qa", bittensor, "--ci", ci, "--readiness-gate", gate, "--json-output", jsonOutput], { stdio: "pipe" });
+    return JSON.parse(await readFile(jsonOutput, "utf8"));
+  };
+  for (const valid of ["# Gate\n\nResult: READY_FOR_TEST_CUSTOMERS\n", "# Gate\n\n## Summary\n\n- Result: READY_FOR_TEST_CUSTOMERS\n- Fail: 0\n"]) {
+    assert.equal((await decision(valid)).ready, true);
+  }
+  for (const invalid of [
+    "# Gate\n\n- Result: NOT_READY\n| fail | Contains READY_FOR_TEST_CUSTOMERS |\n",
+    "# Gate\n\n- Result: NOT_READY\n- Result: READY_FOR_TEST_CUSTOMERS\n",
+    "# Gate\n\nResult: NOT_READY_FOR_TEST_CUSTOMERS\n",
+    "# Gate\n\nThis passes this evidence-backed Bittensor customer-readiness gate\n",
+    "# Gate\n\n```\nResult: READY_FOR_TEST_CUSTOMERS\n```\n",
+    "# Gate\n\n| fail | example |\nResult: READY_FOR_TEST_CUSTOMERS\n",
+    "# Gate\n\nResult: READY_FOR_TEST_CUSTOMERS extra text\n",
+  ]) {
+    const result = await decision(invalid);
+    assert.equal(result.ready, false, invalid);
+    assert.equal(result.readinessGate.ready, false, invalid);
+  }
+
   const bad = path.join(tmp, "bad.json");
   await writeFile(bad, JSON.stringify({ ready: true, seedPhrase: "never" }));
   assert.throws(

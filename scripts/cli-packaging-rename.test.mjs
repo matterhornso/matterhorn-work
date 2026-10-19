@@ -71,9 +71,9 @@ assert.match(publishScript, /"matterhorn-work":/);
 assert.match(publishScript, /openwork:/);
 
 const postinstallScript = readText("apps/orchestrator/scripts/postinstall.mjs");
-assert.match(postinstallScript, /matterhorn-work-bun/);
-assert.match(postinstallScript, /MATTERHORN_WORK_ORCHESTRATOR_DOWNLOAD_BASE_URL/);
-assert.match(postinstallScript, /OPENWORK_ORCHESTRATOR_DOWNLOAD_BASE_URL/);
+assert.match(postinstallScript, /optional dependencies enabled/);
+assert.doesNotMatch(postinstallScript, /fetch\(|DOWNLOAD_BASE_URL/);
+assert.doesNotMatch(orchestratorCanonical, /fallbackCandidates/);
 
 const sidecarScript = readText("apps/orchestrator/scripts/build-sidecars.mjs");
 assert.match(sidecarScript, /matterhorn-work-server/);

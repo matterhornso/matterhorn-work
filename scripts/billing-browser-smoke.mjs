@@ -1,11 +1,10 @@
 #!/usr/bin/env node
-import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { chromium } from "playwright";
+import { networkDiagnostic, privateEvidenceDirectory, recordDiagnostic, reportUrl, validateBrowserTarget, writePrivateEvidence } from "./lib/browser-smoke-privacy.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 const DEFAULT_URL = "http://127.0.0.1:5182/workspace/ws_d6a5b5572860/session";
-const DEFAULT_OUTPUT_DIR = "qa-reports/billing-browser-smoke";
 
 function parseArgs(argv = process.argv.slice(2)) {
   const flags = new Set();
@@ -32,7 +31,7 @@ function parseArgs(argv = process.argv.slice(2)) {
     json: flags.has("--json"),
     strict: flags.has("--strict") || process.env.MATTERHORN_BILLING_BROWSER_STRICT === "1",
     url: values.get("--url") || process.env.MATTERHORN_BILLING_BROWSER_URL || DEFAULT_URL,
-    outputDir: resolve(repoRoot, values.get("--output-dir") || process.env.MATTERHORN_BILLING_BROWSER_OUTPUT_DIR || DEFAULT_OUTPUT_DIR),
+    outputDir: values.get("--output-dir") || process.env.MATTERHORN_BILLING_BROWSER_OUTPUT_DIR || "",
   };
 }
 
@@ -45,7 +44,7 @@ Usage:
 
 Options:
   --url <url>          Matterhorn app URL.
-  --output-dir <dir>   Evidence directory. Default: ${DEFAULT_OUTPUT_DIR}
+  --output-dir <dir>   Parent for a new private evidence directory; default is the OS temporary directory.
   --strict             Exit nonzero on journey, network, console, or page errors.
   --json               Print the full JSON report.
   --headed             Show Chromium while running.
@@ -59,9 +58,9 @@ Boundaries:
 }
 
 function billingSettingsUrl(appUrl) {
-  const url = new URL(appUrl);
+  const url = validateBrowserTarget(appUrl);
   const match = url.pathname.match(/^\/workspace\/([^/]+)/);
-  if (!match?.[1]) throw new Error(`Workspace id is missing from ${appUrl}`);
+  if (!match?.[1]) throw new Error("Workspace id is missing from the browser target");
   url.pathname = `/workspace/${match[1]}/settings/billing`;
   url.search = "";
   url.hash = "";
@@ -71,7 +70,7 @@ function billingSettingsUrl(appUrl) {
 function makeReport(config) {
   return {
     name: "matterhorn-billing-browser-smoke",
-    url: config.url,
+    url: reportUrl(config.url),
     startedAt: new Date().toISOString(),
     ready: false,
     stages: [],
@@ -88,7 +87,7 @@ async function stage(report, id, label, action) {
     report.stages.push({ id, label, status: "pass", durationMs: Date.now() - startedAt });
     return value;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = `${label} failed; raw browser details omitted`;
     report.stages.push({ id, label, status: "fail", durationMs: Date.now() - startedAt, error: message });
     throw error;
   }
@@ -139,7 +138,9 @@ async function currentPlanName(page) {
   const currentBadge = page.getByText("Current", { exact: true });
   await currentBadge.waitFor({ state: "visible", timeout: 15_000 });
   const card = currentBadge.locator("xpath=ancestor::div[.//h3][1]");
-  return (await card.locator("h3").innerText()).trim();
+  const plan = (await card.locator("h3").innerText()).trim();
+  if (!["Free", "Plus", "Max", "Matterhorn Plus", "Matterhorn Max"].includes(plan)) throw new Error("Unexpected billing plan label");
+  return plan;
 }
 
 const config = parseArgs();
@@ -155,27 +156,27 @@ const networkFailures = [];
 let browser;
 let page;
 
+// Validate before browser launch; never print a credential-bearing target.
+try { validateBrowserTarget(config.url); }
+catch { console.error("Billing browser target must be HTTP(S) without URL credentials"); process.exit(1); }
+config.outputDir = await privateEvidenceDirectory(config.outputDir ? resolve(repoRoot, config.outputDir) : undefined);
+
 try {
-  await mkdir(config.outputDir, { recursive: true });
   browser = await chromium.launch({ headless: !config.headed });
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
   page = await context.newPage();
 
   page.on("console", (message) => {
     if (message.type() === "error" && shouldRecordConsoleError(message.text())) {
-      consoleErrors.push(message.text());
+      recordDiagnostic(consoleErrors, "Browser console error; details omitted");
     }
   });
-  page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("pageerror", () => recordDiagnostic(pageErrors, "Browser page error; details omitted"));
   page.on("response", (response) => {
     if (response.status() < 400) return;
     if (response.status() === 404 && isOptionalDevWorkspace404(response.url())) return;
     if (!isBackendRequest(response.url()) && response.status() < 500) return;
-    networkFailures.push({
-      status: response.status(),
-      method: response.request().method(),
-      url: response.url(),
-    });
+    recordDiagnostic(networkFailures, networkDiagnostic(response));
   });
 
   const billingVisible = await stage(report, "open_billing", "Open workspace Billing settings or verify its launch-policy fallback", async () => {
@@ -197,7 +198,7 @@ try {
     }
     report.artifacts.launchPolicy = {
       billing: "hidden",
-      fallbackUrl: page.url(),
+      fallbackUrl: reportUrl(page.url()),
       outcome: "Hidden by launch policy",
     };
     return false;
@@ -205,9 +206,9 @@ try {
 
   if (!billingVisible) {
     const screenshotPath = resolve(config.outputDir, "billing-launch-policy-fallback.png");
-    await page.screenshot({ path: screenshotPath, fullPage: true });
+    await writePrivateEvidence(screenshotPath, await page.screenshot({ fullPage: true }));
     report.artifacts.screenshot = screenshotPath;
-    report.artifacts.finalUrl = page.url();
+    report.artifacts.finalUrl = reportUrl(page.url());
     report.ready = true;
   } else {
   const confirmedPlan = await stage(report, "local_preview_truth", "Verify local preview and no-charge boundaries", async () => {
@@ -273,17 +274,17 @@ try {
   });
 
   const screenshotPath = resolve(config.outputDir, "billing-browser-smoke.png");
-  await page.screenshot({ path: screenshotPath, fullPage: true });
+  await writePrivateEvidence(screenshotPath, await page.screenshot({ fullPage: true }));
   report.artifacts.screenshot = screenshotPath;
-  report.artifacts.finalUrl = page.url();
+  report.artifacts.finalUrl = reportUrl(page.url());
   report.ready = true;
   }
 } catch (error) {
-  report.error = error instanceof Error ? error.message : String(error);
+  report.error = "Billing browser smoke failed; raw browser details omitted";
   report.errors.push(report.error);
   if (page) {
     const failedScreenshot = resolve(config.outputDir, "billing-browser-smoke-failed.png");
-    await page.screenshot({ path: failedScreenshot, fullPage: true }).catch(() => undefined);
+    await page.screenshot({ fullPage: true }).then((bytes) => writePrivateEvidence(failedScreenshot, bytes)).catch(() => undefined);
     report.artifacts.failedScreenshot = failedScreenshot;
     const clearPending = page.getByRole("button", { name: "Clear pending", exact: true });
     if (await clearPending.isVisible().catch(() => false)) {
@@ -299,13 +300,14 @@ try {
   report.finishedAt = new Date().toISOString();
   const reportPath = resolve(config.outputDir, "summary.json");
   report.artifacts.report = reportPath;
-  await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
-  await browser?.close();
+  try { await writePrivateEvidence(reportPath, `${JSON.stringify(report, null, 2)}\n`); }
+  finally { await browser?.close(); }
 }
 
 if (config.json) console.log(JSON.stringify(report, null, 2));
 else {
   console.log(`Matterhorn Billing browser smoke: ${report.ready ? "READY" : "NOT READY"}`);
+  console.log(`Private evidence directory: ${config.outputDir}`);
   for (const item of report.stages) console.log(`[${item.status}] ${item.id}`);
   if (report.error) console.error(report.error);
 }

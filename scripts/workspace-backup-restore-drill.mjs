@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, mkdtempSync, openSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import process from "node:process";
 
@@ -21,7 +22,7 @@ function parseArgs(argv) {
     sourceWorkspaceId: process.env.MATTERHORN_WORKSPACE_ID ?? "",
     targetWorkspaceId: "",
     confirmTarget: "",
-    outputDir: "qa-reports/product-hunt/backup-restore",
+    outputDir: "",
     apply: false,
     json: false,
     jsonOutput: "",
@@ -68,6 +69,8 @@ function help() {
     "Safety:",
     "  The restore target must differ from the source. --apply requires --confirm-target to exactly match the target.",
     "  The drill always exports with sensitive=exclude and only approves the matching config.import request.",
+    "  Exports can still contain private workspace content. Default output is a new private temporary directory.",
+    "  Output files are exclusive owner-only creations; existing files are never overwritten. Protect and retain the reported directory.",
   ].join("\n");
 }
 
@@ -176,107 +179,114 @@ async function runDrill(config) {
   validate(config);
   const serverUrl = cleanServerUrl(config.serverUrl);
   const startedAt = Date.now();
-  mkdirSync(config.outputDir, { recursive: true });
-
-  const sourceId = encodeURIComponent(config.sourceWorkspaceId);
-  const targetId = encodeURIComponent(config.targetWorkspaceId);
-  const backup = await requestJson(
-    `${serverUrl}/workspace/${sourceId}/export?sensitive=exclude`,
-    { headers: clientHeaders(config) },
-    "Secret-excluding workspace export",
-  );
-  const backupSerialized = `${JSON.stringify(backup, null, 2)}\n`;
-  const backupSha256 = sha256(backupSerialized);
+  config.outputDir ||= mkdtempSync(join(tmpdir(), "matterhorn-backup-restore-"));
+  mkdirSync(config.outputDir, { recursive: true, mode: 0o700 });
   const timestamp = new Date(startedAt).toISOString().replaceAll(":", "-");
-  const backupPath = join(config.outputDir, `${safeFilename(config.sourceWorkspaceId)}-${timestamp}.json`);
-  writeFileSync(backupPath, backupSerialized);
-  const restorePayload = buildRestorePayload(backup);
+  const reportPath = config.jsonOutput || join(config.outputDir, `backup-restore-report-${timestamp}.json`);
+  // Reserve the report before any restore so a pre-existing path or symlink
+  // fails without approving or applying an import. Never chmod an existing path.
+  const reportFd = openSync(reportPath, "wx", 0o600);
+  try {
 
-  const preview = await requestJson(`${serverUrl}/workspace/${targetId}/import/preview`, {
-    method: "POST",
-    headers: clientHeaders(config),
-    body: JSON.stringify(restorePayload),
-  }, "Restore preview");
-
-  let approvalCompleted = false;
-  let restoredDigest = null;
-  let exactPortableDigestMatch = false;
-  let verificationSummary = null;
-  let verified = false;
-  if (config.apply) {
-    const importState = { done: false };
-    const importStartedAt = Date.now();
-    const importPromise = requestJson(`${serverUrl}/workspace/${targetId}/import`, {
-      method: "POST",
-      headers: clientHeaders(config),
-      body: JSON.stringify({ ...restorePayload, previewFingerprint: preview.fingerprint }),
-    }, "Restore import").finally(() => { importState.done = true; });
-    approvalCompleted = await approveMatchingImport(
-      config,
-      serverUrl,
-      config.targetWorkspaceId,
-      importStartedAt,
-      approvalSummary(preview.summary),
-      importState,
-    );
-    await importPromise;
-    const restored = await requestJson(
-      `${serverUrl}/workspace/${targetId}/export?sensitive=exclude`,
+    const sourceId = encodeURIComponent(config.sourceWorkspaceId);
+    const targetId = encodeURIComponent(config.targetWorkspaceId);
+    const backup = await requestJson(
+      `${serverUrl}/workspace/${sourceId}/export?sensitive=exclude`,
       { headers: clientHeaders(config) },
-      "Restored workspace export",
+      "Secret-excluding workspace export",
     );
-    restoredDigest = portableDigest(restored);
-    exactPortableDigestMatch = restoredDigest === portableDigest(backup);
-    const verificationPreview = await requestJson(`${serverUrl}/workspace/${targetId}/import/preview`, {
+    const backupSerialized = `${JSON.stringify(backup, null, 2)}\n`;
+    const backupSha256 = sha256(backupSerialized);
+    const backupPath = join(config.outputDir, `${safeFilename(config.sourceWorkspaceId)}-${timestamp}.json`);
+    writeFileSync(backupPath, backupSerialized, { flag: "wx", mode: 0o600 });
+    const restorePayload = buildRestorePayload(backup);
+
+    const preview = await requestJson(`${serverUrl}/workspace/${targetId}/import/preview`, {
       method: "POST",
       headers: clientHeaders(config),
       body: JSON.stringify(restorePayload),
-    }, "Restored workspace verification preview");
-    verificationSummary = verificationPreview.summary;
-    verified = Boolean(
-      verificationSummary
-      && verificationSummary.create === 0
-      && verificationSummary.update === 0
-      && verificationSummary.replace === 0
-      && verificationSummary.delete === 0
-      && verificationSummary.unchanged === verificationSummary.total,
-    );
-    if (!verified) {
-      throw new Error("Restored workspace is not idempotent against the source backup.");
-    }
-  }
+    }, "Restore preview");
 
-  const report = {
-    version: REPORT_VERSION,
-    status: config.apply && verified ? "pass" : "preview_only",
-    ready: config.apply && verified,
-    capturedAt: new Date().toISOString(),
-    sourceWorkspaceId: config.sourceWorkspaceId,
-    targetWorkspaceId: config.targetWorkspaceId,
-    sensitiveMode: "exclude",
-    backup: {
-      file: basename(backupPath),
-      sha256: backupSha256,
-      portableDigest: portableDigest(backup),
-    },
-    preview: {
-      fingerprint: preview.fingerprint,
-      summary: preview.summary,
-    },
-    restore: {
-      applied: config.apply,
-      mode: "replace",
-      approvalCompleted,
-      verified,
-      portableDigest: restoredDigest,
-      exactPortableDigestMatch,
-      verificationSummary,
-    },
-    durationMs: Date.now() - startedAt,
-  };
-  const reportPath = config.jsonOutput || join(config.outputDir, `backup-restore-report-${timestamp}.json`);
-  writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
-  return { report, reportPath };
+    let approvalCompleted = false;
+    let restoredDigest = null;
+    let exactPortableDigestMatch = false;
+    let verificationSummary = null;
+    let verified = false;
+    if (config.apply) {
+      const importState = { done: false };
+      const importStartedAt = Date.now();
+      const importPromise = requestJson(`${serverUrl}/workspace/${targetId}/import`, {
+        method: "POST",
+        headers: clientHeaders(config),
+        body: JSON.stringify({ ...restorePayload, previewFingerprint: preview.fingerprint }),
+      }, "Restore import").finally(() => { importState.done = true; });
+      approvalCompleted = await approveMatchingImport(
+        config,
+        serverUrl,
+        config.targetWorkspaceId,
+        importStartedAt,
+        approvalSummary(preview.summary),
+        importState,
+      );
+      await importPromise;
+      const restored = await requestJson(
+        `${serverUrl}/workspace/${targetId}/export?sensitive=exclude`,
+        { headers: clientHeaders(config) },
+        "Restored workspace export",
+      );
+      restoredDigest = portableDigest(restored);
+      exactPortableDigestMatch = restoredDigest === portableDigest(backup);
+      const verificationPreview = await requestJson(`${serverUrl}/workspace/${targetId}/import/preview`, {
+        method: "POST",
+        headers: clientHeaders(config),
+        body: JSON.stringify(restorePayload),
+      }, "Restored workspace verification preview");
+      verificationSummary = verificationPreview.summary;
+      verified = Boolean(
+        verificationSummary
+        && verificationSummary.create === 0
+        && verificationSummary.update === 0
+        && verificationSummary.replace === 0
+        && verificationSummary.delete === 0
+        && verificationSummary.unchanged === verificationSummary.total,
+      );
+      if (!verified) {
+        throw new Error("Restored workspace is not idempotent against the source backup.");
+      }
+    }
+
+    const report = {
+      version: REPORT_VERSION,
+      status: config.apply && verified ? "pass" : "preview_only",
+      ready: config.apply && verified,
+      capturedAt: new Date().toISOString(),
+      sourceWorkspaceId: config.sourceWorkspaceId,
+      targetWorkspaceId: config.targetWorkspaceId,
+      outputDirectory: config.outputDir,
+      sensitiveMode: "exclude",
+      backup: {
+        file: basename(backupPath),
+        sha256: backupSha256,
+        portableDigest: portableDigest(backup),
+      },
+      preview: {
+        fingerprint: preview.fingerprint,
+        summary: preview.summary,
+      },
+      restore: {
+        applied: config.apply,
+        mode: "replace",
+        approvalCompleted,
+        verified,
+        portableDigest: restoredDigest,
+        exactPortableDigestMatch,
+        verificationSummary,
+      },
+      durationMs: Date.now() - startedAt,
+    };
+    writeFileSync(reportFd, `${JSON.stringify(report, null, 2)}\n`);
+    return { report, reportPath };
+  } finally { closeSync(reportFd); }
 }
 
 async function main() {

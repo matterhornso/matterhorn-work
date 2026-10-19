@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { downloadVerifiedOpencode } from "../src/opencode-download.js";
+import { downloadVerifiedOpencode, downloadVerifiedOfficialOpencode } from "../src/opencode-download.js";
 import type { SidecarConfig, SidecarTarget } from "../src/sidecar-download.js";
 
 const roots: string[] = [];
@@ -63,6 +63,21 @@ async function fixture(target: SidecarTarget = "linux-x64") {
     async rebuildArchive() { archive = await rebuild(); asset.digest = `sha256:${hash(archive)}`; asset.size = archive.length; },
   };
 }
+
+test("desktop official-only entry uses pinned digest verification without a Matterhorn manifest or legacy executable probe", async () => {
+  const f = await fixture();
+  const options = { directory: f.sidecar.dir, target: "linux-x64", expectedVersion: "1.18.31", assetOverride: f.assetName, fetchImpl: f.options.fetchImpl } satisfies Parameters<typeof downloadVerifiedOfficialOpencode>[0];
+  const binary = await downloadVerifiedOfficialOpencode(options);
+  expect(await readFile(binary)).toEqual(executable);
+  expect(f.calls).toEqual([f.apiUrl, f.assetUrl]);
+  await writeFile(binary, "untrusted executable, never run");
+  f.calls.length = 0;
+  expect(await downloadVerifiedOfficialOpencode(options)).toBe(binary);
+  expect(await readFile(binary)).toEqual(executable);
+  expect(f.calls).toEqual([f.apiUrl]);
+  f.setMetadata({ tag_name: "v1.18.31", assets: [{ ...f.asset, digest: undefined }] });
+  await expect(downloadVerifiedOfficialOpencode(options)).rejects.toThrow();
+});
 
 test("manifest 404 and optional omissions reach the verified official fallback without running legacy cache files", async () => {
   for (const manifest of [() => new Response(null, { status: 404 }), () => Response.json({ entries: {} }),
